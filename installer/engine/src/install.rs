@@ -611,21 +611,46 @@ fn wait_for_xplane(ctx: &Ctx) {
     }
 }
 
+fn move_path(from: &Path, to: &Path) -> Result<(), String> {
+    if std::fs::rename(from, to).is_ok() {
+        return Ok(());
+    }
+    if from.is_dir() {
+        crate::liveries::copy_dir(from, to)?;
+        std::fs::remove_dir_all(from)
+    } else {
+        std::fs::copy(from, to).map(|_| ()).and_then(|_| std::fs::remove_file(from))
+    }
+    .map_err(|e| format!("{}: {e}. Close X-Plane and any window or program using that folder, then try again", from.display()))
+}
+
+fn move_entries(from: &Path, to: &Path) -> Result<(), String> {
+    std::fs::create_dir_all(to).map_err(|e| format!("{}: {e}", to.display()))?;
+    for entry in std::fs::read_dir(from).map_err(|e| format!("{}: {e}", from.display()))?.flatten() {
+        let dest = to.join(entry.file_name());
+        if dest.is_dir() {
+            std::fs::remove_dir_all(&dest).map_err(|e| format!("{}: {e}", dest.display()))?;
+        } else if dest.exists() {
+            std::fs::remove_file(&dest).map_err(|e| format!("{}: {e}", dest.display()))?;
+        }
+        move_path(&entry.path(), &dest)?;
+    }
+    Ok(())
+}
+
 fn wipe_install(a: &Answers, ctx: &Ctx, work_root: &Path) -> Result<(), String> {
     ctx.status("Removing the old install and every trace of it...");
     let liveries = a.xplane.join(AIRCRAFT_DIR).join("liveries");
-    let kept = work_root.join("liveries-kept");
-    let keep = liveries.is_dir();
-    if keep {
-        let _ = std::fs::remove_dir_all(&kept);
-        std::fs::create_dir_all(work_root).map_err(|e| e.to_string())?;
-        std::fs::rename(&liveries, &kept).map_err(|e| format!("could not set the liveries aside: {e}"))?;
+    let kept = a.xplane.join("Output").join("a380-liveries-kept");
+    if liveries.is_dir() {
+        move_entries(&liveries, &kept).map_err(|e| format!("could not set the liveries aside: {e}"))?;
     }
+    let keep = kept.is_dir();
     let local = std::env::var("LOCALAPPDATA").ok().map(PathBuf::from);
     let wiped = wipe_traces(&a.xplane, local.as_deref(), &std::env::temp_dir(), work_root);
     if keep {
-        std::fs::create_dir_all(a.xplane.join(AIRCRAFT_DIR)).map_err(|e| e.to_string())?;
-        std::fs::rename(&kept, &liveries).map_err(|e| format!("could not put the liveries back from {}: {e}", kept.display()))?;
+        move_entries(&kept, &liveries).map_err(|e| format!("could not put the liveries back from {}: {e}", kept.display()))?;
+        let _ = std::fs::remove_dir(&kept);
         ctx.log("Kept the installed liveries");
     }
     for p in wiped? {
@@ -1458,6 +1483,24 @@ mod tests {
         assert_eq!(r.chain[0].files[0].url, "https://github.com/o/r/releases/download/v0.3.0/b1.zip");
         assert_eq!(r.chain[1].files[0].url, "https://github.com/o/r/releases/download/v0.3.1/p.zip");
         assert_eq!(r.chain[1].deleted, ["objects/old.obj"]);
+    }
+
+    #[test]
+    fn liveries_set_aside_replace_a_stale_copy_and_keep_the_rest() {
+        let root = std::env::temp_dir().join(format!("fbw-kept-test-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        let (from, to) = (root.join("liveries"), root.join("kept"));
+        std::fs::create_dir_all(from.join("A")).unwrap();
+        std::fs::write(from.join("A/new.dds"), b"new").unwrap();
+        std::fs::write(from.join("note.txt"), b"n").unwrap();
+        std::fs::create_dir_all(to.join("A")).unwrap();
+        std::fs::write(to.join("A/old.dds"), b"old").unwrap();
+        std::fs::create_dir_all(to.join("B")).unwrap();
+        move_entries(&from, &to).unwrap();
+        assert!(to.join("A/new.dds").is_file() && !to.join("A/old.dds").exists());
+        assert!(to.join("B").is_dir() && to.join("note.txt").is_file());
+        assert_eq!(std::fs::read_dir(&from).unwrap().count(), 0);
+        std::fs::remove_dir_all(&root).unwrap();
     }
 
     #[test]

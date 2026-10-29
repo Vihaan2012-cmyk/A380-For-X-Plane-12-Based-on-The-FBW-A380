@@ -180,7 +180,7 @@ pub fn remove(xplane: &Path, folder: &str) -> Result<String, String> {
     }
 }
 
-fn copy_dir(from: &Path, to: &Path) -> Result<(), String> {
+pub(crate) fn copy_dir(from: &Path, to: &Path) -> Result<(), String> {
     std::fs::create_dir_all(to).map_err(|e| e.to_string())?;
     for entry in std::fs::read_dir(from).map_err(|e| e.to_string())?.flatten() {
         let path = entry.path();
