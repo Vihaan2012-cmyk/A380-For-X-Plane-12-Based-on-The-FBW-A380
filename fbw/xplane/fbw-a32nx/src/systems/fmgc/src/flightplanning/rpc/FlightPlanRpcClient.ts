@@ -1,0 +1,627 @@
+// @ts-strict-ignore
+// Copyright (c) 2021-2023 FlyByWire Simulations
+//
+// SPDX-License-Identifier: GPL-3.0
+
+import { FlightPlanInterface } from '@fmgc/flightplanning/FlightPlanInterface';
+import { Airway, AltitudeConstraint, Fix, MathUtils, Waypoint } from '@flybywiresim/fbw-sdk';
+import { FlightPlanIndex, FlightPlanManager } from '@fmgc/flightplanning/FlightPlanManager';
+import {
+  Bus,
+  Inbox,
+  Derived,
+  Outbox,
+  Emitter,
+  Signal,
+  Bond,
+  Waits,
+} from 'xplane-js/ui';
+import { v4 } from 'uuid';
+import { HoldData } from '@fmgc/flightplanning/data/flightplan';
+import { Coordinates } from '@fmgc/flightplanning/data/geo';
+import { FlightPlanPerformanceData } from '@fmgc/flightplanning/plans/performance/FlightPlanPerformanceData';
+import { FlightPlanServerRpcEvents } from '@fmgc/flightplanning/rpc/FlightPlanRpcServer';
+import { FlightPlanLegDefinition } from '../legs/FlightPlanLegDefinition';
+import { FixInfoEntry } from '../plans/FixInfo';
+import { FlightPlan } from '../plans/FlightPlan';
+import { FlightPlanLeg } from '@fmgc/flightplanning/legs/FlightPlanLeg';
+import { FlightPlanBatch } from '@fmgc/flightplanning/plans/FlightPlanBatch';
+import { FlightPlanEvents } from '@fmgc/flightplanning/sync/FlightPlanEvents';
+import { PropagatedWindEntry, WindEntry, WindVector } from '../data/wind';
+
+export type FunctionsOnlyAndUnwrapPromises<T> = {
+  [k in keyof T as T[k] extends (...args: any) => Promise<any> ? k : never]: T[k] extends (
+    ...args: infer U
+  ) => Promise<infer V>
+    ? (...args: U) => V
+    : never;
+};
+
+type PromiseFn = (result: any) => void;
+
+export interface FlightPlanRemoteClientRpcEvents<P extends FlightPlanPerformanceData> {
+  flightPlanRemoteClient_rpcCommand: [keyof FlightPlanInterface<P>, string, ...any];
+}
+
+export class FlightPlanRpcClient<P extends FlightPlanPerformanceData> implements FlightPlanInterface<P> {
+  private subs: Bond[] = [];
+
+  public readonly onAvailable = new Emitter();
+
+  public readonly batchStack: FlightPlanBatch[] = [];
+
+  private readonly flightPlanManager: FlightPlanManager<P>;
+
+  private readonly rpcAvailable = Signal.of(false);
+
+  private readonly flightPlanManagerInitialized = Signal.of(false);
+
+  private readonly pub: Outbox<FlightPlanRemoteClientRpcEvents<P>>;
+
+  private readonly sub: Inbox<FlightPlanServerRpcEvents>;
+
+  public syncClientID = MathUtils.randomInt32();
+
+  constructor(
+    private readonly bus: Bus,
+    private readonly performanceDataInit: P,
+    private readonly useBatches = true,
+  ) {
+    this.pub = this.bus.outbox<FlightPlanRemoteClientRpcEvents<P>>();
+    this.sub = this.bus.inbox<FlightPlanServerRpcEvents>();
+
+    this.subs.push(
+      this.sub.topic('flightPlanServer_heartbeat').listen(() => {
+        this.rpcAvailable.set(true);
+      }),
+      this.sub.topic('flightPlanServer_rpcCommandResponse').listen(([responseId, response]) => {
+        if (this.rpcCommandsSent.has(responseId)) {
+          const [resolve] = this.rpcCommandsSent.get(responseId) ?? [];
+
+          if (resolve) {
+            resolve(response);
+            this.rpcCommandsSent.delete(responseId);
+          }
+        }
+      }),
+      this.sub.topic('flightPlanServer_rpcCommandErrorResponse').listen(([responseId, error]) => {
+        if (this.rpcCommandsSent.has(responseId)) {
+          const [, reject] = this.rpcCommandsSent.get(responseId) ?? [];
+
+          if (reject) {
+            reject(
+              `Error from RPC server: ${typeof error === 'object' && 'message' in error && typeof error.message === 'string' ? error.message : error.toString()}`,
+            );
+            this.rpcCommandsSent.delete(responseId);
+          }
+        }
+      }),
+    );
+
+    this.flightPlanManager = new FlightPlanManager<P>(
+      this,
+      this.bus,
+      this
+        .performanceDataInit as P /*  TODO, is this comment still valid? "This flight plan manager will never create plans, so this is fine" */,
+      this.syncClientID,
+      false,
+    );
+    this.flightPlanManager.initialized.listen(() => this.flightPlanManagerInitialized.set(true));
+
+    Derived.from(
+      ([rpcAvailable, flightPlanManagerInitialized]) => {
+        if (rpcAvailable && flightPlanManagerInitialized) {
+          this.onAvailable.emit(undefined, undefined);
+        }
+      },
+      this.rpcAvailable,
+      this.flightPlanManagerInitialized,
+    );
+  }
+
+  private rpcCommandsSent = new Map<string, [PromiseFn, PromiseFn]>();
+
+  private async callFunctionViaRpc<T extends keyof FunctionsOnlyAndUnwrapPromises<FlightPlanInterface<P>> & string>(
+    funcName: T,
+    ...args: Parameters<FunctionsOnlyAndUnwrapPromises<FlightPlanInterface<P>>[T]>
+  ): Promise<ReturnType<FunctionsOnlyAndUnwrapPromises<FlightPlanInterface<P>>[T]>> {
+    const batchState = { batch: null, remoteBatchClosed: false };
+
+    let batchSubscription: Bond | null = null;
+    if (this.useBatches) {
+      batchSubscription = this.bus
+        .inbox<FlightPlanEvents>()
+        .topic('flightPlanService.batchChange')
+        .listen((event) => {
+          if (
+            batchState.batch &&
+            event.syncClientID === this.syncClientID &&
+            event.type === 'close' &&
+            event.batch.id === batchState.batch.id
+          ) {
+            batchState.remoteBatchClosed = true;
+          }
+        });
+      batchState.batch = await this.doCallFunctionViaRpc('openBatch', `rpcFunctionExec_${funcName}`);
+    }
+
+    const result = await this.doCallFunctionViaRpc(funcName, ...args);
+
+    if (this.useBatches) {
+      await this.doCallFunctionViaRpc('closeBatch', batchState.batch.id);
+      await Waits.until(() => batchState.remoteBatchClosed === true);
+    }
+
+    batchSubscription?.destroy();
+
+    return result;
+  }
+
+  private async doCallFunctionViaRpc<T extends keyof FunctionsOnlyAndUnwrapPromises<FlightPlanInterface<P>> & string>(
+    funcName: T,
+    ...args: Parameters<FunctionsOnlyAndUnwrapPromises<FlightPlanInterface<P>>[T]>
+  ): Promise<ReturnType<FunctionsOnlyAndUnwrapPromises<FlightPlanInterface<P>>[T]>> {
+    const id = v4();
+
+    const result = await this.waitForRpcCommandResponse<
+      ReturnType<FunctionsOnlyAndUnwrapPromises<FlightPlanInterface<P>>[T]>
+    >(id, funcName, ...args);
+
+    return result;
+  }
+
+  private waitForRpcCommandResponse<T>(id: string, command: keyof FlightPlanInterface<P>, ...args: any[]): Promise<T> {
+    return new Promise((resolve, reject) => {
+      this.rpcCommandsSent.set(id, [resolve, reject]);
+
+      this.pub.post('flightPlanRemoteClient_rpcCommand', [command, id, ...args], true, false);
+
+      setTimeout(() => {
+        if (this.rpcCommandsSent.has(id)) {
+          this.rpcCommandsSent.delete(id);
+          reject(new Error(`Timeout waiting for response from server for request ${id}`));
+        }
+      }, 5000);
+    });
+  }
+
+  public destroy() {
+    this.flightPlanManager.destroy();
+    this.subs.forEach((sub) => sub.destroy());
+  }
+
+  get(index: number): FlightPlan<P> {
+    return this.flightPlanManager.get(index);
+  }
+
+  has(index: number): boolean {
+    return this.flightPlanManager.has(index);
+  }
+
+  get active(): FlightPlan<P> {
+    return this.flightPlanManager.get(FlightPlanIndex.Active);
+  }
+
+  get temporary(): FlightPlan<P> {
+    return this.flightPlanManager.get(FlightPlanIndex.Temporary);
+  }
+
+  get activeOrTemporary(): FlightPlan<P> {
+    return this.hasTemporary ? this.temporary : this.active;
+  }
+
+  get uplink(): FlightPlan<P> {
+    return this.flightPlanManager.get(FlightPlanIndex.Uplink);
+  }
+
+  secondary(index: number): FlightPlan<P> {
+    return this.flightPlanManager.get(FlightPlanIndex.FirstSecondary + index);
+  }
+
+  get hasActive(): boolean {
+    return this.has(FlightPlanIndex.Active);
+  }
+
+  hasSecondary(index: number): boolean {
+    return this.has(FlightPlanIndex.FirstSecondary + index);
+  }
+
+  get hasTemporary(): boolean {
+    return this.has(FlightPlanIndex.Temporary);
+  }
+
+  get hasUplink(): boolean {
+    return this.has(FlightPlanIndex.Uplink);
+  }
+
+  secondaryInit(index: number): Promise<void> {
+    return this.callFunctionViaRpc('secondaryInit', index);
+  }
+
+  secondaryCopyFromActive(index: number, isBeforeEngineStart: boolean): Promise<void> {
+    return this.callFunctionViaRpc('secondaryCopyFromActive', index, isBeforeEngineStart);
+  }
+
+  secondaryCopyFromSecondary(from: number, to: number, isBeforeEngineStart: boolean): Promise<void> {
+    return this.callFunctionViaRpc('secondaryCopyFromSecondary', from, to, isBeforeEngineStart);
+  }
+
+  secondaryDelete(index: number): Promise<void> {
+    return this.callFunctionViaRpc('secondaryDelete', index);
+  }
+
+  secondaryReset(index: number): Promise<void> {
+    return this.callFunctionViaRpc('secondaryReset', index);
+  }
+
+  secondaryActivate(index: number, isBeforeEngineStart: boolean): Promise<void> {
+    return this.callFunctionViaRpc('secondaryActivate', index, isBeforeEngineStart);
+  }
+
+  activeAndSecondarySwap(secIndex: number, isBeforeEngineStart: boolean): Promise<void> {
+    return this.callFunctionViaRpc('activeAndSecondarySwap', secIndex, isBeforeEngineStart);
+  }
+
+  temporaryInsert(): Promise<void> {
+    return this.callFunctionViaRpc('temporaryInsert');
+  }
+
+  temporaryDelete(): Promise<void> {
+    return this.callFunctionViaRpc('temporaryDelete');
+  }
+
+  uplinkInsert(intoPlan: number): Promise<void> {
+    return this.callFunctionViaRpc('uplinkInsert', intoPlan);
+  }
+
+  uplinkDelete(): Promise<void> {
+    return this.callFunctionViaRpc('uplinkDelete');
+  }
+
+  reset(): Promise<void> {
+    return this.callFunctionViaRpc('reset');
+  }
+
+  deleteAll(): Promise<void> {
+    return this.callFunctionViaRpc('deleteAll');
+  }
+
+  newCityPair(fromIcao: string, toIcao: string, altnIcao?: string, planIndex?: number): Promise<void> {
+    return this.callFunctionViaRpc('newCityPair', fromIcao, toIcao, altnIcao, planIndex);
+  }
+
+  setAlternate(altnIcao: string, planIndex: number): Promise<void> {
+    return this.callFunctionViaRpc('setAlternate', altnIcao, planIndex);
+  }
+
+  setOriginRunway(runwayIdent: string, planIndex?: number, alternate?: boolean): Promise<void> {
+    return this.callFunctionViaRpc('setOriginRunway', runwayIdent, planIndex, alternate);
+  }
+
+  setDepartureProcedure(databaseId: string | undefined, planIndex?: number, alternate?: boolean): Promise<void> {
+    return this.callFunctionViaRpc('setDepartureProcedure', databaseId, planIndex, alternate);
+  }
+
+  setDepartureEnrouteTransition(
+    transitionIdent: string | undefined,
+    planIndex?: number,
+    alternate?: boolean,
+  ): Promise<void> {
+    return this.callFunctionViaRpc('setDepartureEnrouteTransition', transitionIdent, planIndex, alternate);
+  }
+
+  setArrivalEnrouteTransition(databaseId: string | undefined, planIndex?: number, alternate?: boolean): Promise<void> {
+    return this.callFunctionViaRpc('setArrivalEnrouteTransition', databaseId, planIndex, alternate);
+  }
+
+  setArrival(databaseId: string | undefined, planIndex?: number, alternate?: boolean): Promise<void> {
+    return this.callFunctionViaRpc('setArrival', databaseId, planIndex, alternate);
+  }
+
+  setApproachVia(databaseId: string | undefined, planIndex?: number, alternate?: boolean): Promise<void> {
+    return this.callFunctionViaRpc('setApproachVia', databaseId, planIndex, alternate);
+  }
+
+  setApproach(databaseId: string | undefined, planIndex?: number, alternate?: boolean): Promise<void> {
+    return this.callFunctionViaRpc('setApproach', databaseId, planIndex, alternate);
+  }
+
+  setDestinationRunway(databaseId: string, planIndex?: number, alternate?: boolean): Promise<void> {
+    return this.callFunctionViaRpc('setDestinationRunway', databaseId, planIndex, alternate);
+  }
+
+  deleteElementAt(
+    index: number,
+    insertDiscontinuity?: boolean,
+    planIndex?: number,
+    alternate?: boolean,
+  ): Promise<boolean> {
+    return this.callFunctionViaRpc('deleteElementAt', index, insertDiscontinuity, planIndex, alternate);
+  }
+
+  insertWaypointBefore(atIndex: number, waypoint: Fix, planIndex?: number, alternate?: boolean): Promise<void> {
+    return this.callFunctionViaRpc('insertWaypointBefore', atIndex, waypoint, planIndex, alternate);
+  }
+
+  insertDiscontinuityAfter(atIndex: number, planIndex?: number, alternate?: boolean): Promise<void> {
+    return this.callFunctionViaRpc('insertDiscontinuityAfter', atIndex, planIndex, alternate);
+  }
+
+  nextWaypoint(atIndex: number, waypoint: Fix, planIndex?: number, alternate?: boolean): Promise<void> {
+    return this.callFunctionViaRpc('nextWaypoint', atIndex, waypoint, planIndex, alternate);
+  }
+
+  newDest(atIndex: number, airportIdent: string, planIndex?: number, alternate?: boolean): Promise<void> {
+    return this.callFunctionViaRpc('newDest', atIndex, airportIdent, planIndex, alternate);
+  }
+
+  startAirwayEntry(at: number, planIndex: number, alternate?: boolean): Promise<number> {
+    return this.callFunctionViaRpc('startAirwayEntry', at, planIndex, alternate);
+  }
+
+  continueAirwayEntryViaAirway(airway: Airway, planIndex: number, alternate?: boolean): Promise<boolean> {
+    return this.callFunctionViaRpc('continueAirwayEntryViaAirway', airway, planIndex, alternate);
+  }
+
+  continueAirwayEntryToFix(fix: Fix, isDct: boolean, planIndex: number, alternate?: boolean): Promise<boolean> {
+    return this.callFunctionViaRpc('continueAirwayEntryToFix', fix, isDct, planIndex, alternate);
+  }
+
+  finaliseAirwayEntry(planIndex: number, alternate?: boolean): Promise<void> {
+    return this.callFunctionViaRpc('finaliseAirwayEntry', planIndex, alternate);
+  }
+
+  directToLeg(
+    ppos: Coordinates,
+    trueTrack: Degrees,
+    targetLegIndex: number,
+    withAbeam: boolean,
+    planIndex: number,
+  ): Promise<void> {
+    return this.callFunctionViaRpc('directToLeg', ppos, trueTrack, targetLegIndex, withAbeam, planIndex);
+  }
+
+  directToWaypoint(
+    ppos: Coordinates,
+    trueTrack: Degrees,
+    waypoint: Fix,
+    withAbeam: boolean,
+    planIndex: number,
+  ): Promise<void> {
+    return this.callFunctionViaRpc('directToWaypoint', ppos, trueTrack, waypoint, withAbeam, planIndex);
+  }
+
+  addOrEditManualHold(
+    at: number,
+    desiredHold: HoldData,
+    modifiedHold: HoldData,
+    defaultHold: HoldData,
+    planIndex: number,
+    alternate: boolean,
+  ): Promise<number> {
+    return this.callFunctionViaRpc(
+      'addOrEditManualHold',
+      at,
+      desiredHold,
+      modifiedHold,
+      desiredHold,
+      planIndex,
+      alternate,
+    );
+  }
+
+  revertHoldToComputed(at: number, planIndex: number, alternate: boolean): Promise<void> {
+    return this.callFunctionViaRpc('revertHoldToComputed', at, planIndex, alternate);
+  }
+
+  enableAltn(atIndexInAlternate: number, cruiseLevel: number, planIndex: number): Promise<void> {
+    return this.callFunctionViaRpc('enableAltn', atIndexInAlternate, cruiseLevel, planIndex);
+  }
+
+  setPilotEnteredAltitudeConstraintAt(
+    atIndex: number,
+    isDescentConstraint: boolean,
+    constraint?: AltitudeConstraint,
+    planIndex?: FlightPlanIndex,
+    alternate?: boolean,
+  ): Promise<void> {
+    return this.callFunctionViaRpc(
+      'setPilotEnteredAltitudeConstraintAt',
+      atIndex,
+      isDescentConstraint,
+      constraint,
+      planIndex,
+      alternate,
+    );
+  }
+
+  setPilotEnteredSpeedConstraintAt(
+    atIndex: number,
+    isDescentConstraint: boolean,
+    speed?: number,
+    planIndex?: FlightPlanIndex,
+    alternate?: boolean,
+  ): Promise<void> {
+    return this.callFunctionViaRpc(
+      'setPilotEnteredSpeedConstraintAt',
+      atIndex,
+      isDescentConstraint,
+      speed,
+      planIndex,
+      alternate,
+    );
+  }
+
+  addOrUpdateCruiseStep(atIndex: number, toAltitude: number, planIndex?: FlightPlanIndex): Promise<void> {
+    return this.callFunctionViaRpc('addOrUpdateCruiseStep', atIndex, toAltitude, planIndex);
+  }
+
+  removeCruiseStep(atIndex: number, planIndex?: FlightPlanIndex): Promise<void> {
+    return this.callFunctionViaRpc('removeCruiseStep', atIndex, planIndex);
+  }
+
+  editLegDefinition(
+    atIndex: number,
+    changes: Partial<FlightPlanLegDefinition>,
+    planIndex?: number,
+    alternate?: boolean,
+  ): Promise<void> {
+    return this.callFunctionViaRpc('editLegDefinition', atIndex, changes, planIndex, alternate);
+  }
+
+  setOverfly(atIndex: number, overfly: boolean, planIndex: number, alternate: boolean): Promise<void> {
+    return this.callFunctionViaRpc('setOverfly', atIndex, overfly, planIndex, alternate);
+  }
+
+  toggleOverfly(atIndex: number, planIndex: number, alternate: boolean): Promise<void> {
+    return this.callFunctionViaRpc('toggleOverfly', atIndex, planIndex, alternate);
+  }
+
+  setFixInfoEntry(index: 1 | 2 | 3 | 4, fixInfo: FixInfoEntry | null, planIndex: number): Promise<void> {
+    return this.callFunctionViaRpc('setFixInfoEntry', index, fixInfo, planIndex);
+  }
+
+  editFixInfoEntry(
+    index: 1 | 2 | 3 | 4,
+    callback: (fixInfo: FixInfoEntry) => FixInfoEntry,
+    planIndex: number,
+  ): Promise<void> {
+    return this.callFunctionViaRpc('editFixInfoEntry', index, callback, planIndex);
+  }
+
+  setPilotEntryClimbSpeedLimitSpeed(value: number, planIndex: FlightPlanIndex, alternate: boolean): Promise<void> {
+    return this.callFunctionViaRpc('setPilotEntryClimbSpeedLimitSpeed', value, planIndex, alternate);
+  }
+
+  setPilotEntryClimbSpeedLimitAltitude(value: number, planIndex: FlightPlanIndex, alternate: boolean): Promise<void> {
+    return this.callFunctionViaRpc('setPilotEntryClimbSpeedLimitAltitude', value, planIndex, alternate);
+  }
+
+  deleteClimbSpeedLimit(planIndex: FlightPlanIndex, alternate: boolean): Promise<void> {
+    return this.callFunctionViaRpc('deleteClimbSpeedLimit', planIndex, alternate);
+  }
+
+  setPilotEntryDescentSpeedLimitSpeed(value: number, planIndex: FlightPlanIndex, alternate: boolean): Promise<void> {
+    return this.callFunctionViaRpc('setPilotEntryDescentSpeedLimitSpeed', value, planIndex, alternate);
+  }
+
+  setPilotEntryDescentSpeedLimitAltitude(value: number, planIndex: FlightPlanIndex, alternate: boolean): Promise<void> {
+    return this.callFunctionViaRpc('setPilotEntryDescentSpeedLimitAltitude', value, planIndex, alternate);
+  }
+
+  deleteDescentSpeedLimit(planIndex: FlightPlanIndex, alternate: boolean): Promise<void> {
+    return this.callFunctionViaRpc('deleteDescentSpeedLimit', planIndex, alternate);
+  }
+
+  isWaypointInUse(waypoint: Waypoint): Promise<boolean> {
+    return this.callFunctionViaRpc('isWaypointInUse', waypoint);
+  }
+
+  setFlightNumber(flightNumber: string, planIndex: number): Promise<void> {
+    return this.callFunctionViaRpc('setFlightNumber', flightNumber, planIndex);
+  }
+
+  // FIXME types
+  setPerformanceData<k extends keyof P & string>(key: k, value: any, planIndex: number): Promise<void> {
+    return this.callFunctionViaRpc('setPerformanceData', key, value, planIndex);
+  }
+
+  stringMissedApproach(onConstraintsDeleted?: (_: FlightPlanLeg) => void, planIndex?: number): Promise<void> {
+    return this.callFunctionViaRpc('stringMissedApproach', onConstraintsDeleted, planIndex);
+  }
+
+  openBatch(name: string): Promise<FlightPlanBatch> {
+    return this.callFunctionViaRpc('openBatch', name);
+  }
+
+  closeBatch(uuid: string): Promise<FlightPlanBatch> {
+    return this.callFunctionViaRpc('closeBatch', uuid);
+  }
+
+  propagateWindsAt(atIndex: number, result: PropagatedWindEntry[], planIndex: number): PropagatedWindEntry[] {
+    return this.propagateWindsAt(atIndex, result, planIndex);
+  }
+
+  addCruiseWindEntry(atIndex: number, entry: WindEntry, planIndex: number): Promise<void> {
+    return this.callFunctionViaRpc('addCruiseWindEntry', atIndex, entry, planIndex);
+  }
+
+  deleteCruiseWindEntry(atIndex: number, altitude: number, planIndex: number): Promise<void> {
+    return this.callFunctionViaRpc('deleteCruiseWindEntry', atIndex, altitude, planIndex);
+  }
+
+  editCruiseWindEntry(atIndex: number, altitude: number, newEntry: WindEntry, planIndex: number): Promise<void> {
+    return this.callFunctionViaRpc('editCruiseWindEntry', atIndex, altitude, newEntry, planIndex);
+  }
+
+  setClimbWindEntry(altitude: number, entry: WindEntry | null, planIndex: number): Promise<void> {
+    return this.callFunctionViaRpc('setClimbWindEntry', altitude, entry, planIndex);
+  }
+
+  editClimbWindEntry(index: number, entry: WindEntry, planIndex: number): Promise<void> {
+    return this.callFunctionViaRpc('editClimbWindEntry', index, entry, planIndex);
+  }
+
+  setDescentWindEntry(
+    altitude: number,
+    entry: WindEntry | null,
+    planIndex: number,
+    shouldUpdateTwrWind: boolean,
+  ): Promise<void> {
+    return this.callFunctionViaRpc('setDescentWindEntry', altitude, entry, planIndex, shouldUpdateTwrWind);
+  }
+
+  editDescentWindEntry(index: number, entry: WindEntry, planIndex: number): Promise<void> {
+    return this.callFunctionViaRpc('editDescentWindEntry', index, entry, planIndex);
+  }
+
+  deleteAllClimbWindEntries(): Promise<void> {
+    return this.callFunctionViaRpc('deleteAllClimbWindEntries');
+  }
+
+  deleteClimbWindEntries(planIndex: number): Promise<void> {
+    return this.callFunctionViaRpc('deleteClimbWindEntries', planIndex);
+  }
+
+  deleteDescentWindEntries(planIndex: number): Promise<void> {
+    return this.callFunctionViaRpc('deleteDescentWindEntries', planIndex);
+  }
+
+  setAlternateWind(entry: WindVector | null, planIndex: number): Promise<void> {
+    return this.callFunctionViaRpc('setAlternateWind', entry, planIndex);
+  }
+
+  clearAlternateWind(planIndex: number): Promise<void> {
+    return this.callFunctionViaRpc('clearAlternateWind', planIndex);
+  }
+
+  insertWindUplink(planIndex: number): Promise<void> {
+    return this.callFunctionViaRpc('insertWindUplink', planIndex);
+  }
+
+  /** @inheritdoc */
+  public tryActivateEngineOutSid(): Promise<boolean> {
+    return this.callFunctionViaRpc('tryActivateEngineOutSid');
+  }
+
+  /** @inheritdoc */
+  public tryEraseEngineOutSid(): Promise<boolean> {
+    return this.callFunctionViaRpc('tryActivateEngineOutSid');
+  }
+
+  getHistoryWindsEntries(sortByAltitudeAscending?: boolean): Promise<Readonly<WindEntry>[]> {
+    return this.callFunctionViaRpc('getHistoryWindsEntries', sortByAltitudeAscending);
+  }
+  insertHistoryWinds(): Promise<boolean> {
+    return this.callFunctionViaRpc('insertHistoryWinds');
+  }
+  historyWindInsertionAllowed(): Promise<boolean> {
+    return this.callFunctionViaRpc('historyWindInsertionAllowed');
+  }
+  setApproachWind(direction: number | null, magnitude: number | null, planIndex: number): Promise<boolean> {
+    return this.callFunctionViaRpc('setApproachWind', direction, magnitude, planIndex);
+  }
+  deleteApproachWind(planIndex: number): Promise<boolean> {
+    return this.callFunctionViaRpc('deleteApproachWind', planIndex);
+  }
+}

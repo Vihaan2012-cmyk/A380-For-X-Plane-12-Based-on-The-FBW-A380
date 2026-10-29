@@ -1,0 +1,482 @@
+// Copyright (c) 2025-2026 FlyByWire Simulations
+// SPDX-License-Identifier: GPL-3.0
+import { SignalList, Bus, BoardDevice } from 'xplane-js/ui';
+import { AtcFmsMessages, FmsAtcMessages } from '@datalink/atc';
+import {
+  AtisMessage,
+  AtisType,
+  AtsuMessage,
+  AtsuMessageType,
+  AtsuStatusCodes,
+  CpdlcMessage,
+  DatalinkModeCode,
+  DatalinkStatusCode,
+  DclMessage,
+  OclMessage,
+} from '@datalink/common';
+import { RouterFmsMessages } from '@datalink/router';
+import { MessageStorage } from './MessageStorage';
+import { FmsData } from '@flybywiresim/fbw-sdk';
+import { FmsErrorType } from '@fmgc/FmsError';
+import { AtcDatalinkMessages } from './AtcDatalinkPublisher';
+import {
+  McduMessage,
+  ATCCOMMessage,
+  ATCCOMMessages,
+  NXFictionalMessages,
+  NXSystemMessages,
+} from '../shared/NXSystemMessages';
+import { FmsToDatalinkSubsystemEvents } from '../../../../shared/src/publishers/A380XFmsAtcBusPublisher';
+
+export type AirportAtis = {
+  icao: string;
+  type: AtisType;
+  requested: boolean;
+  autoupdate: boolean;
+  lastReadAtis: string | null;
+  status: string | null;
+};
+
+export const PredefinedMessages = {
+  sending: 'SENDING',
+  sent: 'SENT',
+  useVoice: 'USE<br/>VOICE',
+  sendFailed: 'SEND<br/>FAILED',
+  noReply: 'NO REPLY',
+  noAutoUpdate: 'NO AUTO<br/>UPDATE',
+  endOfUpdate: 'END OF<br/>UPDATE',
+  atisXRejected: 'ATIS X<br/>REJECTED',
+  gndSysMsg: 'GND SYS<br/>MSG >>>',
+};
+
+export interface AtcErrorMessage {
+  message: McduMessage;
+  messageText: string;
+  backgroundColor: 'white' | 'amber' | 'cyan'; // Whether the message should be colored.
+  cleared: boolean; // If message has been cleared from footer
+}
+
+export class AtcDatalinkSystem implements BoardDevice {
+  // TODO this should be hosted in the CPIOM-D.
+  private readonly messageStorage: MessageStorage;
+
+  private readonly publisher = this.bus.outbox<AtcDatalinkMessages & FmsAtcMessages>();
+
+  private readonly sub = this.bus.inbox<AtcFmsMessages & FmsData & RouterFmsMessages>();
+
+  private readonly fmsBusSub = this.bus.inbox<FmsToDatalinkSubsystemEvents>();
+
+  private requestId: number = 0;
+
+  private genericRequestResponseCallbacks: ((requestId: number) => boolean)[] = [];
+
+  private requestAtsuStatusCodeCallbacks: ((code: AtsuStatusCodes, requestId: number) => boolean)[] = [];
+
+  private atisAutoUpdates: string[] = [];
+
+  private atisReportsPrintActive: boolean = false;
+
+  #atcErrors = SignalList.of<AtcErrorMessage>();
+
+  get atcErrors() {
+    return this.#atcErrors;
+  }
+
+  private readonly atisAirports: AirportAtis[] = [
+    { icao: '', type: AtisType.Departure, requested: false, autoupdate: false, lastReadAtis: null, status: null },
+    { icao: '', type: AtisType.Arrival, requested: false, autoupdate: false, lastReadAtis: null, status: null },
+    { icao: '', type: AtisType.Arrival, requested: false, autoupdate: false, lastReadAtis: null, status: null },
+  ];
+
+  private datalinkStatus: { vhf: DatalinkStatusCode; satellite: DatalinkStatusCode; hf: DatalinkStatusCode } = {
+    vhf: DatalinkStatusCode.NotInstalled,
+    satellite: DatalinkStatusCode.NotInstalled,
+    hf: DatalinkStatusCode.NotInstalled,
+  };
+
+  private datalinkMode: { vhf: DatalinkModeCode; satellite: DatalinkModeCode; hf: DatalinkModeCode } = {
+    vhf: DatalinkModeCode.None,
+    satellite: DatalinkModeCode.None,
+    hf: DatalinkModeCode.None,
+  };
+
+  /**
+   * Creates a new instance of the ATC Datalink System
+   * @param {Bus} bus The event bus
+   */
+  constructor(private readonly bus: Bus) {
+    this.messageStorage = new MessageStorage(this.sub);
+
+    this.sub.topic('atcResetData').listen(() => {
+      this.messageStorage.resetAtcData();
+      this.atisAutoUpdates = [];
+      this.atisReportsPrintActive = false;
+
+      this.datalinkStatus = {
+        vhf: DatalinkStatusCode.NotInstalled,
+        satellite: DatalinkStatusCode.NotInstalled,
+        hf: DatalinkStatusCode.NotInstalled,
+      };
+
+      this.datalinkMode = {
+        vhf: DatalinkModeCode.None,
+        satellite: DatalinkModeCode.None,
+        hf: DatalinkModeCode.None,
+      };
+    });
+
+    this.sub.topic('routerDatalinkStatus').listen((data) => (this.datalinkStatus = data));
+    this.sub.topic('routerDatalinkMode').listen((data) => (this.datalinkMode = data));
+
+    this.sub.topic('atcSystemStatus').listen((status) => {
+      switch (status) {
+        // TODO: Add feature to track atis that was updated
+        case AtsuStatusCodes.NewAtisReceived:
+          this.atisAirports.forEach((data, index) => {
+            this.publisher.post(`atcAtis_${index}`, this.atisAirports[index]);
+          });
+      }
+    });
+
+    this.sub.topic('atcActiveAtisAutoUpdates').listen((airports) => {
+      this.atisAutoUpdates = airports;
+      this.atisAirports.forEach((airportData, index) => {
+        if (
+          airportData.icao !== null &&
+          airports.includes(airportData.icao) &&
+          airportData.autoupdate == false &&
+          airportData.type !== AtisType.Departure
+        ) {
+          this.atisAirports[index].autoupdate = true;
+          this.publisher.post(`atcAtis_${index}`, this.atisAirports[index]);
+        } else if (
+          airportData.icao !== null &&
+          !airports.includes(airportData.icao) &&
+          airportData.autoupdate == true
+        ) {
+          this.atisAirports[index].autoupdate = false;
+          this.publisher.post(`atcAtis_${index}`, this.atisAirports[index]);
+        }
+      });
+    });
+
+    this.sub.topic('atcRequestAtsuStatusCode').listen((response) => {
+      this.requestAtsuStatusCodeCallbacks.every((callback, index) => {
+        if (callback(response.code, response.requestId)) {
+          this.requestAtsuStatusCodeCallbacks.splice(index, 1);
+          return false;
+        }
+        return true;
+      });
+    });
+
+    this.sub
+      .topic('fmsOrigin')
+      .distinct()
+      .listen((icao) => {
+        this.initAtis(0, icao);
+      });
+
+    this.sub
+      .topic('fmsDestination')
+      .distinct()
+      .listen((icao) => {
+        this.initAtis(1, icao);
+      });
+
+    this.sub
+      .topic('fmsAlternate')
+      .distinct()
+      .listen((icao) => {
+        this.initAtis(2, icao);
+      });
+
+    this.fmsBusSub.topic('reset_auto_update').listen(() => {
+      this.resetAtisAutoUpdate();
+    });
+  }
+
+  setup(): void {}
+  tick(): void {}
+
+  destroy() {}
+
+  /**
+   * Add ATC error message to ATCCOM message queue
+   * @param {FmsErrorType} errorType error type
+   * @param {string} details optional details to add to error message which are shown on the second line. For format error and entry out of range cases
+   */
+  showAtcErrorMessage(errorType: FmsErrorType, details?: string) {
+    switch (errorType) {
+      case FmsErrorType.EntryOutOfRange:
+        this.addMessageToQueue(NXSystemMessages.entryOutOfRange, details);
+        break;
+      case FmsErrorType.FormatError:
+        this.addMessageToQueue(NXSystemMessages.formatError, details);
+        break;
+      case FmsErrorType.NotInDatabase:
+        this.addMessageToQueue(NXSystemMessages.notInDatabase);
+        break;
+      case FmsErrorType.NotYetImplemented:
+        this.addMessageToQueue(NXFictionalMessages.notYetImplemented);
+        break;
+      default:
+        break;
+    }
+  }
+
+  /**
+   * Clear last ATC error message from queue
+   */
+  clearLatestAtcErrorMessage() {
+    const arr = this.atcErrors.snapshot();
+    const index = arr.findIndex((val) => !val.cleared);
+
+    if (index > -1) {
+      if (arr[index].message.isTypeTwo) {
+        const old = arr[index];
+        old.cleared = true;
+
+        this.atcErrors.set(arr);
+      } else {
+        this.atcErrors.removeAt(index);
+      }
+    }
+  }
+
+  /**
+   * Add ATCCOM message to ATCCOM message queue
+   * @param {ATCCOMMessage} message message object
+   * @param {string} details optional details to add to message which are shown on the second line
+   */
+  public addMessageToQueue(message: ATCCOMMessage, details?: string) {
+    const msg: AtcErrorMessage = {
+      message: message,
+      messageText: details ? message.text.concat('\n', details) : message.text,
+      backgroundColor: message.isAmber ? 'amber' : 'white',
+      cleared: false,
+    };
+
+    const exists = this.atcErrors.snapshot().findIndex((el) => el.messageText === msg.messageText && el.cleared);
+    if (exists !== -1) {
+      this.atcErrors.removeAt(exists);
+    }
+    this.atcErrors.insert(msg, 0);
+  }
+
+  // TODO: improve icao checks
+  /**
+   * Initialise D-ATIS data for specified block
+   * @param {number} index index of D-ATIS block
+   * @param {string} icao 4-letter icao code of airport
+   */
+  private initAtis(index: number, icao?: string | null): void {
+    const newAtisData = {
+      icao: '',
+      type: AtisType.Arrival,
+      requested: false,
+      autoupdate: false,
+      lastReadAtis: '',
+      status: '',
+    };
+    if (icao !== undefined && icao !== null) {
+      newAtisData.icao = icao;
+    }
+    if (index == 0) {
+      newAtisData.type = AtisType.Departure;
+    }
+    this.atisAirports[index] = newAtisData;
+    this.publisher.post(`atcAtis_${index}`, this.atisAirports[index]);
+  }
+
+  /**
+   * Handler for receiving ATC ATIS message
+   * @param {string} airport 4-letter icao code for airport
+   * @param {AtisType} type ATIS type DEP/ARR/ENR
+   * @returns {Promise<AtsuStatusCodes>} promise which returns an ATSU status code
+   */
+  public async receiveAtcAtis(airport: string, type: AtisType): Promise<AtsuStatusCodes> {
+    return new Promise<AtsuStatusCodes>((resolve, _reject) => {
+      const requestId = this.requestId++;
+      this.publisher.post('atcRequestAtis', { icao: airport, type, requestId }, true, false);
+      this.requestAtsuStatusCodeCallbacks.push((response: AtsuStatusCodes, id: number) => {
+        if (id === requestId) resolve(response);
+        return id === requestId;
+      });
+    });
+  }
+
+  /**
+   * Get D-ATIS data blocks from ATC datalink system.
+   * @returns {AirportAtis[]} array of all three D-ATIS blocks.
+   */
+  public getAtisAirports(): AirportAtis[] {
+    return this.atisAirports;
+  }
+
+  /**
+   * Replace the AirportAtis block at the specific index in the ATC datalink system
+   * @param {AirportAtis} airportData airport atis datablock
+   * @param {number} index index of D-ATIS block to set
+   */
+  public setAtisAirport(airportData: AirportAtis, index: number): void {
+    this.atisAirports[index] = airportData;
+  }
+
+  /**
+   * Fetch all D-ATIS messages of the station
+   * @param {string} icao 4-letter icao of station to fetch reports of
+   * @returns {AtisMessage[]} array of all ATIS messages of specific station
+   */
+  public atisReports(icao: string): AtisMessage[] {
+    if (this.messageStorage.atisReports.has(icao)) {
+      return this.messageStorage.atisReports.get(icao)!;
+    }
+    return [];
+  }
+
+  // TODO: Improve error handling
+  /**
+   * Request the D-ATIS for a D-ATIS block
+   * @param {number} index index of D-ATIS block to request ATIS
+   * @returns {Promise<void>} promise
+   */
+  public async requestAtis(index: number): Promise<void> {
+    const airport = this.atisAirports[index];
+
+    if (airport.icao == null || airport.requested) {
+      return;
+    }
+    airport.requested = true;
+
+    this.atisAirports[index].status = PredefinedMessages.sending;
+    this.publisher.post(`atcAtis_${index}`, this.atisAirports[index]);
+
+    const response = await this.receiveAtcAtis(airport.icao, airport.type);
+
+    if (response !== AtsuStatusCodes.Ok) {
+      // TODO: log error
+    }
+
+    switch (response) {
+      case AtsuStatusCodes.ComFailed:
+        this.atisAirports[index].status = PredefinedMessages.sendFailed;
+        break;
+      case AtsuStatusCodes.NoAtisReceived:
+        this.atisAirports[index].status = PredefinedMessages.noReply;
+        this.addMessageToQueue(ATCCOMMessages.datisNoReply);
+        break;
+      case AtsuStatusCodes.NewAtisReceived:
+        this.atisAirports[index].status = '';
+      // TODO: Message should only appear on certain pages
+      // this.addMessageToQueue(ATCCOMMessages.datisReceived);
+    }
+    this.publisher.post(`atcAtis_${index}`, this.atisAirports[index]);
+    airport.requested = false;
+  }
+
+  /**
+   * Update all D-ATIS blocks
+   */
+  public updateAllAtis(): void {
+    for (let i = 0; i < this.atisAirports.length; i++) {
+      this.requestAtis(i);
+    }
+  }
+
+  /**
+   * Check if auto update is active for a specified station
+   * @param {string} icao 4-letter icao of D-ATIS station
+   * @returns {boolean} true if auto update is enabled for the station
+   */
+  public atisAutoUpdateActive(icao: string): boolean {
+    return this.atisAutoUpdates.findIndex((airport) => icao === airport) !== -1;
+  }
+
+  /**
+   * Activate auto update for a D-ATIS block
+   * @param {number} index index of D-ATIS block to activate auto update
+   * @returns {Promise<AtsuStatusCodes>} promise which returns an ATSU status code
+   */
+  public async activateAtisAutoUpdate(index: number): Promise<AtsuStatusCodes> {
+    const airportData = this.atisAirports[index];
+    const icao = airportData.icao;
+    const type = airportData.type;
+    return new Promise<AtsuStatusCodes>((resolve, _reject) => {
+      const requestId = this.requestId++;
+      this.publisher.post('atcActivateAtisAutoUpdate', { icao, type, requestId }, true, false);
+      this.genericRequestResponseCallbacks.push((id: number) => {
+        if (id === requestId) resolve(AtsuStatusCodes.Ok);
+        return id === requestId;
+      });
+    });
+  }
+
+  /**
+   * Deactivate auto update for a D-ATIS block
+   * @param {number} index index of D-ATIS block to deactivate auto update
+   * @returns {Promise<AtsuStatusCodes>} promise which returns an ATSU status code
+   */
+  public async deactivateAtisAutoUpdate(index: number): Promise<AtsuStatusCodes> {
+    const airportData = this.atisAirports[index];
+    const icao = airportData.icao;
+    return new Promise<AtsuStatusCodes>((resolve, _reject) => {
+      const requestId = this.requestId++;
+      this.publisher.post('atcDeactivateAtisAutoUpdate', { icao, requestId }, true, false);
+      this.genericRequestResponseCallbacks.push((id: number) => {
+        if (id === requestId) resolve(AtsuStatusCodes.Ok);
+        return id === requestId;
+      });
+    });
+  }
+
+  public registerMessages(messages: AtsuMessage[]): void {
+    if (messages[0].Type === AtsuMessageType.CPDLC) {
+      this.publisher.post('atcRegisterCpdlcMessages', messages as CpdlcMessage[], true, false);
+    } else if (messages[0].Type === AtsuMessageType.DCL) {
+      this.publisher.post('atcRegisterDclMessages', messages as DclMessage[], true, false);
+    } else if (messages[0].Type === AtsuMessageType.OCL) {
+      this.publisher.post('atcRegisterOclMessages', messages as OclMessage[], true, false);
+    }
+  }
+
+  /**
+   * Get status of datalink subsystem
+   * @param {string} value name of datalink subsystem vhf/satcom/hf
+   * @returns {DatalinkStatusCode} status code of datalink system
+   */
+  public getDatalinkStatus(value: 'vhf' | 'satcom' | 'hf'): DatalinkStatusCode {
+    switch (value) {
+      case 'vhf':
+        return this.datalinkStatus.vhf;
+      case 'satcom':
+        return this.datalinkStatus.satellite;
+      case 'hf':
+        return this.datalinkStatus.hf;
+      default:
+        return DatalinkStatusCode.NotInstalled;
+    }
+  }
+
+  /**
+   * Get mode of datalink subsystem
+   * @param {string} value name of datalink subsystem vhf/satcom/hf
+   * @returns {DatalinkModeCode} mode code of datalink subsystem
+   */
+  public getDatalinkMode(value: 'vhf' | 'satcom' | 'hf'): DatalinkModeCode {
+    switch (value) {
+      case 'vhf':
+        return this.datalinkMode.vhf;
+      case 'satcom':
+        return this.datalinkMode.satellite;
+      case 'hf':
+        return this.datalinkMode.hf;
+      default:
+        return DatalinkModeCode.None;
+    }
+  }
+
+  private resetAtisAutoUpdate(): void {
+    this.publisher.post('atcResetAtisAutoUpdate', true, true, false);
+  }
+}

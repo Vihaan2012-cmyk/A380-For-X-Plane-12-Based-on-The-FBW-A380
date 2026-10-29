@@ -1,0 +1,108 @@
+{
+ "name": "transmit_receive",
+ "steps": [
+  {
+   "press": "RMP_1_VHF_CALL_1"
+  },
+  {
+   "run_ms": 300
+  },
+  {
+   "press": "RMP_1_VHF_CALL_2"
+  },
+  {
+   "run_ms": 300
+  },
+  {
+   "press": "RMP_1_HF_CALL_1"
+  },
+  {
+   "run_ms": 300
+  },
+  {
+   "press": "RMP_1_VOICE"
+  },
+  {
+   "run_ms": 300
+  },
+  {
+   "press": "RMP_1_VOICE"
+  },
+  {
+   "press": "RMP_1_MECH_CALL"
+  },
+  {
+   "run_ms": 300
+  },
+  {
+   "press": "RMP_1_MECH_CALL"
+  },
+  {
+   "run_ms": 300
+  },
+  {
+   "set": {
+    "L:A380X_RMP_1_VHF_VOL_RX_SWITCH_1": 1
+   }
+  },
+  {
+   "run_ms": 600
+  },
+  {
+   "set": {
+    "L:A380X_RMP_1_VHF_VOL_RX_SWITCH_1": 0
+   }
+  },
+  {
+   "run_ms": 300
+  },
+  {
+   "set": {
+    "L:A380X_RMP_1_VHF_VOL_RX_SWITCH_1": 1
+   }
+  },
+  {
+   "run_ms": 100
+  },
+  {
+   "set": {
+    "L:A380X_RMP_1_VHF_VOL_RX_SWITCH_1": 0
+   }
+  },
+  {
+   "run_ms": 600
+  },
+  {
+   "press": "RMP_1_VHF_CALL_1"
+  },
+  {
+   "run_ms": 600
+  },
+  {
+   "set": {
+    "L:A380X_RMP_1_VHF_VOL_RX_SWITCH_1": 1
+   }
+  },
+  {
+   "run_ms": 600
+  },
+  {
+   "press": "RMP_1_VHF_CALL_1"
+  },
+  {
+   "run_ms": 1500
+  },
+  {
+   "press": "RMP_1_TEL_CALL_1"
+  },
+  {
+   "run_ms": 800
+  },
+  {
+   "press": "RMP_1_TEL_CALL_1"
+  },
+  {
+   "run_ms": 300
+  }
+ ]
+}

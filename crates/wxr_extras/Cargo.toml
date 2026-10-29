@@ -1,0 +1,10 @@
+[package]
+name = "wxr_extras"
+version = "0.1.0"
+edition = "2021"
+description = "Predictive windshear, turbulence detection and vertical-display weather for the A380 radar, without any simulator dependency"
+license = "GPL-3.0-or-later"
+
+[dependencies]
+
+[workspace]

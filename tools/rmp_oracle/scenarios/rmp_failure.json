@@ -1,0 +1,44 @@
+{
+ "name": "rmp_failure",
+ "steps": [
+  {
+   "run_ms": 500
+  },
+  {
+   "failures": [
+    23002
+   ]
+  },
+  {
+   "run_ms": 1000
+  },
+  {
+   "press": "RMP_1_LSK_1"
+  },
+  {
+   "run_ms": 500
+  },
+  {
+   "failures": []
+  },
+  {
+   "run_ms": 1000
+  },
+  {
+   "set": {
+    "L:A380X_RMP_2_BRIGHTNESS_KNOB": 0
+   }
+  },
+  {
+   "run_ms": 500
+  },
+  {
+   "set": {
+    "L:A380X_RMP_2_BRIGHTNESS_KNOB": 50
+   }
+  },
+  {
+   "run_ms": 500
+  }
+ ]
+}

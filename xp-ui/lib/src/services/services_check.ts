@@ -1,0 +1,25 @@
+import type * as Api from 'xplane-js/ui';
+import * as Mine from './index';
+
+export const waitOk: typeof Api.Waits = Mine.Waits;
+export const debounceOk: typeof Api.Debouncer = Mine.Debouncer;
+export const uuidOk: typeof Api.Ids = Mine.Ids;
+export const sharedOk: typeof Api.SharedObject = Mine.SharedObject;
+export const heapOk: typeof Api.Pool = Mine.Pool;
+export const icaoOk: typeof Api.IcaoCodes = Mine.IcaoCodes;
+export const loaderOk: typeof Api.NavDatabase = Mine.NavDatabase;
+export const maskOk: typeof Api.AirportKinds = Mine.AirportKinds;
+export const providerOk: typeof Api.ChartOrigin = Mine.ChartOrigin;
+export const clientOk: typeof Api.Charts = Mine.Charts;
+export const viewOk: typeof Api.ChartPanel = Mine.ChartPanel;
+export const faaOk: typeof Api.FaaChart = Mine.FaaChart;
+export const lidoOk: typeof Api.LidoChart = Mine.LidoChart;
+export const refOk: Api.SharedHandle<object> = {} as Mine.SharedHandle<object>;
+export const icaoValOk: Api.IcaoCode = {} as Mine.IcaoCode;
+export const rwyOk: Api.RunwayId = {} as Mine.RunwayId;
+export const comOk: Api.ComSlot = 1 as Mine.ComSlot;
+export const metarOk: Api.MetarReport = {} as Mine.MetarReport;
+export const metaOk: Api.ChartInfo = {} as Mine.ChartInfo;
+export const idxOk: Api.ChartList = {} as Mine.ChartList;
+export const pagesOk: Api.ChartPageSet = {} as Mine.ChartPageSet;
+export const imgOk: Api.ChartPicture = {} as Mine.ChartPicture;

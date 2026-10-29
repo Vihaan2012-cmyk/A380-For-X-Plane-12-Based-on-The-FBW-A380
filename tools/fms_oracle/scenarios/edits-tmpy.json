@@ -1,0 +1,22 @@
+{
+  "name": "edits-tmpy",
+  "lat": 51.4706,
+  "lon": -0.4619,
+  "steps": [
+    { "uplink": "canned" },
+    { "run_ms": 5000 },
+    { "snapshot": "before" },
+    { "fms": "await fps.deleteElementAt(3);" },
+    { "run_ms": 1000 },
+    { "snapshot": "tmpy-after-delete" },
+    { "fms": "await fps.temporaryInsert();" },
+    { "run_ms": 2000 },
+    { "fms": "await fps.insertDiscontinuityAfter(5); if (fps.hasTemporary) await fps.temporaryInsert();" },
+    { "run_ms": 2000 },
+    { "fms": "await fps.setPilotEnteredAltitudeConstraintAt(2, false, { altitudeDescriptor: '+', altitude1: 5000 }); if (fps.hasTemporary) await fps.temporaryInsert();" },
+    { "run_ms": 2000 },
+    { "fms": "await fps.addOrUpdateCruiseStep(8, 39000); if (fps.hasTemporary) await fps.temporaryInsert();" },
+    { "run_ms": 5000 },
+    { "snapshot": "after-edits" }
+  ]
+}

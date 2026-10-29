@@ -1,0 +1,13 @@
+[package]
+name = "oans-oracle"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[dependencies]
+rquickjs = { version = "0.13", features = ["loader"] }
+oxc = { version = "0.150", features = ["transformer", "codegen", "semantic"] }
+serde_json = "1"
+oans = { path = ".." }
+
+[workspace]

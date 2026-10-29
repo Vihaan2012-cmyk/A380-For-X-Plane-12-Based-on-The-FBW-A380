@@ -1,0 +1,19 @@
+{
+  "name": "flight-egll-kjfk-star",
+  "lat": 51.4706,
+  "lon": -0.4619,
+  "steps": [
+    { "fms": "await fps.newCityPair('EGLL', 'KJFK', 'KBOS');" },
+    { "run_ms": 3000 },
+    { "fms": "const a = [...fps.active.availableArrivals].sort((x, y) => x.ident.localeCompare(y.ident)); if (a.length) await fps.setArrival(a[0].databaseId);" },
+    { "run_ms": 2000 },
+    { "fms": "const p = [...fps.active.availableApproaches].sort((x, y) => x.ident.localeCompare(y.ident)); if (p.length) await fps.setApproach(p[0].databaseId);" },
+    { "fms": "if (fps.hasTemporary) await fps.temporaryInsert();" },
+    { "run_ms": 5000 },
+    { "fms": "const p = fps.active; let i = p.allLegs.findIndex((e) => !e.isDiscontinuity && e.definition && e.definition.waypoint && e.type === 'IF' && p.allLegs.indexOf(e) > 0); if (i < 0) i = 1; p.setActiveLegIndex(i);" },
+    { "run_ms": 3000 },
+    { "snapshot": "before-flight" },
+    { "fly": { "start": "plan", "kt": 280, "flight_phase": 4, "seconds": 420, "sample_ms": 1000 } },
+    { "snapshot": "after-flight" }
+  ]
+}

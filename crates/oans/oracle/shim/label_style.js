@@ -1,0 +1,18 @@
+export const LabelStyle = {
+  Taxiway: 'taxiway',
+  ExitLine: 'exit-line',
+  TerminalBuilding: 'terminal-building',
+  RunwayAxis: 'runway-axis',
+  RunwayEnd: 'runway-end',
+  FmsSelectedRunwayEnd: 'runway-end-fms-selected',
+  FmsSelectedRunwayAxis: 'runway-axis-fms-selected',
+  BtvSelectedRunwayEnd: 'runway-end-btv-selected',
+  BtvSelectedRunwayArrow: 'runway-arrow-btv-selected',
+  BtvSelectedExit: 'exit-line-btv-selected',
+  BtvStopLineMagenta: 'btv-stop-line-magenta',
+  BtvStopLineAmber: 'btv-stop-line-amber',
+  BtvStopLineRed: 'btv-stop-line-red',
+  BtvStopLineGreen: 'btv-stop-line-green',
+  CrossSymbol: 'cross-symbol',
+  FlagSymbol: 'flag-symbol',
+};

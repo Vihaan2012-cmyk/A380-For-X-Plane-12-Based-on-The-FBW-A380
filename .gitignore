@@ -1,0 +1,40 @@
+/target/
+/dist/
+/fbw-buildtarget-*/
+/distribution/**/node_modules/
+/distribution/**/*.zip
+/distribution/**/*.7z
+/distribution/out/
+*.pdb
+*.tar.gz
+.wrangler/
+.dev.vars
+*.env
+.env*
+
+# Per-agent build directories (parallel work)
+target-*/
+
+# build.ps1 downloads, stages and builds here
+/build/
+
+__pycache__/
+*.pyc
+
+# 3D models and their art are not in the source repo
+*.obj
+*.obj-base
+*.gltf
+*.glb
+*.blend
+*.blend1
+*.fbx
+*.pbrprj
+*.xcf
+**/model/*.bin
+/vendor/openSAM-a380x-fork/DGS-*/**/*.png
+/vendor/openSAM-a380x-fork/DGS-*/**/*.jpg
+/vendor/openSAM-a380x-fork/DGS-*/**/*.dds
+/vendor/openSAM-a380x-fork/DGS-*/**/*.DDS
+/vendor/openSAM-a380x-fork/DGS-*/**/*.pdf
+/vendor/openSAM-a380x-fork/DGS-*/**/*.zip

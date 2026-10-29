@@ -1,0 +1,18 @@
+{
+  "name": "flight-egll-kjfk-sid",
+  "lat": 51.4706,
+  "lon": -0.4619,
+  "steps": [
+    { "fms": "await fps.newCityPair('EGLL', 'KJFK', 'KBOS');" },
+    { "run_ms": 3000 },
+    { "fms": "const r = fps.active.availableOriginRunways.map((x) => x.ident).sort(); await fps.setOriginRunway(r[0]);" },
+    { "run_ms": 2000 },
+    { "fms": "const d = [...fps.active.availableDepartures].sort((a, b) => a.ident.localeCompare(b.ident)); if (d.length) await fps.setDepartureProcedure(d[0].databaseId);" },
+    { "run_ms": 2000 },
+    { "fms": "if (fps.hasTemporary) await fps.temporaryInsert();" },
+    { "run_ms": 5000 },
+    { "snapshot": "before-flight" },
+    { "fly": { "start": "plan", "kt": 250, "flight_phase": 2, "seconds": 900, "until_leg": 8, "sample_ms": 1000 } },
+    { "snapshot": "after-flight" }
+  ]
+}

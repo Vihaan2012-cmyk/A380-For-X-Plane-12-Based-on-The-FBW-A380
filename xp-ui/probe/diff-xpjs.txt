@@ -1,0 +1,16 @@
+51 items, 2 differ: U14 K01
+U14.units.L:U_LLA
+    old "latlonalt"
+    new missing
+U14.units.L:U_LLA_ALT
+    old missing
+    new "feet"
+U14.units.L:U_LLA_LAT
+    old missing
+    new "degrees"
+U14.units.L:U_LLA_LON
+    old missing
+    new "degrees"
+K01.afterGet
+    old ["RegisterViewListener:register:JS_LISTENER_KEYEVENT","ViewListener:on:keyIntercepted"]
+    new []

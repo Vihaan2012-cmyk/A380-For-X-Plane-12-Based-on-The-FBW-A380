@@ -1,0 +1,133 @@
+A380 for X-Plane 12 (Ported from FBW A380): licenses and notices
+
+This is an unofficial, free, non-commercial port. It is not made, endorsed or
+supported by FlyByWire Simulations, Microsoft, Laminar Research or Airbus.
+
+
+1. FlyByWire A380X
+   FlyByWire Simulations, https://flybywiresim.com/
+   Original source code: https://github.com/flybywiresim/aircraft (fbw-a380x,
+   fbw-common)
+   - Source code, and everything compiled from it (the systems plugin, the
+     instrument pages): GNU General Public License v3, see LICENSE.txt.
+   - FlyByWire's original 3D assets and textures: Creative Commons
+     Attribution-NonCommercial 4.0 International,
+     https://creativecommons.org/licenses/by-nc/4.0/
+     Changes made for this port: the models are converted from MSFS glTF to
+     X-Plane OBJ8, textures are re-encoded and resized, and animations, click
+     spots and lighting are rebuilt for X-Plane.
+
+2. Microsoft Flight Simulator
+   FlyByWire's A380X is an add-on for Microsoft Flight Simulator. This port
+   contains no Microsoft Flight Simulator models or textures: those are
+   FlyByWire's own. Its instruments run on xp-ui (xp-ui/ in this
+   repository), an avionics UI library written for this port that implements
+   the programming interface FlyByWire's instruments use. It was written from
+   a specification derived from FlyByWire's use of that interface and checked
+   file by file for similarity with Microsoft's MSFS avionics framework; the
+   report is xp-ui/lib/gate_all.json. Earlier releases used xp-kit, which a
+   similarity check in October 2026 found to reproduce parts of that
+   framework's implementation; its source has been withdrawn.
+   Microsoft Flight Simulator (c) Microsoft Corporation.
+
+3. The port's own software
+   The systems plugin, the display host, the aircraft
+   converter and the installer: GNU General Public License v3.
+   Source: https://github.com/Vihaan2012-cmyk/A380-For-X-Plane-12-Based-on-The-FBW-A380
+
+4. Third-party libraries
+   The npm packages bundled into the instrument pages and the Rust crates
+   built into the systems plugin, the display host and the installer are under MIT,
+   Apache-2.0, BSD, ISC, Zlib, Unicode and similar licenses. Each one's
+   license text is in THIRD_PARTY_LICENSES.txt.
+
+5. Chromium Embedded Framework (plugins/fbw_a380_systems/XPHFBW)
+   BSD license, see XPHFBW/CEF-LICENSE.txt. Chromium and its third-party
+   components: see XPHFBW/CREDITS.html.
+
+6. Fonts (html_ui/Fonts/fbw-a380x)
+   Inter, JetBrains Mono, Manrope, Noto Sans (Arabic, Devanagari, Hebrew, JP,
+   KR, SC, Thai) and Poppins: SIL Open Font License 1.1, see
+   html_ui/Fonts/fbw-a380x/OFL-FONTS.txt. The other fonts there are
+   FlyByWire's and their contributors'. The FCU display font
+   (A380X_FCU.ttf) is not in the release: the installer downloads it from
+   FlyByWire's repository.
+
+7. Sounds
+   Engine, ground, weather, warning, callout and switch sounds (fmod/):
+   A380RR_Sp v1.2, demo "P-HAGER" edition (for Peter Hager's A380), by
+   FTSiM+Sounds, https://www.ftsimplus.net/a380rr.html. The pack is not in
+   the release: during installation the installer downloads the demo from
+   FTSiM+'s own link (or uses your own copy of A380_Sp(RR)(P)(C).zip) and
+   adapts it to this aircraft on your computer (its sound parameters
+   renamed to this aircraft's, and this aircraft's own sound positions
+   applied to its A388.snd). FTSiM+'s full version is on their Patreon,
+   https://www.patreon.com/FTSIM.
+
+8. Laminar Research
+   The aircraft's .acf is built on Laminar Research's Airbus A330-300, and
+   its wing uses that aircraft's airfoils. Neither is in the release: the
+   installer builds the .acf from your own X-Plane 12's A330.acf and this
+   aircraft's own settings, and copies the airfoils from your own X-Plane.
+
+9. SASL
+   SASL is 1-sim's (https://1-sim.com) and is not included: the installer
+   downloads it from 1-sim during installation. SASL's notice:
+
+   The current software uses the SASL library. Redistribution in source and
+   binary forms, with or without modification, are not permitted.
+   Copyright (c) 2025, 1-sim.aero. All rights reserved.
+   SASL copyright holders are not responsible in any event for malfunction,
+   unavailability, incompatibility or other problems that might occur while
+   using the end product which uses SASL in conjunction with any other
+   software. SASL copyright holders are not liable for any properties for
+   any end product which uses SASL.
+
+10. Loading screen images
+   The loading screen backgrounds (plugins/fbw_a380_systems/loading) are
+   screenshots by a3fatty, used with permission.
+
+11. Map data
+   The cabin IFE moving map draws land outlines from Natural Earth
+   (naturalearthdata.com), which is in the public domain.
+
+12. Steam Audio (plugins/fbw_a380_systems/steamaudio)
+   Valve Corporation's Steam Audio, Apache License 2.0, see LICENSE.md and
+   THIRDPARTY.md in that folder.
+
+13. First officer voice (plugins/fbw_a380_systems/sound/copilot)
+   Recorded with the Piper text-to-speech engine (MIT) and three of its
+   voices:
+   - cori: trained on LibriVox recordings, public domain.
+   - joe: CC0.
+   - northern: trained on OpenSLR SLR83, Google's crowdsourced UK and Ireland
+     English dialect speech data, CC BY-SA 4.0. The phrases recorded with
+     this voice are shared under the same licence,
+     https://creativecommons.org/licenses/by-sa/4.0/
+
+14. B612 font (html_ui/Pages/VCockpit/Instruments/A380X/FAP/fonts)
+   B612 by Airbus and ENAC (PolarSys), SIL Open Font License 1.1, see OFL.txt
+   in that folder.
+
+15. Liveries
+   The airline liveries are repaints made for this aircraft by D_an_ and
+   are included with permission.
+
+16. openSAM (vendor/openSAM-a380x-fork)
+   openSAM by hotbso and its contributors, https://github.com/hotbso/openSAM
+   GNU Lesser General Public License v2.1, see vendor/openSAM-a380x-fork/LICENSE.
+   This port's fork adds three-door jetway support and cab-angle data.
+
+17. OpenStreetMap
+   The EFB airport maps are drawn from OpenStreetMap data,
+   (c) OpenStreetMap contributors, Open Database License (ODbL) 1.0,
+   https://www.openstreetmap.org/copyright
+
+18. Converter (Converter/)
+   The texture and model conversion library: MIT License, see
+   Converter/LICENSE.
+
+19. Trademarks
+   Airbus and A380 are Airbus trademarks, used only to identify the aircraft.
+   Airline and ground handling company names and logos are their owners'
+   trademarks, used only to identify them.

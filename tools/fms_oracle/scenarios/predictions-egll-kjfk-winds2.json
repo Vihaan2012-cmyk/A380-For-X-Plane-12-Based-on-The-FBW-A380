@@ -1,0 +1,58 @@
+{
+  "name": "predictions-egll-kjfk-winds2",
+  "lat": 51.4706,
+  "lon": -0.4619,
+  "steps": [
+    {
+      "uplink": "canned"
+    },
+    {
+      "run_ms": 5000
+    },
+    {
+      "snapshot": "no-weights"
+    },
+    {
+      "fms": "fps.setPerformanceData('zeroFuelWeight', 330, 0); fps.setPerformanceData('zeroFuelWeightCenterOfGravity', 38.5, 0); fps.setPerformanceData('blockFuel', 95, 0); fps.setPerformanceData('costIndex', 30, 0);"
+    },
+    {
+      "run_ms": 3000
+    },
+    {
+      "snapshot": "weights"
+    },
+    {
+      "fms": "fmc.trySetCruiseFl(360, 0);"
+    },
+    {
+      "run_ms": 8000
+    },
+    {
+      "page": [
+        "ACTIVE",
+        "F-PLN"
+      ]
+    },
+    {
+      "run_ms": 3000
+    },
+    {
+      "fms": "const vd = fmc.guidanceController.vnavDriver; const prof = vd.profileManager.mcduProfile; const pd = fps.active.performanceData; const wps = []; prof.waypointPredictions.forEach((w, i) => wps.push({ leg: i, distanceFromStart: w.distanceFromStart, secondsFromPresent: w.secondsFromPresent, altitude: w.altitude, speed: w.speed, estimatedFuelOnBoard: w.estimatedFuelOnBoard, profilePhase: w.profilePhase })); fmc.bus.getPublisher().pub('oracle_vnav_dump', { label: 'NOWIND', ready: prof.isReadyToDisplay, totalFlightPlanDistance: vd.constraintReader.totalFlightPlanDistance, distanceToPresentPosition: vd.constraintReader.distanceToPresentPosition, climbWindEntries: pd.climbWindEntries.get().length, descentWindEntries: pd.descentWindEntries.get().length, checkpoints: prof.checkpoints.map((c) => ({ reason: c.reason, distanceFromStart: c.distanceFromStart, secondsFromPresent: c.secondsFromPresent, altitude: c.altitude, remainingFuelOnBoard: c.remainingFuelOnBoard, speed: c.speed, mach: c.mach, profilePhase: c.profilePhase })), waypointPredictions: wps }, true, false);"
+    },
+    {
+      "snapshot": "predictions-no-wind"
+    },
+    {
+      "fms": "const w = (m, d) => ({ direction: d * Math.PI / 180, magnitude: m }); fps.setPerformanceData('climbWindEntries', [{ vector: w(70, 290), altitude: 30000, flags: 0 }, { vector: w(35, 280), altitude: 10000, flags: 0 }, { vector: w(15, 270), altitude: 0, flags: 0 }], 0); fps.setPerformanceData('descentWindEntries', [{ vector: w(60, 300), altitude: 30000, flags: 0 }, { vector: w(30, 290), altitude: 10000, flags: 0 }, { vector: w(12, 280), altitude: 0, flags: 0 }], 0); await fps.addCruiseWindEntry(3, { vector: w(90, 300), altitude: 36000, flags: 0 }, 0); fps.active.insertDraftWindEntries(); if (fps.hasTemporary) await fps.temporaryInsert();"
+    },
+    {
+      "run_ms": 10000
+    },
+    {
+      "fms": "const vd = fmc.guidanceController.vnavDriver; const prof = vd.profileManager.mcduProfile; const pd = fps.active.performanceData; const wps = []; prof.waypointPredictions.forEach((w, i) => wps.push({ leg: i, distanceFromStart: w.distanceFromStart, secondsFromPresent: w.secondsFromPresent, altitude: w.altitude, speed: w.speed, estimatedFuelOnBoard: w.estimatedFuelOnBoard, profilePhase: w.profilePhase })); fmc.bus.getPublisher().pub('oracle_vnav_dump', { label: 'WIND', ready: prof.isReadyToDisplay, totalFlightPlanDistance: vd.constraintReader.totalFlightPlanDistance, distanceToPresentPosition: vd.constraintReader.distanceToPresentPosition, climbWindEntries: pd.climbWindEntries.get().length, descentWindEntries: pd.descentWindEntries.get().length, checkpoints: prof.checkpoints.map((c) => ({ reason: c.reason, distanceFromStart: c.distanceFromStart, secondsFromPresent: c.secondsFromPresent, altitude: c.altitude, remainingFuelOnBoard: c.remainingFuelOnBoard, speed: c.speed, mach: c.mach, profilePhase: c.profilePhase })), waypointPredictions: wps }, true, false);"
+    },
+    {
+      "snapshot": "predictions-winds"
+    }
+  ]
+}

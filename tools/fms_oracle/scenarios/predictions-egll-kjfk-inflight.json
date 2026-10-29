@@ -1,0 +1,149 @@
+{
+  "name": "predictions-egll-kjfk-inflight",
+  "lat": 51.4706,
+  "lon": -0.4619,
+  "steps": [
+    {
+      "uplink": "canned"
+    },
+    {
+      "run_ms": 5000
+    },
+    {
+      "snapshot": "no-weights"
+    },
+    {
+      "fms": "fps.setPerformanceData('zeroFuelWeight', 330, 0); fps.setPerformanceData('zeroFuelWeightCenterOfGravity', 38.5, 0); fps.setPerformanceData('blockFuel', 95, 0); fps.setPerformanceData('costIndex', 30, 0);"
+    },
+    {
+      "run_ms": 3000
+    },
+    {
+      "snapshot": "weights"
+    },
+    {
+      "fms": "fmc.trySetCruiseFl(360, 0);"
+    },
+    {
+      "run_ms": 8000
+    },
+    {
+      "page": [
+        "ACTIVE",
+        "F-PLN"
+      ]
+    },
+    {
+      "run_ms": 3000
+    },
+    {
+      "fms": "const w = (m, d) => ({ direction: d * Math.PI / 180, magnitude: m }); fps.setPerformanceData('climbWindEntries', [{ vector: w(70, 290), altitude: 30000, flags: 0 }, { vector: w(35, 280), altitude: 10000, flags: 0 }, { vector: w(15, 270), altitude: 0, flags: 0 }], 0); fps.setPerformanceData('descentWindEntries', [{ vector: w(60, 300), altitude: 30000, flags: 0 }, { vector: w(30, 290), altitude: 10000, flags: 0 }, { vector: w(12, 280), altitude: 0, flags: 0 }], 0); await fps.addCruiseWindEntry(3, { vector: w(90, 300), altitude: 36000, flags: 0 }, 0); fps.active.insertDraftWindEntries(); if (fps.hasTemporary) await fps.temporaryInsert();"
+    },
+    {
+      "run_ms": 10000
+    },
+    {
+      "fms": "const vd = fmc.guidanceController.vnavDriver; const prof = vd.profileManager.mcduProfile; const pd = fps.active.performanceData; const op = vd.computationParametersObserver.get(); const rel = vd.aircraftToDescentProfileRelation; const dp = vd.profileManager.descentProfile; const params = { flightPhase: op.flightPhase, presentPosition: op.presentPosition, fuelOnBoard: op.fuelOnBoard, zeroFuelWeight: op.zeroFuelWeight, cruiseAltitude: op.cruiseAltitude, fcuAltitude: op.fcuAltitude, fcuVerticalMode: op.fcuVerticalMode, fcuLateralMode: op.fcuLateralMode, fcuArmedVerticalMode: op.fcuArmedVerticalMode, fcuArmedLateralMode: op.fcuArmedLateralMode, fcuSpeedManaged: op.fcuSpeedManaged, fcuSpeed: op.fcuSpeed, fcuVerticalSpeed: op.fcuVerticalSpeed, fcuFlightPathAngle: op.fcuFlightPathAngle, fcuExpediteModeActive: op.fcuExpediteModeActive, managedDescentSpeed: op.managedDescentSpeed, managedDescentSpeedMach: op.managedDescentSpeedMach, managedCruiseSpeed: op.managedCruiseSpeed, managedCruiseSpeedMach: op.managedCruiseSpeedMach, estimatedDestinationFuel: op.estimatedDestinationFuel, approachSpeed: op.approachSpeed, tropoPause: op.tropoPause }; const relation = { isValid: rel.isValid, pastTod: rel.isValid ? rel.isPastTopOfDescent() : null, distanceToTopOfDescent: rel.isValid ? rel.distanceToTopOfDescent() : null }; const descentCheckpoints = dp ? dp.checkpoints.map((c) => ({ reason: c.reason, distanceFromStart: c.distanceFromStart, secondsFromPresent: c.secondsFromPresent, altitude: c.altitude, remainingFuelOnBoard: c.remainingFuelOnBoard, speed: c.speed, mach: c.mach, profilePhase: c.profilePhase })) : null; const wps = []; prof.waypointPredictions.forEach((w, i) => wps.push({ leg: i, distanceFromStart: w.distanceFromStart, secondsFromPresent: w.secondsFromPresent, altitude: w.altitude, speed: w.speed, estimatedFuelOnBoard: w.estimatedFuelOnBoard, profilePhase: w.profilePhase })); fmc.bus.getPublisher().pub('oracle_vnav_dump', { label: 'PREFLIGHT', ready: prof.isReadyToDisplay, totalFlightPlanDistance: vd.constraintReader.totalFlightPlanDistance, distanceToPresentPosition: vd.constraintReader.distanceToPresentPosition, climbWindEntries: pd.climbWindEntries.get().length, descentWindEntries: pd.descentWindEntries.get().length, checkpoints: prof.checkpoints.map((c) => ({ reason: c.reason, distanceFromStart: c.distanceFromStart, secondsFromPresent: c.secondsFromPresent, altitude: c.altitude, remainingFuelOnBoard: c.remainingFuelOnBoard, speed: c.speed, mach: c.mach, profilePhase: c.profilePhase })), waypointPredictions: wps, params, relation, descentCheckpoints, activeLegIndex: fps.active.activeLegIndex }, true, false);"
+    },
+    {
+      "fms": "const fpm = fmc.flightPhaseManager; fpm.changePhase(3); fmc.fmgc.data.flightPhase.set(3);"
+    },
+    {
+      "var": [
+        "INDICATED ALTITUDE",
+        "feet",
+        36000
+      ]
+    },
+    {
+      "var": [
+        "PLANE ALTITUDE",
+        "feet",
+        36000
+      ]
+    },
+    {
+      "var": [
+        "PRESSURE ALTITUDE",
+        "feet",
+        36000
+      ]
+    },
+    {
+      "fms": "fps.active.setActiveLegIndex(7);"
+    },
+    {
+      "run_ms": 2000
+    },
+    {
+      "fly": {
+        "start": "plan",
+        "kt": 480,
+        "flight_phase": 3,
+        "seconds": 60,
+        "sample_ms": 5000
+      }
+    },
+    {
+      "run_ms": 5000
+    },
+    {
+      "fms": "const vd = fmc.guidanceController.vnavDriver; const prof = vd.profileManager.mcduProfile; const pd = fps.active.performanceData; const op = vd.computationParametersObserver.get(); const rel = vd.aircraftToDescentProfileRelation; const dp = vd.profileManager.descentProfile; const params = { flightPhase: op.flightPhase, presentPosition: op.presentPosition, fuelOnBoard: op.fuelOnBoard, zeroFuelWeight: op.zeroFuelWeight, cruiseAltitude: op.cruiseAltitude, fcuAltitude: op.fcuAltitude, fcuVerticalMode: op.fcuVerticalMode, fcuLateralMode: op.fcuLateralMode, fcuArmedVerticalMode: op.fcuArmedVerticalMode, fcuArmedLateralMode: op.fcuArmedLateralMode, fcuSpeedManaged: op.fcuSpeedManaged, fcuSpeed: op.fcuSpeed, fcuVerticalSpeed: op.fcuVerticalSpeed, fcuFlightPathAngle: op.fcuFlightPathAngle, fcuExpediteModeActive: op.fcuExpediteModeActive, managedDescentSpeed: op.managedDescentSpeed, managedDescentSpeedMach: op.managedDescentSpeedMach, managedCruiseSpeed: op.managedCruiseSpeed, managedCruiseSpeedMach: op.managedCruiseSpeedMach, estimatedDestinationFuel: op.estimatedDestinationFuel, approachSpeed: op.approachSpeed, tropoPause: op.tropoPause }; const relation = { isValid: rel.isValid, pastTod: rel.isValid ? rel.isPastTopOfDescent() : null, distanceToTopOfDescent: rel.isValid ? rel.distanceToTopOfDescent() : null }; const descentCheckpoints = dp ? dp.checkpoints.map((c) => ({ reason: c.reason, distanceFromStart: c.distanceFromStart, secondsFromPresent: c.secondsFromPresent, altitude: c.altitude, remainingFuelOnBoard: c.remainingFuelOnBoard, speed: c.speed, mach: c.mach, profilePhase: c.profilePhase })) : null; const wps = []; prof.waypointPredictions.forEach((w, i) => wps.push({ leg: i, distanceFromStart: w.distanceFromStart, secondsFromPresent: w.secondsFromPresent, altitude: w.altitude, speed: w.speed, estimatedFuelOnBoard: w.estimatedFuelOnBoard, profilePhase: w.profilePhase })); fmc.bus.getPublisher().pub('oracle_vnav_dump', { label: 'CRUISE', ready: prof.isReadyToDisplay, totalFlightPlanDistance: vd.constraintReader.totalFlightPlanDistance, distanceToPresentPosition: vd.constraintReader.distanceToPresentPosition, climbWindEntries: pd.climbWindEntries.get().length, descentWindEntries: pd.descentWindEntries.get().length, checkpoints: prof.checkpoints.map((c) => ({ reason: c.reason, distanceFromStart: c.distanceFromStart, secondsFromPresent: c.secondsFromPresent, altitude: c.altitude, remainingFuelOnBoard: c.remainingFuelOnBoard, speed: c.speed, mach: c.mach, profilePhase: c.profilePhase })), waypointPredictions: wps, params, relation, descentCheckpoints, activeLegIndex: fps.active.activeLegIndex }, true, false);"
+    },
+    {
+      "fms": "const fpm = fmc.flightPhaseManager; fpm.changePhase(4); fmc.fmgc.data.flightPhase.set(4);"
+    },
+    {
+      "var": [
+        "INDICATED ALTITUDE",
+        "feet",
+        30000
+      ]
+    },
+    {
+      "var": [
+        "PLANE ALTITUDE",
+        "feet",
+        30000
+      ]
+    },
+    {
+      "var": [
+        "PRESSURE ALTITUDE",
+        "feet",
+        30000
+      ]
+    },
+    {
+      "var": [
+        "L:A32NX_FMA_VERTICAL_MODE",
+        "number",
+        23
+      ]
+    },
+    {
+      "fms": "fps.active.setActiveLegIndex(12);"
+    },
+    {
+      "run_ms": 2000
+    },
+    {
+      "fly": {
+        "start": "plan",
+        "kt": 450,
+        "flight_phase": 4,
+        "seconds": 60,
+        "sample_ms": 5000
+      }
+    },
+    {
+      "run_ms": 5000
+    },
+    {
+      "fms": "const vd = fmc.guidanceController.vnavDriver; const prof = vd.profileManager.mcduProfile; const pd = fps.active.performanceData; const op = vd.computationParametersObserver.get(); const rel = vd.aircraftToDescentProfileRelation; const dp = vd.profileManager.descentProfile; const params = { flightPhase: op.flightPhase, presentPosition: op.presentPosition, fuelOnBoard: op.fuelOnBoard, zeroFuelWeight: op.zeroFuelWeight, cruiseAltitude: op.cruiseAltitude, fcuAltitude: op.fcuAltitude, fcuVerticalMode: op.fcuVerticalMode, fcuLateralMode: op.fcuLateralMode, fcuArmedVerticalMode: op.fcuArmedVerticalMode, fcuArmedLateralMode: op.fcuArmedLateralMode, fcuSpeedManaged: op.fcuSpeedManaged, fcuSpeed: op.fcuSpeed, fcuVerticalSpeed: op.fcuVerticalSpeed, fcuFlightPathAngle: op.fcuFlightPathAngle, fcuExpediteModeActive: op.fcuExpediteModeActive, managedDescentSpeed: op.managedDescentSpeed, managedDescentSpeedMach: op.managedDescentSpeedMach, managedCruiseSpeed: op.managedCruiseSpeed, managedCruiseSpeedMach: op.managedCruiseSpeedMach, estimatedDestinationFuel: op.estimatedDestinationFuel, approachSpeed: op.approachSpeed, tropoPause: op.tropoPause }; const relation = { isValid: rel.isValid, pastTod: rel.isValid ? rel.isPastTopOfDescent() : null, distanceToTopOfDescent: rel.isValid ? rel.distanceToTopOfDescent() : null }; const descentCheckpoints = dp ? dp.checkpoints.map((c) => ({ reason: c.reason, distanceFromStart: c.distanceFromStart, secondsFromPresent: c.secondsFromPresent, altitude: c.altitude, remainingFuelOnBoard: c.remainingFuelOnBoard, speed: c.speed, mach: c.mach, profilePhase: c.profilePhase })) : null; const wps = []; prof.waypointPredictions.forEach((w, i) => wps.push({ leg: i, distanceFromStart: w.distanceFromStart, secondsFromPresent: w.secondsFromPresent, altitude: w.altitude, speed: w.speed, estimatedFuelOnBoard: w.estimatedFuelOnBoard, profilePhase: w.profilePhase })); fmc.bus.getPublisher().pub('oracle_vnav_dump', { label: 'DESCENT', ready: prof.isReadyToDisplay, totalFlightPlanDistance: vd.constraintReader.totalFlightPlanDistance, distanceToPresentPosition: vd.constraintReader.distanceToPresentPosition, climbWindEntries: pd.climbWindEntries.get().length, descentWindEntries: pd.descentWindEntries.get().length, checkpoints: prof.checkpoints.map((c) => ({ reason: c.reason, distanceFromStart: c.distanceFromStart, secondsFromPresent: c.secondsFromPresent, altitude: c.altitude, remainingFuelOnBoard: c.remainingFuelOnBoard, speed: c.speed, mach: c.mach, profilePhase: c.profilePhase })), waypointPredictions: wps, params, relation, descentCheckpoints, activeLegIndex: fps.active.activeLegIndex }, true, false);"
+    },
+    {
+      "snapshot": "in-flight"
+    }
+  ]
+}

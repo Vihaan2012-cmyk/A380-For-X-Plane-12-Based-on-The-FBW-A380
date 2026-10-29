@@ -1,0 +1,16 @@
+[package]
+name = "fms_data"
+version = "0.1.0"
+edition = "2021"
+description = "A380X FMS performance, fuel/load and approach data entry: FlyByWire's FlightPlanPerformanceData, its entry ranges, defaults and invalidation rules, as commands and change events"
+license = "GPL-3.0-or-later"
+publish = false
+
+[lib]
+doctest = false
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+
+[dev-dependencies]
+serde_json = "1"

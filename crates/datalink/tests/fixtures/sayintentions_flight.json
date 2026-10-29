@@ -1,0 +1,2 @@
+{"flight_details":{"flight_id":100001,"callsign":"TEST123","callsign_icao":"TST123","current_airport":"EGLL","runway":"27R",
+ "current_flight":{"flight_origin":"EGLL","flight_destination":"KJFK","flight_plan_route":"CPT5J CPT UL9 KENET","flight_plan_sid":"CPT5J","flight_plan_star":"","flight_plan_departing_runway":"27R","flight_plan_arriving_runway":"22L","assigned_gate":"511","assigned_gate_lat":51.47,"assigned_gate_lon":-0.48}}}

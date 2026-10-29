@@ -1,0 +1,10 @@
+[package]
+name = "row_rop"
+version = "0.1.0"
+edition = "2021"
+description = "Runway overrun warning (ROW) and runway overrun protection (ROP) logic for the A380, without any simulator dependency"
+license = "GPL-3.0-or-later"
+
+[dependencies]
+
+[workspace]

@@ -1,0 +1,21 @@
+[package]
+name = "fms_host"
+version = "0.1.0"
+edition = "2021"
+description = "The A380X FMS host on a worker thread: flight plans, LNAV/VNAV guidance, EFIS vectors and symbols, speeds and flight plan bus topics, as FlyByWire's MFD FMS host produces them"
+license = "GPL-3.0-or-later"
+publish = false
+
+[workspace]
+
+[lib]
+doctest = false
+
+[dependencies]
+fms = { path = "../fms" }
+fms_lnav = { path = "../fms_lnav" }
+fms_vnav = { path = "../fms_vnav" }
+fms_perf = { path = "../fms_perf" }
+fms_data = { path = "../fms_data" }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"

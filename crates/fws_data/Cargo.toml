@@ -1,0 +1,10 @@
+[package]
+name = "fws_data"
+version = "0.1.0"
+edition = "2021"
+description = "FlyByWire's A380X ECAM abnormal procedure data as static Rust tables, without any simulator dependency"
+license = "GPL-3.0-or-later"
+
+[dependencies]
+
+[workspace]

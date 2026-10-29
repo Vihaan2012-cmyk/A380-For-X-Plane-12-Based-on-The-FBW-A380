@@ -1,0 +1,6 @@
+{"data":[
+ {"id":"c-1","name":"GROUND MOVEMENT","type_key":"GND"},
+ {"id":"c-2","name":"STAR NORTH","type_key":"STAR"},
+ {"id":"c-3","name":"VOR RWY 27","type_key":"APP"},
+ {"id":"c-4","name":"MISC","type_key":"WHATEVER"}
+]}

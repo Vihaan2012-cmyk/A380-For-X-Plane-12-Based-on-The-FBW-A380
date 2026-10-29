@@ -1,0 +1,13 @@
+[package]
+name = "oit_pages"
+version = "0.1.0"
+edition = "2021"
+description = "The A380 OIT page trees: pure functions from a page model to the DOM tree the native OIT painter consumes"
+publish = false
+
+[dependencies]
+mfd_tree = { path = "../mfd_tree" }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+[workspace]

@@ -1,0 +1,635 @@
+[
+ {
+  "file": "lib/src/aliases.ts",
+  "tokens": 48,
+  "raw_longest": 0,
+  "raw_pct": 0.0,
+  "raw_lines": [],
+  "norm_longest": 0,
+  "norm_pct": 0.0,
+  "norm_lines": [],
+  "shared_private": [],
+  "pass": true
+ },
+ {
+  "file": "lib/src/bus/bus_check.ts",
+  "tokens": 512,
+  "raw_longest": 0,
+  "raw_pct": 0.0,
+  "raw_lines": [],
+  "norm_longest": 0,
+  "norm_pct": 0.0,
+  "norm_lines": [],
+  "shared_private": [],
+  "pass": true
+ },
+ {
+  "file": "lib/src/bus/host.ts",
+  "tokens": 1203,
+  "raw_longest": 0,
+  "raw_pct": 0.0,
+  "raw_lines": [],
+  "norm_longest": 43,
+  "norm_pct": 7.15,
+  "norm_lines": [
+   [
+    2,
+    5
+   ],
+   [
+    89,
+    94
+   ]
+  ],
+  "shared_private": [],
+  "pass": true
+ },
+ {
+  "file": "lib/src/bus/index.ts",
+  "tokens": 125,
+  "raw_longest": 0,
+  "raw_pct": 0.0,
+  "raw_lines": [],
+  "norm_longest": 0,
+  "norm_pct": 0.0,
+  "norm_lines": [],
+  "shared_private": [],
+  "pass": true
+ },
+ {
+  "file": "lib/src/bus/messageBus.ts",
+  "tokens": 1806,
+  "raw_longest": 0,
+  "raw_pct": 0.0,
+  "raw_lines": [],
+  "norm_longest": 37,
+  "norm_pct": 4.02,
+  "norm_lines": [
+   [
+    242,
+    247
+   ],
+   [
+    249,
+    252
+   ],
+   [
+    254,
+    254
+   ]
+  ],
+  "shared_private": [],
+  "pass": true
+ },
+ {
+  "file": "lib/src/bus/publishers.ts",
+  "tokens": 1210,
+  "raw_longest": 33,
+  "raw_pct": 3.33,
+  "raw_lines": [
+   [
+    31,
+    32
+   ]
+  ],
+  "norm_longest": 38,
+  "norm_pct": 10.4,
+  "norm_lines": [
+   [
+    28,
+    29
+   ],
+   [
+    31,
+    32
+   ],
+   [
+    35,
+    36
+   ],
+   [
+    81,
+    83
+   ],
+   [
+    97,
+    101
+   ],
+   [
+    103,
+    103
+   ]
+  ],
+  "shared_private": [],
+  "pass": true
+ },
+ {
+  "file": "lib/src/bus/stream.ts",
+  "tokens": 1230,
+  "raw_longest": 0,
+  "raw_pct": 0.0,
+  "raw_lines": [],
+  "norm_longest": 0,
+  "norm_pct": 0.0,
+  "norm_lines": [],
+  "shared_private": [],
+  "pass": true
+ },
+ {
+  "file": "lib/src/bus/values.ts",
+  "tokens": 900,
+  "raw_longest": 0,
+  "raw_pct": 0.0,
+  "raw_lines": [],
+  "norm_longest": 36,
+  "norm_pct": 14.51,
+  "norm_lines": [
+   [
+    13,
+    16
+   ],
+   [
+    35,
+    36
+   ],
+   [
+    38,
+    40
+   ],
+   [
+    42,
+    42
+   ],
+   [
+    99,
+    101
+   ],
+   [
+    115,
+    116
+   ],
+   [
+    118,
+    120
+   ],
+   [
+    122,
+    122
+   ]
+  ],
+  "shared_private": [],
+  "pass": true
+ },
+ {
+  "file": "lib/src/collections/collections_check.ts",
+  "tokens": 191,
+  "raw_longest": 0,
+  "raw_pct": 0.0,
+  "raw_lines": [],
+  "norm_longest": 0,
+  "norm_pct": 0.0,
+  "norm_lines": [],
+  "shared_private": [],
+  "pass": true
+ },
+ {
+  "file": "lib/src/collections/index.ts",
+  "tokens": 59,
+  "raw_longest": 0,
+  "raw_pct": 0.0,
+  "raw_lines": [],
+  "norm_longest": 0,
+  "norm_pct": 0.0,
+  "norm_lines": [],
+  "shared_private": [],
+  "pass": true
+ },
+ {
+  "file": "lib/src/collections/listeners.ts",
+  "tokens": 354,
+  "raw_longest": 0,
+  "raw_pct": 0.0,
+  "raw_lines": [],
+  "norm_longest": 0,
+  "norm_pct": 0.0,
+  "norm_lines": [],
+  "shared_private": [],
+  "pass": true
+ },
+ {
+  "file": "lib/src/collections/quantitySignal.ts",
+  "tokens": 548,
+  "raw_longest": 0,
+  "raw_pct": 0.0,
+  "raw_lines": [],
+  "norm_longest": 33,
+  "norm_pct": 12.0,
+  "norm_lines": [
+   [
+    6,
+    6
+   ],
+   [
+    16,
+    17
+   ]
+  ],
+  "shared_private": [],
+  "pass": true
+ },
+ {
+  "file": "lib/src/collections/signalList.ts",
+  "tokens": 688,
+  "raw_longest": 0,
+  "raw_pct": 0.0,
+  "raw_lines": [],
+  "norm_longest": 7,
+  "norm_pct": 1.21,
+  "norm_lines": [
+   [
+    2,
+    2
+   ]
+  ],
+  "shared_private": [],
+  "pass": true
+ },
+ {
+  "file": "lib/src/collections/signalMap.ts",
+  "tokens": 547,
+  "raw_longest": 0,
+  "raw_pct": 0.0,
+  "raw_lines": [],
+  "norm_longest": 1,
+  "norm_pct": 0.2,
+  "norm_lines": [
+   [
+    12,
+    12
+   ]
+  ],
+  "shared_private": [],
+  "pass": true
+ },
+ {
+  "file": "lib/src/collections/signalRecord.ts",
+  "tokens": 192,
+  "raw_longest": 0,
+  "raw_pct": 0.0,
+  "raw_lines": [],
+  "norm_longest": 0,
+  "norm_pct": 0.0,
+  "norm_lines": [],
+  "shared_private": [],
+  "pass": true
+ },
+ {
+  "file": "lib/src/collections/signalSet.ts",
+  "tokens": 401,
+  "raw_longest": 0,
+  "raw_pct": 0.0,
+  "raw_lines": [],
+  "norm_longest": 34,
+  "norm_pct": 8.85,
+  "norm_lines": [
+   [
+    52,
+    54
+   ]
+  ],
+  "shared_private": [],
+  "pass": true
+ },
+ {
+  "file": "lib/src/compat/ts-helpers.ts",
+  "tokens": 577,
+  "raw_longest": 0,
+  "raw_pct": 0.0,
+  "raw_lines": [],
+  "norm_longest": 0,
+  "norm_pct": 0.0,
+  "norm_lines": [],
+  "shared_private": [],
+  "pass": true
+ },
+ {
+  "file": "lib/src/components/api_check.ts",
+  "tokens": 338,
+  "raw_longest": 0,
+  "raw_pct": 0.0,
+  "raw_lines": [],
+  "norm_longest": 0,
+  "norm_pct": 0.0,
+  "norm_lines": [],
+  "shared_private": [],
+  "pass": true
+ },
+ {
+  "file": "lib/src/components/board.ts",
+  "tokens": 708,
+  "raw_longest": 0,
+  "raw_pct": 0.0,
+  "raw_lines": [],
+  "norm_longest": 125,
+  "norm_pct": 20.16,
+  "norm_lines": [
+   [
+    91,
+    94
+   ],
+   [
+    96,
+    101
+   ],
+   [
+    103,
+    108
+   ],
+   [
+    110,
+    115
+   ]
+  ],
+  "shared_private": [],
+  "pass": true
+ },
+ {
+  "file": "lib/src/components/index.ts",
+  "tokens": 71,
+  "raw_longest": 0,
+  "raw_pct": 0.0,
+  "raw_lines": [],
+  "norm_longest": 0,
+  "norm_pct": 0.0,
+  "norm_lines": [],
+  "shared_private": [],
+  "pass": true
+ },
+ {
+  "file": "lib/src/components/view.ts",
+  "tokens": 3397,
+  "raw_longest": 0,
+  "raw_pct": 0.0,
+  "raw_lines": [],
+  "norm_longest": 72,
+  "norm_pct": 4.28,
+  "norm_lines": [
+   [
+    53,
+    86
+   ],
+   [
+    89,
+    102
+   ],
+   [
+    531,
+    531
+   ],
+   [
+    533,
+    534
+   ]
+  ],
+  "shared_private": [],
+  "pass": true
+ },
+ {
+  "file": "lib/src/index.ts",
+  "tokens": 35,
+  "raw_longest": 0,
+  "raw_pct": 0.0,
+  "raw_lines": [],
+  "norm_longest": 35,
+  "norm_pct": 100.0,
+  "norm_lines": [
+   [
+    1,
+    7
+   ]
+  ],
+  "shared_private": [],
+  "pass": true
+ },
+ {
+  "file": "lib/src/maths/formatters.ts",
+  "tokens": 1446,
+  "raw_longest": 0,
+  "raw_pct": 0.0,
+  "raw_lines": [],
+  "norm_longest": 22,
+  "norm_pct": 1.58,
+  "norm_lines": [
+   [
+    1,
+    2
+   ]
+  ],
+  "shared_private": [],
+  "pass": true
+ },
+ {
+  "file": "lib/src/maths/index.ts",
+  "tokens": 15,
+  "raw_longest": 0,
+  "raw_pct": 0.0,
+  "raw_lines": [],
+  "norm_longest": 0,
+  "norm_pct": 0.0,
+  "norm_lines": [],
+  "shared_private": [],
+  "pass": true
+ },
+ {
+  "file": "lib/src/maths/maths_check.ts",
+  "tokens": 327,
+  "raw_longest": 0,
+  "raw_pct": 0.0,
+  "raw_lines": [],
+  "norm_longest": 0,
+  "norm_pct": 0.0,
+  "norm_lines": [],
+  "shared_private": [],
+  "pass": true
+ },
+ {
+  "file": "lib/src/maths/scalar.ts",
+  "tokens": 1575,
+  "raw_longest": 0,
+  "raw_pct": 0.0,
+  "raw_lines": [],
+  "norm_longest": 0,
+  "norm_pct": 0.0,
+  "norm_lines": [],
+  "shared_private": [],
+  "pass": true
+ },
+ {
+  "file": "lib/src/maths/units.ts",
+  "tokens": 451,
+  "raw_longest": 0,
+  "raw_pct": 0.0,
+  "raw_lines": [],
+  "norm_longest": 0,
+  "norm_pct": 0.0,
+  "norm_lines": [],
+  "shared_private": [],
+  "pass": true
+ },
+ {
+  "file": "lib/src/reactive/index.ts",
+  "tokens": 2849,
+  "raw_longest": 31,
+  "raw_pct": 2.55,
+  "raw_lines": [
+   [
+    187,
+    187
+   ],
+   [
+    394,
+    396
+   ]
+  ],
+  "norm_longest": 36,
+  "norm_pct": 10.83,
+  "norm_lines": [
+   [
+    102,
+    107
+   ],
+   [
+    134,
+    136
+   ],
+   [
+    149,
+    151
+   ],
+   [
+    179,
+    180
+   ],
+   [
+    187,
+    187
+   ],
+   [
+    197,
+    201
+   ],
+   [
+    349,
+    354
+   ],
+   [
+    394,
+    396
+   ]
+  ],
+  "shared_private": [],
+  "pass": true
+ },
+ {
+  "file": "lib/src/reactive/reactive_check.ts",
+  "tokens": 82,
+  "raw_longest": 0,
+  "raw_pct": 0.0,
+  "raw_lines": [],
+  "norm_longest": 0,
+  "norm_pct": 0.0,
+  "norm_lines": [],
+  "shared_private": [],
+  "pass": true
+ },
+ {
+  "file": "lib/src/services/index.ts",
+  "tokens": 74,
+  "raw_longest": 0,
+  "raw_pct": 0.0,
+  "raw_lines": [],
+  "norm_longest": 0,
+  "norm_pct": 0.0,
+  "norm_lines": [],
+  "shared_private": [],
+  "pass": true
+ },
+ {
+  "file": "lib/src/services/Navdata.ts",
+  "tokens": 741,
+  "raw_longest": 0,
+  "raw_pct": 0.0,
+  "raw_lines": [],
+  "norm_longest": 0,
+  "norm_pct": 0.0,
+  "norm_lines": [],
+  "shared_private": [],
+  "pass": true
+ },
+ {
+  "file": "lib/src/services/services_check.ts",
+  "tokens": 324,
+  "raw_longest": 0,
+  "raw_pct": 0.0,
+  "raw_lines": [],
+  "norm_longest": 0,
+  "norm_pct": 0.0,
+  "norm_lines": [],
+  "shared_private": [],
+  "pass": true
+ },
+ {
+  "file": "lib/src/services/Shared.ts",
+  "tokens": 742,
+  "raw_longest": 0,
+  "raw_pct": 0.0,
+  "raw_lines": [],
+  "norm_longest": 53,
+  "norm_pct": 7.56,
+  "norm_lines": [
+   [
+    68,
+    73
+   ]
+  ],
+  "shared_private": [],
+  "pass": true
+ },
+ {
+  "file": "lib/src/services/waits.ts",
+  "tokens": 599,
+  "raw_longest": 0,
+  "raw_pct": 0.0,
+  "raw_lines": [],
+  "norm_longest": 54,
+  "norm_pct": 20.07,
+  "norm_lines": [
+   [
+    38,
+    39
+   ],
+   [
+    41,
+    45
+   ],
+   [
+    86,
+    88
+   ],
+   [
+    90,
+    93
+   ],
+   [
+    95,
+    96
+   ],
+   [
+    98,
+    99
+   ]
+  ],
+  "shared_private": [],
+  "pass": true
+ }
+]

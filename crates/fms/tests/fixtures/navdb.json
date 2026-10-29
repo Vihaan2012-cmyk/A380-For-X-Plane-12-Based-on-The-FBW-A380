@@ -1,0 +1,1236 @@
+{
+  "fixes": [
+    {
+      "airportIdent": "EGLL",
+      "area": 1,
+      "bearing": 89.6549634645107,
+      "databaseId": "REGEGLL09L",
+      "designator": 2,
+      "gradient": 0.00487141408843788,
+      "icaoCode": "EG",
+      "ident": "EGLL09L",
+      "length": 3890.9454182261647,
+      "location": {
+        "alt": 79,
+        "lat": 51.47750262955666,
+        "long": -0.484965384268822
+      },
+      "lsFrequencyChannel": 110.3,
+      "lsIdent": "IAA",
+      "magVar": 0,
+      "magneticBearing": 89.65496346451073,
+      "number": 9,
+      "sectionCode": 4,
+      "startLocation": {
+        "lat": 51.47748615887661,
+        "long": -0.4893788369854779
+      },
+      "subSectionCode": 6,
+      "surfaceType": 2,
+      "thresholdCrossingHeight": 129,
+      "thresholdLocation": {
+        "alt": 79,
+        "lat": 51.47750262955666,
+        "long": -0.484965384268822
+      },
+      "width": 49.9900016784668
+    },
+    {
+      "airportIdent": "EGLL",
+      "area": 1,
+      "databaseId": "WEGEGLLD110B",
+      "icaoCode": "EG",
+      "ident": "D110B",
+      "location": {
+        "lat": 51.478122222,
+        "long": -0.429311111
+      },
+      "name": "",
+      "sectionCode": 4,
+      "subSectionCode": 2
+    },
+    {
+      "airportIdent": "EGLL",
+      "area": 1,
+      "databaseId": "WEGEGLLD070J",
+      "icaoCode": "EG",
+      "ident": "D070J",
+      "location": {
+        "lat": 51.541169444,
+        "long": -0.214133333
+      },
+      "name": "",
+      "sectionCode": 4,
+      "subSectionCode": 2
+    },
+    {
+      "airportIdent": "EGLL",
+      "area": 1,
+      "databaseId": "WEGEGLLD196J",
+      "icaoCode": "EG",
+      "ident": "D196J",
+      "location": {
+        "lat": 51.589702778,
+        "long": -0.180394444
+      },
+      "name": "",
+      "sectionCode": 4,
+      "subSectionCode": 2
+    },
+    {
+      "airportIdent": "EGLL",
+      "area": 1,
+      "databaseId": "WEGEGLLD196F",
+      "icaoCode": "EG",
+      "ident": "D196F",
+      "location": {
+        "lat": 51.653722222,
+        "long": -0.150991667
+      },
+      "name": "",
+      "sectionCode": 4,
+      "subSectionCode": 2
+    },
+    {
+      "airportIdent": "EGLL",
+      "area": 1,
+      "databaseId": "WEGEGLLBAPAG",
+      "icaoCode": "EG",
+      "ident": "BAPAG",
+      "location": {
+        "lat": 51.718055556,
+        "long": -0.123333333
+      },
+      "name": "",
+      "sectionCode": 4,
+      "subSectionCode": 2
+    },
+    {
+      "area": 0,
+      "class": 8,
+      "databaseId": "VEG    BPK  ",
+      "dmeLocation": {
+        "lat": 51.749736111,
+        "long": -0.106736111
+      },
+      "figureOfMerit": 2,
+      "frequency": 117.5,
+      "icaoCode": "EG",
+      "ident": "BPK",
+      "location": {
+        "lat": 51.749736111,
+        "long": -0.106736111
+      },
+      "name": null,
+      "range": 130,
+      "sectionCode": 1,
+      "stationDeclination": 0,
+      "subSectionCode": 0,
+      "trueReferenced": false,
+      "type": 4
+    },
+    {
+      "airportIdent": "KJFK",
+      "area": 1,
+      "databaseId": "WK6KJFKBEBKE",
+      "icaoCode": "K6",
+      "ident": "BEBKE",
+      "location": {
+        "lat": 40.555077778,
+        "long": -73.800991667
+      },
+      "name": "",
+      "sectionCode": 4,
+      "subSectionCode": 2
+    },
+    {
+      "airportIdent": "KJFK",
+      "area": 1,
+      "databaseId": "WK6KJFKMA04R",
+      "icaoCode": "K6",
+      "ident": "MA04R",
+      "location": {
+        "lat": 40.626161111,
+        "long": -73.77395
+      },
+      "name": "",
+      "sectionCode": 4,
+      "subSectionCode": 2
+    },
+    {
+      "area": 0,
+      "class": 4,
+      "databaseId": "VK6    DPK  ",
+      "dmeLocation": {
+        "lat": 40.791766667,
+        "long": -73.303677778
+      },
+      "figureOfMerit": 1,
+      "frequency": 117.7,
+      "icaoCode": "K6",
+      "ident": "DPK",
+      "location": {
+        "lat": 40.791766667,
+        "long": -73.303677778
+      },
+      "name": null,
+      "range": 40,
+      "sectionCode": 1,
+      "stationDeclination": -12,
+      "subSectionCode": 0,
+      "trueReferenced": false,
+      "type": 4
+    },
+    {
+      "airportIdent": "KJFK",
+      "area": 1,
+      "databaseId": "A      KJFK ",
+      "icaoCode": "  ",
+      "ident": "KJFK",
+      "location": {
+        "alt": 12.625,
+        "lat": 40.639925,
+        "long": -73.778694444
+      },
+      "longestRunwayLength": 4417.961189795873,
+      "longestRunwaySurfaceType": 2,
+      "magVar": 0,
+      "name": null,
+      "sectionCode": 4,
+      "subSectionCode": 0,
+      "transitionAltitude": 18000,
+      "transitionLevel": 180
+    },
+    {
+      "airportIdent": "KBOS",
+      "area": 1,
+      "databaseId": "A      KBOS ",
+      "icaoCode": "  ",
+      "ident": "KBOS",
+      "location": {
+        "alt": 16,
+        "lat": 42.362944444,
+        "long": -71.006388889
+      },
+      "longestRunwayLength": 3071.617776389314,
+      "longestRunwaySurfaceType": 2,
+      "magVar": 0,
+      "name": null,
+      "sectionCode": 4,
+      "subSectionCode": 0,
+      "transitionAltitude": 18000,
+      "transitionLevel": 180
+    },
+    {
+      "airportIdent": "EGLL",
+      "area": 1,
+      "databaseId": "A      EGLL ",
+      "icaoCode": "  ",
+      "ident": "EGLL",
+      "location": {
+        "alt": 77.25,
+        "lat": 51.4775,
+        "long": -0.461388889
+      },
+      "longestRunwayLength": 3890.9454182261647,
+      "longestRunwaySurfaceType": 2,
+      "magVar": 0,
+      "name": null,
+      "sectionCode": 4,
+      "subSectionCode": 0,
+      "transitionAltitude": 6000,
+      "transitionLevel": 70
+    },
+    {
+      "area": 0,
+      "class": 8,
+      "databaseId": "VEG    CPT  ",
+      "dmeLocation": {
+        "lat": 51.491572222,
+        "long": -1.219691667
+      },
+      "figureOfMerit": 2,
+      "frequency": 114.35,
+      "icaoCode": "EG",
+      "ident": "CPT",
+      "location": {
+        "lat": 51.491572222,
+        "long": -1.219691667
+      },
+      "name": null,
+      "range": 130,
+      "sectionCode": 1,
+      "stationDeclination": 0,
+      "subSectionCode": 0,
+      "trueReferenced": false,
+      "type": 4
+    },
+    {
+      "area": 0,
+      "databaseId": "WEG    IPNOX",
+      "icaoCode": "EG",
+      "ident": "IPNOX",
+      "location": {
+        "lat": 54.227777778,
+        "long": -2.706111111
+      },
+      "name": "",
+      "sectionCode": 2,
+      "subSectionCode": 0
+    },
+    {
+      "area": 0,
+      "databaseId": "WEG    OLPOP",
+      "icaoCode": "EG",
+      "ident": "OLPOP",
+      "location": {
+        "lat": 54.092222222,
+        "long": -2.535555556
+      },
+      "name": "",
+      "sectionCode": 2,
+      "subSectionCode": 0
+    },
+    {
+      "area": 0,
+      "databaseId": "WEG    SETEL",
+      "icaoCode": "EG",
+      "ident": "SETEL",
+      "location": {
+        "lat": 54.0124,
+        "long": -2.435752778
+      },
+      "name": "",
+      "sectionCode": 2,
+      "subSectionCode": 0
+    },
+    {
+      "area": 0,
+      "databaseId": "W      N55W010",
+      "icaoCode": "  ",
+      "ident": "N55W010",
+      "location": {
+        "lat": 55,
+        "long": -10
+      },
+      "sectionCode": 2,
+      "subSectionCode": 0
+    },
+    {
+      "area": 0,
+      "databaseId": "W      N56W030",
+      "icaoCode": "  ",
+      "ident": "N56W030",
+      "location": {
+        "lat": 56,
+        "long": -30
+      },
+      "sectionCode": 2,
+      "subSectionCode": 0
+    },
+    {
+      "area": 0,
+      "databaseId": "W      N52W050",
+      "icaoCode": "  ",
+      "ident": "N52W050",
+      "location": {
+        "lat": 52,
+        "long": -50
+      },
+      "sectionCode": 2,
+      "subSectionCode": 0
+    },
+    {
+      "area": 0,
+      "databaseId": "WK6    GONZZ",
+      "icaoCode": "K6",
+      "ident": "GONZZ",
+      "location": {
+        "lat": 43.089444444,
+        "long": -76.686666667
+      },
+      "name": "",
+      "sectionCode": 2,
+      "subSectionCode": 0
+    },
+    {
+      "area": 0,
+      "databaseId": "WK6    PUPPY",
+      "icaoCode": "K6",
+      "ident": "PUPPY",
+      "location": {
+        "lat": 43.05735,
+        "long": -75.29425
+      },
+      "name": "",
+      "sectionCode": 2,
+      "subSectionCode": 0
+    },
+    {
+      "area": 0,
+      "databaseId": "WK6    PAYGE",
+      "icaoCode": "K6",
+      "ident": "PAYGE",
+      "location": {
+        "lat": 43.014022222,
+        "long": -74.253544444
+      },
+      "name": "",
+      "sectionCode": 2,
+      "subSectionCode": 0
+    },
+    {
+      "area": 0,
+      "class": 8,
+      "databaseId": "VK6    ENE  ",
+      "dmeLocation": {
+        "lat": 43.425672222,
+        "long": -70.613525
+      },
+      "figureOfMerit": 2,
+      "frequency": 117.1,
+      "icaoCode": "K6",
+      "ident": "ENE",
+      "location": {
+        "lat": 43.425672222,
+        "long": -70.613525
+      },
+      "name": null,
+      "range": 130,
+      "sectionCode": 1,
+      "stationDeclination": -17,
+      "subSectionCode": 0,
+      "trueReferenced": false,
+      "type": 4
+    },
+    {
+      "airportIdent": "KEWR",
+      "area": 1,
+      "databaseId": "A      KEWR ",
+      "icaoCode": "  ",
+      "ident": "KEWR",
+      "location": {
+        "alt": 11.5,
+        "lat": 40.692480556,
+        "long": -74.168686111
+      },
+      "longestRunwayLength": 3354.770739450006,
+      "longestRunwaySurfaceType": 2,
+      "magVar": 0,
+      "name": null,
+      "sectionCode": 4,
+      "subSectionCode": 0,
+      "transitionAltitude": 18000,
+      "transitionLevel": 180
+    }
+  ],
+  "airways": [
+    {
+      "ident": "UN57",
+      "fixes": [
+        "WEG    IPNOX",
+        "WEG    OLPOP",
+        "WEG    SETEL"
+      ]
+    },
+    {
+      "ident": "Q822",
+      "fixes": [
+        "WK6    GONZZ",
+        "WK6    PUPPY",
+        "WK6    PAYGE"
+      ]
+    }
+  ],
+  "airports": {
+    "EGLL": {
+      "runways": [
+        {
+          "airportIdent": "EGLL",
+          "area": 1,
+          "bearing": 89.6549634645107,
+          "databaseId": "REGEGLL09L",
+          "designator": 2,
+          "gradient": 0.00487141408843788,
+          "icaoCode": "EG",
+          "ident": "EGLL09L",
+          "length": 3890.9454182261647,
+          "location": {
+            "alt": 79,
+            "lat": 51.47750262955666,
+            "long": -0.484965384268822
+          },
+          "lsFrequencyChannel": 110.3,
+          "lsIdent": "IAA",
+          "magVar": 0,
+          "magneticBearing": 89.65496346451073,
+          "number": 9,
+          "sectionCode": 4,
+          "startLocation": {
+            "lat": 51.47748615887661,
+            "long": -0.4893788369854779
+          },
+          "subSectionCode": 6,
+          "surfaceType": 2,
+          "thresholdCrossingHeight": 129,
+          "thresholdLocation": {
+            "alt": 79,
+            "lat": 51.47750262955666,
+            "long": -0.484965384268822
+          },
+          "width": 49.9900016784668
+        }
+      ],
+      "departures": [
+        {
+          "databaseId": "PEGEGLLBPK5K",
+          "ident": "BPK5K",
+          "runwayTransitions": [
+            {
+              "databaseId": "BPK5K0",
+              "ident": "EGLL09L",
+              "legs": []
+            }
+          ],
+          "commonLegs": [
+            {
+              "procedureIdent": "BPK5K",
+              "type": "CF",
+              "overfly": true,
+              "waypoint": {
+                "databaseId": "WEGEGLLD110B",
+                "icaoCode": "EG",
+                "ident": "D110B",
+                "name": "",
+                "location": {
+                  "lat": 51.478122222,
+                  "long": -0.429311111
+                },
+                "area": 1,
+                "airportIdent": "EGLL",
+                "sectionCode": 4,
+                "subSectionCode": 2
+              },
+              "recommendedNavaid": {
+                "databaseId": "VEG    LON  ",
+                "icaoCode": "EG",
+                "ident": "LON",
+                "name": null,
+                "location": {
+                  "lat": 51.487247222,
+                  "long": -0.466538889
+                },
+                "area": 0,
+                "sectionCode": 1,
+                "subSectionCode": 0,
+                "frequency": 113.6,
+                "range": 130,
+                "figureOfMerit": 2,
+                "stationDeclination": 1,
+                "trueReferenced": false,
+                "dmeLocation": {
+                  "lat": 51.487247222,
+                  "long": -0.466538889
+                },
+                "type": 4,
+                "class": 8
+              },
+              "rho": 1.5,
+              "theta": 110.4,
+              "length": 2,
+              "altitudeDescriptor": "+",
+              "altitude1": 590,
+              "altitude2": 0,
+              "turnDirection": "E",
+              "course": 89,
+              "magVar": 1,
+              "waypointDescriptor": 2
+            },
+            {
+              "procedureIdent": "BPK5K",
+              "type": "CI",
+              "overfly": false,
+              "rho": 0,
+              "theta": 0,
+              "length": 0,
+              "altitude1": 0,
+              "altitude2": 0,
+              "turnDirection": "E",
+              "course": 50,
+              "magVar": 0,
+              "waypointDescriptor": 0
+            },
+            {
+              "procedureIdent": "BPK5K",
+              "type": "CF",
+              "overfly": true,
+              "waypoint": {
+                "databaseId": "WEGEGLLD070J",
+                "icaoCode": "EG",
+                "ident": "D070J",
+                "name": "",
+                "location": {
+                  "lat": 51.541169444,
+                  "long": -0.214133333
+                },
+                "area": 1,
+                "airportIdent": "EGLL",
+                "sectionCode": 4,
+                "subSectionCode": 2
+              },
+              "recommendedNavaid": {
+                "databaseId": "VEG    LON  ",
+                "icaoCode": "EG",
+                "ident": "LON",
+                "name": null,
+                "location": {
+                  "lat": 51.487247222,
+                  "long": -0.466538889
+                },
+                "area": 0,
+                "sectionCode": 1,
+                "subSectionCode": 0,
+                "frequency": 113.6,
+                "range": 130,
+                "figureOfMerit": 2,
+                "stationDeclination": 1,
+                "trueReferenced": false,
+                "dmeLocation": {
+                  "lat": 51.487247222,
+                  "long": -0.466538889
+                },
+                "type": 4,
+                "class": 8
+              },
+              "rho": 10,
+              "theta": 70,
+              "length": 6,
+              "altitudeDescriptor": "+",
+              "altitude1": 3000,
+              "altitude2": 0,
+              "turnDirection": "E",
+              "course": 70,
+              "magVar": 1,
+              "waypointDescriptor": 2
+            },
+            {
+              "procedureIdent": "BPK5K",
+              "type": "CF",
+              "overfly": false,
+              "waypoint": {
+                "databaseId": "WEGEGLLD196J",
+                "icaoCode": "EG",
+                "ident": "D196J",
+                "name": "",
+                "location": {
+                  "lat": 51.589702778,
+                  "long": -0.180394444
+                },
+                "area": 1,
+                "airportIdent": "EGLL",
+                "sectionCode": 4,
+                "subSectionCode": 2
+              },
+              "recommendedNavaid": {
+                "databaseId": "VEG    BPK  ",
+                "icaoCode": "EG",
+                "ident": "BPK",
+                "name": null,
+                "location": {
+                  "lat": 51.749736111,
+                  "long": -0.106736111
+                },
+                "area": 0,
+                "sectionCode": 1,
+                "subSectionCode": 0,
+                "frequency": 117.5,
+                "range": 130,
+                "figureOfMerit": 2,
+                "stationDeclination": 0,
+                "trueReferenced": false,
+                "dmeLocation": {
+                  "lat": 51.749736111,
+                  "long": -0.106736111
+                },
+                "type": 4,
+                "class": 8
+              },
+              "rho": 10,
+              "theta": 196,
+              "length": 3,
+              "altitudeDescriptor": "+",
+              "altitude1": 4000,
+              "altitude2": 0,
+              "turnDirection": "E",
+              "course": 16,
+              "magVar": 0,
+              "waypointDescriptor": 2
+            },
+            {
+              "procedureIdent": "BPK5K",
+              "type": "TF",
+              "overfly": false,
+              "waypoint": {
+                "databaseId": "WEGEGLLD196F",
+                "icaoCode": "EG",
+                "ident": "D196F",
+                "name": "",
+                "location": {
+                  "lat": 51.653722222,
+                  "long": -0.150991667
+                },
+                "area": 1,
+                "airportIdent": "EGLL",
+                "sectionCode": 4,
+                "subSectionCode": 2
+              },
+              "rho": 0,
+              "theta": 0,
+              "length": 0,
+              "altitudeDescriptor": "@",
+              "altitude1": 6000,
+              "altitude2": 0,
+              "turnDirection": "E",
+              "course": 0,
+              "magVar": 0,
+              "waypointDescriptor": 2
+            },
+            {
+              "procedureIdent": "BPK5K",
+              "type": "TF",
+              "overfly": false,
+              "waypoint": {
+                "databaseId": "WEGEGLLBAPAG",
+                "icaoCode": "EG",
+                "ident": "BAPAG",
+                "name": "",
+                "location": {
+                  "lat": 51.718055556,
+                  "long": -0.123333333
+                },
+                "area": 1,
+                "airportIdent": "EGLL",
+                "sectionCode": 4,
+                "subSectionCode": 2
+              },
+              "rho": 0,
+              "theta": 0,
+              "length": 0,
+              "altitude1": 0,
+              "altitude2": 0,
+              "turnDirection": "E",
+              "course": 0,
+              "magVar": 0,
+              "waypointDescriptor": 2
+            },
+            {
+              "procedureIdent": "BPK5K",
+              "type": "TF",
+              "overfly": false,
+              "waypoint": {
+                "databaseId": "VEG    BPK  ",
+                "icaoCode": "EG",
+                "ident": "BPK",
+                "name": null,
+                "location": {
+                  "lat": 51.749736111,
+                  "long": -0.106736111
+                },
+                "area": 0,
+                "sectionCode": 1,
+                "subSectionCode": 0,
+                "frequency": 117.5,
+                "range": 130,
+                "figureOfMerit": 2,
+                "stationDeclination": 0,
+                "trueReferenced": false,
+                "dmeLocation": {
+                  "lat": 51.749736111,
+                  "long": -0.106736111
+                },
+                "type": 4,
+                "class": 8
+              },
+              "rho": 0,
+              "theta": 0,
+              "length": 0,
+              "altitudeDescriptor": "@",
+              "altitude1": 6000,
+              "altitude2": 0,
+              "turnDirection": "E",
+              "course": 0,
+              "magVar": 0,
+              "waypointDescriptor": 9
+            }
+          ],
+          "enrouteTransitions": []
+        }
+      ]
+    },
+    "KJFK": {
+      "runways": [
+        {
+          "airportIdent": "KJFK",
+          "area": 1,
+          "databaseId": "RK6KJFK04R",
+          "icaoCode": "K6",
+          "ident": "KJFK04R",
+          "sectionCode": 4,
+          "subSectionCode": 6,
+          "number": 4,
+          "designator": 3,
+          "bearing": 16.0,
+          "magneticBearing": 28.0,
+          "magVar": -12,
+          "length": 4417.96,
+          "location": {
+            "lat": 40.626161111,
+            "long": -73.77395,
+            "alt": 13
+          },
+          "thresholdLocation": {
+            "lat": 40.626161111,
+            "long": -73.77395,
+            "alt": 13
+          }
+        }
+      ],
+      "arrivals": [
+        {
+          "databaseId": "PK6KJFKCAMRN4",
+          "ident": "CAMRN4",
+          "runwayTransitions": [],
+          "commonLegs": [
+            {
+              "procedureIdent": "CAMRN4",
+              "type": "IF",
+              "overfly": false,
+              "waypoint": {
+                "databaseId": "VK6    SIE  ",
+                "icaoCode": "K6",
+                "ident": "SIE",
+                "name": null,
+                "location": {
+                  "lat": 39.095508333,
+                  "long": -74.800344444
+                },
+                "area": 0,
+                "sectionCode": 1,
+                "subSectionCode": 0,
+                "frequency": 114.8,
+                "range": 130,
+                "figureOfMerit": 2,
+                "stationDeclination": -9,
+                "trueReferenced": false,
+                "dmeLocation": {
+                  "lat": 39.095508333,
+                  "long": -74.800344444
+                },
+                "type": 32,
+                "class": 8
+              },
+              "rho": 0,
+              "theta": 0,
+              "length": 0,
+              "altitude1": 0,
+              "altitude2": 0,
+              "turnDirection": "E",
+              "course": 0,
+              "magVar": -9,
+              "waypointDescriptor": 9
+            },
+            {
+              "procedureIdent": "CAMRN4",
+              "type": "TF",
+              "overfly": false,
+              "waypoint": {
+                "databaseId": "WK6    BOTON",
+                "icaoCode": "K6",
+                "ident": "BOTON",
+                "name": "",
+                "location": {
+                  "lat": 39.414472222,
+                  "long": -74.454744444
+                },
+                "area": 0,
+                "sectionCode": 2,
+                "subSectionCode": 0
+              },
+              "rho": 0,
+              "theta": 0,
+              "length": 0,
+              "altitude1": 0,
+              "altitude2": 0,
+              "turnDirection": "E",
+              "course": 0,
+              "magVar": 0,
+              "waypointDescriptor": 2
+            },
+            {
+              "procedureIdent": "CAMRN4",
+              "type": "TF",
+              "overfly": false,
+              "waypoint": {
+                "databaseId": "WK6    HOGGS",
+                "icaoCode": "K6",
+                "ident": "HOGGS",
+                "name": "",
+                "location": {
+                  "lat": 39.582847222,
+                  "long": -74.270575
+                },
+                "area": 0,
+                "sectionCode": 2,
+                "subSectionCode": 0
+              },
+              "rho": 0,
+              "theta": 0,
+              "length": 0,
+              "altitude1": 0,
+              "altitude2": 0,
+              "turnDirection": "E",
+              "course": 0,
+              "magVar": 0,
+              "waypointDescriptor": 2
+            },
+            {
+              "procedureIdent": "CAMRN4",
+              "type": "TF",
+              "overfly": false,
+              "waypoint": {
+                "databaseId": "WK6    PANZE",
+                "icaoCode": "K6",
+                "ident": "PANZE",
+                "name": "",
+                "location": {
+                  "lat": 39.675994444,
+                  "long": -74.168180556
+                },
+                "area": 0,
+                "sectionCode": 2,
+                "subSectionCode": 0
+              },
+              "rho": 0,
+              "theta": 0,
+              "length": 0,
+              "altitude1": 0,
+              "altitude2": 0,
+              "turnDirection": "E",
+              "course": 0,
+              "magVar": 0,
+              "waypointDescriptor": 2
+            },
+            {
+              "procedureIdent": "CAMRN4",
+              "type": "TF",
+              "overfly": false,
+              "waypoint": {
+                "databaseId": "WK6    KARRS",
+                "icaoCode": "K6",
+                "ident": "KARRS",
+                "name": "",
+                "location": {
+                  "lat": 39.840872222,
+                  "long": -73.985988889
+                },
+                "area": 0,
+                "sectionCode": 2,
+                "subSectionCode": 0
+              },
+              "rho": 0,
+              "theta": 0,
+              "length": 0,
+              "altitude1": 0,
+              "altitude2": 0,
+              "turnDirection": "E",
+              "course": 0,
+              "magVar": 0,
+              "waypointDescriptor": 2
+            },
+            {
+              "procedureIdent": "CAMRN4",
+              "type": "TF",
+              "overfly": false,
+              "waypoint": {
+                "databaseId": "WK6    CAMRN",
+                "icaoCode": "K6",
+                "ident": "CAMRN",
+                "name": "",
+                "location": {
+                  "lat": 40.017302778,
+                  "long": -73.861058333
+                },
+                "area": 0,
+                "sectionCode": 2,
+                "subSectionCode": 0
+              },
+              "rho": 0,
+              "theta": 0,
+              "length": 0,
+              "altitude1": 0,
+              "altitude2": 0,
+              "turnDirection": "E",
+              "course": 0,
+              "magVar": 0,
+              "waypointDescriptor": 2
+            }
+          ],
+          "enrouteTransitions": []
+        }
+      ],
+      "approaches": [
+        {
+          "databaseId": "PK6KJFKVORDME 04R",
+          "ident": "D04R",
+          "type": 2,
+          "multipleIndicator": "",
+          "runwayIdent": "KJFK04R",
+          "legs": [
+            {
+              "procedureIdent": "D04R",
+              "type": "IF",
+              "overfly": false,
+              "waypoint": {
+                "databaseId": "WK6KJFKBEBKE",
+                "icaoCode": "K6",
+                "ident": "BEBKE",
+                "name": "",
+                "location": {
+                  "lat": 40.555077778,
+                  "long": -73.800991667
+                },
+                "area": 1,
+                "airportIdent": "KJFK",
+                "sectionCode": 4,
+                "subSectionCode": 2
+              },
+              "recommendedNavaid": {
+                "databaseId": "VK6    JFK  ",
+                "icaoCode": "K6",
+                "ident": "JFK",
+                "name": null,
+                "location": {
+                  "lat": 40.632883333,
+                  "long": -73.771391667
+                },
+                "area": 0,
+                "sectionCode": 1,
+                "subSectionCode": 0,
+                "frequency": 115.9,
+                "range": 130,
+                "figureOfMerit": 2,
+                "stationDeclination": -12,
+                "trueReferenced": false,
+                "dmeLocation": {
+                  "lat": 40.632888889,
+                  "long": -73.771388889
+                },
+                "type": 4,
+                "class": 8
+              },
+              "rho": 4.9,
+              "theta": 208.2,
+              "length": 0,
+              "altitudeDescriptor": "+",
+              "altitude1": 1500,
+              "altitude2": 0,
+              "turnDirection": "E",
+              "course": 0,
+              "magVar": -12,
+              "waypointDescriptor": 2,
+              "approachWaypointDescriptor": 5
+            },
+            {
+              "procedureIdent": "D04R",
+              "type": "CF",
+              "overfly": false,
+              "waypoint": {
+                "databaseId": "WK6KJFKMA04R",
+                "icaoCode": "K6",
+                "ident": "MA04R",
+                "name": "",
+                "location": {
+                  "lat": 40.626161111,
+                  "long": -73.77395
+                },
+                "area": 1,
+                "airportIdent": "KJFK",
+                "sectionCode": 4,
+                "subSectionCode": 2
+              },
+              "recommendedNavaid": {
+                "databaseId": "VK6    JFK  ",
+                "icaoCode": "K6",
+                "ident": "JFK",
+                "name": null,
+                "location": {
+                  "lat": 40.632883333,
+                  "long": -73.771391667
+                },
+                "area": 0,
+                "sectionCode": 1,
+                "subSectionCode": 0,
+                "frequency": 115.9,
+                "range": 130,
+                "figureOfMerit": 2,
+                "stationDeclination": -12,
+                "trueReferenced": false,
+                "dmeLocation": {
+                  "lat": 40.632888889,
+                  "long": -73.771388889
+                },
+                "type": 4,
+                "class": 8
+              },
+              "rho": 0.4,
+              "theta": 208.2,
+              "length": 4.4,
+              "altitudeDescriptor": "@",
+              "altitude1": 69,
+              "altitude2": 0,
+              "turnDirection": "E",
+              "course": 28,
+              "magVar": -12,
+              "waypointDescriptor": 2,
+              "approachWaypointDescriptor": 8,
+              "verticalAngle": -3.0400000000000205
+            }
+          ],
+          "missedLegs": [
+            {
+              "procedureIdent": "D04R",
+              "type": "CA",
+              "overfly": false,
+              "rho": 0,
+              "theta": 0,
+              "length": 0,
+              "altitudeDescriptor": "+",
+              "altitude1": 420,
+              "altitude2": 0,
+              "turnDirection": "E",
+              "course": 28,
+              "magVar": 0,
+              "waypointDescriptor": 0
+            },
+            {
+              "procedureIdent": "D04R",
+              "type": "VI",
+              "overfly": false,
+              "rho": 0,
+              "theta": 0,
+              "length": 0,
+              "altitude1": 0,
+              "altitude2": 0,
+              "turnDirection": "E",
+              "course": 100,
+              "magVar": 0,
+              "waypointDescriptor": 0
+            },
+            {
+              "procedureIdent": "D04R",
+              "type": "CF",
+              "overfly": false,
+              "waypoint": {
+                "databaseId": "VK6    DPK  ",
+                "icaoCode": "K6",
+                "ident": "DPK",
+                "name": null,
+                "location": {
+                  "lat": 40.791766667,
+                  "long": -73.303677778
+                },
+                "area": 0,
+                "sectionCode": 1,
+                "subSectionCode": 0,
+                "frequency": 117.7,
+                "range": 40,
+                "figureOfMerit": 1,
+                "stationDeclination": -12,
+                "trueReferenced": false,
+                "dmeLocation": {
+                  "lat": 40.791766667,
+                  "long": -73.303677778
+                },
+                "type": 4,
+                "class": 4
+              },
+              "recommendedNavaid": {
+                "databaseId": "VK6    DPK  ",
+                "icaoCode": "K6",
+                "ident": "DPK",
+                "name": null,
+                "location": {
+                  "lat": 40.791766667,
+                  "long": -73.303677778
+                },
+                "area": 0,
+                "sectionCode": 1,
+                "subSectionCode": 0,
+                "frequency": 117.7,
+                "range": 40,
+                "figureOfMerit": 1,
+                "stationDeclination": -12,
+                "trueReferenced": false,
+                "dmeLocation": {
+                  "lat": 40.791766667,
+                  "long": -73.303677778
+                },
+                "type": 4,
+                "class": 4
+              },
+              "rho": 0,
+              "theta": 0,
+              "length": 8,
+              "altitudeDescriptor": "+",
+              "altitude1": 4000,
+              "altitude2": 0,
+              "turnDirection": "E",
+              "course": 41,
+              "magVar": -12,
+              "waypointDescriptor": 9
+            },
+            {
+              "procedureIdent": "D04R",
+              "type": "HM",
+              "overfly": false,
+              "waypoint": {
+                "databaseId": "VK6    DPK  ",
+                "icaoCode": "K6",
+                "ident": "DPK",
+                "name": null,
+                "location": {
+                  "lat": 40.791766667,
+                  "long": -73.303677778
+                },
+                "area": 0,
+                "sectionCode": 1,
+                "subSectionCode": 0,
+                "frequency": 117.7,
+                "range": 40,
+                "figureOfMerit": 1,
+                "stationDeclination": -12,
+                "trueReferenced": false,
+                "dmeLocation": {
+                  "lat": 40.791766667,
+                  "long": -73.303677778
+                },
+                "type": 4,
+                "class": 4
+              },
+              "rho": 0,
+              "theta": 0,
+              "lengthTime": 1,
+              "altitude1": 0,
+              "altitude2": 0,
+              "turnDirection": "L",
+              "course": 258,
+              "magVar": -12,
+              "waypointDescriptor": 9
+            }
+          ],
+          "transitions": []
+        }
+      ]
+    }
+  }
+}

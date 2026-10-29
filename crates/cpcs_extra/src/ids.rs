@@ -1,0 +1,58 @@
+pub const FMS_LANDING_ELEVATION: &str = "FM1_LANDING_ELEVATION";
+pub const FMS_DESTINATION_QNH: &str = "DESTINATION_QNH";
+pub const FMS_CRUISE_ALTITUDE: &str = "AIRLINER_CRUISE_ALTITUDE";
+pub const FMA_LATERAL_MODE: &str = "FMA_LATERAL_MODE";
+
+pub const CPCS_CABIN_ALTITUDE: [&str; 4] = [
+    "PRESS_CABIN_ALTITUDE_B1",
+    "PRESS_CABIN_ALTITUDE_B2",
+    "PRESS_CABIN_ALTITUDE_B3",
+    "PRESS_CABIN_ALTITUDE_B4",
+];
+pub const CPCS_CABIN_VS: [&str; 4] = [
+    "PRESS_CABIN_VS_B1",
+    "PRESS_CABIN_VS_B2",
+    "PRESS_CABIN_VS_B3",
+    "PRESS_CABIN_VS_B4",
+];
+pub const CPCS_DELTA_PRESSURE: [&str; 4] = [
+    "PRESS_CABIN_DELTA_PRESSURE_B1",
+    "PRESS_CABIN_DELTA_PRESSURE_B2",
+    "PRESS_CABIN_DELTA_PRESSURE_B3",
+    "PRESS_CABIN_DELTA_PRESSURE_B4",
+];
+pub const CPCS_DISCRETE_WORD: [&str; 4] = [
+    "COND_CPIOM_B1_CPCS_DISCRETE_WORD",
+    "COND_CPIOM_B2_CPCS_DISCRETE_WORD",
+    "COND_CPIOM_B3_CPCS_DISCRETE_WORD",
+    "COND_CPIOM_B4_CPCS_DISCRETE_WORD",
+];
+pub const CPCS_DISCRETE_EXCESS_CAB_ALT_BIT: u32 = 13;
+pub const MAN_EXCESSIVE_CABIN_ALTITUDE: &str = "PRESS_MAN_EXCESSIVE_CABIN_ALTITUDE";
+pub const OUTFLOW_VALVE_OPEN_PERCENTAGE: [&str; 4] = [
+    "PRESS_OUTFLOW_VALVE_1_OPEN_PERCENTAGE_B1",
+    "PRESS_OUTFLOW_VALVE_2_OPEN_PERCENTAGE_B1",
+    "PRESS_OUTFLOW_VALVE_3_OPEN_PERCENTAGE_B1",
+    "PRESS_OUTFLOW_VALVE_4_OPEN_PERCENTAGE_B1",
+];
+pub const SAFETY_VALVE_OPEN_PERCENTAGE: &str = "PRESS_SAFETY_VALVE_OPEN_PERCENTAGE";
+
+pub const OVHD_ALT_MAN_PB_IS_AUTO: &str = "OVHD_PRESS_MAN_ALTITUDE_PB_IS_AUTO";
+pub const OVHD_ALT_KNOB: &str = "OVHD_PRESS_MAN_ALTITUDE_KNOB";
+pub const OVHD_VS_MAN_PB_IS_AUTO: &str = "OVHD_PRESS_MAN_VS_CTL_PB_IS_AUTO";
+pub const OVHD_VS_KNOB: &str = "OVHD_PRESS_MAN_VS_CTL_KNOB";
+
+pub const OUT_EMER_DESCENT_PHASE: &str = "DEEP_CPCS_EMER_DESCENT_PHASE";
+pub const OUT_EMER_DESCENT_ANNOUNCE: &str = "DEEP_CPCS_EMER_DESCENT_ANNOUNCE";
+pub const OUT_MASKS_EXPECTED: &str = "DEEP_CPCS_MASKS_EXPECTED";
+pub const OUT_TIME_TO_MASK_ALT_S: &str = "DEEP_CPCS_TIME_TO_MASK_ALT_S";
+pub const OUT_LANDING_ELEVATION_SOURCE: &str = "DEEP_CPCS_LANDING_ELEVATION_SOURCE";
+
+pub const SND_OUTFLOW_HISS: &str = "fbw/snd/press_outflow_hiss";
+pub const SND_OUTFLOW_PITCH: &str = "fbw/snd/press_outflow_pitch";
+pub const SND_SAFETY_VALVE: &str = "fbw/snd/press_safety_valve";
+pub const SND_EAR_POP: &str = "fbw/snd/press_ear_pop";
+pub const SND_DECOMP_BANG: &str = "fbw/snd/press_decomp_bang";
+pub const SND_DECOMP_ROAR: &str = "fbw/snd/press_decomp_roar";
+pub const SND_RESIDUAL_HISS: &str = "fbw/snd/press_residual_hiss";
+pub const SND_DENSITY: &str = "fbw/snd/press_density";

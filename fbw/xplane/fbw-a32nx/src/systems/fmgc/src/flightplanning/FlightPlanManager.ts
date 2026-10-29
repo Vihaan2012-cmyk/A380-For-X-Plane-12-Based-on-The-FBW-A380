@@ -1,0 +1,451 @@
+// @ts-strict-ignore
+// Copyright (c) 2021-2026 FlyByWire Simulations
+// Copyright (c) 2021-2022 Synaptic Simulations
+//
+// SPDX-License-Identifier: GPL-3.0
+
+import { FlightPlan } from '@fmgc/flightplanning/plans/FlightPlan';
+import {
+  ClockTopics,
+  BusSignal,
+  Bus,
+  Outbox,
+  Emitter,
+  Signal,
+  Bond,
+} from 'xplane-js/ui';
+import {
+  FlightPlanBatchChangeEvent,
+  FlightPlanEditSyncEvent,
+  FlightPlanEvents,
+  FlightPlanSyncResponsePacket,
+  PerformanceDataFlightPlanSyncEvents,
+  SyncFlightPlanEvents,
+} from '@fmgc/flightplanning/sync/FlightPlanEvents';
+import { FlightPlanContext, SerializedFlightPlan } from '@fmgc/flightplanning/plans/BaseFlightPlan';
+import { CopyOptions } from '@fmgc/flightplanning/plans/CloningOptions';
+import { FlightPlanPerformanceData } from '@fmgc/flightplanning/plans/performance/FlightPlanPerformanceData';
+import { FlightPlanUtils } from './FlightPlanUtils';
+import { FlightPlanBatch, FlightPlanBatchUtils } from '@fmgc/flightplanning/plans/FlightPlanBatch';
+import { FlightPlanFlags } from './plans/FlightPlanFlags';
+import { FpmConfig } from './FpmConfig';
+
+export enum FlightPlanIndex {
+  Active,
+  Temporary,
+  Uplink,
+  FirstSecondary,
+}
+
+export class FlightPlanManager<P extends FlightPlanPerformanceData> {
+  private plans: FlightPlan<P>[] = [];
+
+  private subs: Bond[] = [];
+
+  private _initialized = Signal.of(false);
+
+  /**
+   * Public version of {@link _initialized}
+   */
+  public initialized = new Emitter();
+
+  private ignoreSync = false;
+
+  private processingSyncEvents = false;
+
+  private readonly syncEventQueue: [
+    keyof SyncFlightPlanEvents,
+    FlightPlanEditSyncEvent | FlightPlanBatchChangeEvent,
+  ][] = [];
+
+  public destroy() {
+    this.subs.forEach((sub) => sub.destroy());
+  }
+
+  private readonly time = BusSignal.from(null, 0);
+
+  constructor(
+    private readonly context: FlightPlanContext,
+    private readonly bus: Bus,
+    private readonly performanceDataInit: P,
+    private readonly syncClientID: number,
+    private readonly master: boolean,
+    private readonly config?: FpmConfig,
+  ) {
+    const sub = bus.inbox<FlightPlanEvents & ClockTopics>();
+
+    this.subs.push(this.time.rebind(sub.topic('simTime').limit(1)));
+
+    this.subs.push(
+      sub.topic('flightPlanManager.syncRequest').listen(() => {
+        // TODO clarify, I guess only one instance should reply to this
+        if (!this.ignoreSync && this.master) {
+          const plansRecord: Record<number, SerializedFlightPlan> = {};
+
+          for (const plan of this.plans) {
+            if (plan) {
+              plansRecord[plan.index] = plan.serialize();
+            }
+          }
+
+          const response: FlightPlanSyncResponsePacket = { syncClientID: this.syncClientID, plans: plansRecord };
+
+          this.sendEvent('flightPlanManager.syncResponse', response);
+        }
+      }),
+    );
+
+    // TODO handle this in the event queue
+    this.subs.push(
+      sub.topic('flightPlanManager.syncResponse').listen(async (event) => {
+        if (!this.ignoreSync && this.syncClientID === event.syncClientID) {
+          for (const [index, serialisedPlan] of Object.entries(event.plans)) {
+            const intIndex = parseInt(index);
+
+            const newPlan = await FlightPlan.fromSerializedFlightPlan(
+              this.context,
+              intIndex,
+              serialisedPlan,
+              this.bus,
+              this.performanceDataInit.clone(),
+              this.time.get(),
+              this.config?.DRAFT_ON_WIND_EDIT ?? false,
+              this.config?.NUM_CLIMB_WIND_LEVELS ?? 0,
+              this.config?.NUM_CRUISE_WIND_LEVELS ?? 0,
+              this.config?.NUM_DESCENT_WIND_LEVELS ?? 0,
+              this.config?.SORT_CLIMB_WIND_DESCENDING ?? true,
+            );
+
+            this.set(intIndex, newPlan);
+          }
+
+          this._initialized.set(true);
+        }
+      }),
+    );
+
+    this.subs.push(
+      sub.topic('flightPlanManager.create').listen((event) => {
+        if (!this.ignoreSync && this.syncClientID === event.syncClientID) {
+          this.create(event.planIndex, false);
+        }
+      }),
+    );
+
+    this.subs.push(
+      sub.topic('flightPlanManager.delete').listen((event) => {
+        if (!this.ignoreSync && this.syncClientID === event.syncClientID) {
+          // Out-of-order sync (W154): a delete synced from another instance
+          // can arrive before this instance's own syncResponse populated
+          // the plan it names. Nothing to delete either way, so skip it
+          // instead of letting assertFlightPlanExists throw out of the
+          // EventBus dispatch. A direct local delete() (not this synced
+          // path) still asserts, unchanged.
+          if (this.has(event.planIndex)) {
+            this.delete(event.planIndex, false);
+          }
+        }
+      }),
+    );
+
+    this.subs.push(
+      sub.topic('flightPlanManager.deleteAll').listen(() => {
+        if (!this.ignoreSync) {
+          this.deleteAll(false);
+        }
+      }),
+    );
+
+    this.subs.push(
+      sub.topic('flightPlanManager.copy').listen((event) => {
+        if (!this.ignoreSync && this.syncClientID !== event.syncClientID) {
+          this.copy(event.planIndex, event.targetPlanIndex, event.options, false);
+        }
+      }),
+    );
+
+    this.subs.push(
+      sub.topic('flightPlanManager.swap').listen((event) => {
+        if (!this.ignoreSync && this.syncClientID !== event.syncClientID) {
+          this.swap(event.planIndex, event.targetPlanIndex, false);
+        }
+      }),
+    );
+
+    this.subs.push(
+      this.bus.listenAll((key, event: FlightPlanEditSyncEvent | FlightPlanBatchChangeEvent) => {
+        if (!this.ignoreSync && key.startsWith('SYNC_flightPlan') && typeof event === 'object') {
+          this.syncEventQueue.push([key as keyof SyncFlightPlanEvents, event]);
+
+          if (!this.processingSyncEvents) {
+            this.processSyncEventQueue();
+          }
+        }
+      }),
+    );
+
+    this.subs.push(this._initialized.watch(() => this.initialized.emit(undefined, undefined)));
+
+    if (!this.master) {
+      setTimeout(() => this.sendEvent('flightPlanManager.syncRequest', undefined), 5_000);
+    } else {
+      this._initialized.set(true);
+    }
+
+    this.syncPub = this.bus.outbox<FlightPlanEvents>();
+    this.perfSyncPub = this.bus.outbox<PerformanceDataFlightPlanSyncEvents<P>>();
+  }
+
+  private readonly syncPub: Outbox<FlightPlanEvents>;
+
+  private readonly perfSyncPub: Outbox<PerformanceDataFlightPlanSyncEvents<P>>;
+
+  has(index: number) {
+    return this.plans[index] !== undefined;
+  }
+
+  get(index: number) {
+    this.assertFlightPlanExists(index);
+
+    return this.plans[index];
+  }
+
+  private set(index: number, flightPlan: FlightPlan<P>) {
+    this.plans[index] = flightPlan;
+  }
+
+  create(index: number, notify = true, flags?: FlightPlanFlags) {
+    this.assertFlightPlanDoesntExist(index);
+
+    this.plans[index] = FlightPlan.empty(
+      this.context,
+      index,
+      this.bus,
+      this.performanceDataInit.clone(),
+      this.config?.NUM_CLIMB_WIND_LEVELS ?? 0,
+      this.config?.NUM_CRUISE_WIND_LEVELS ?? 0,
+      this.config?.NUM_DESCENT_WIND_LEVELS ?? 0,
+      this.time.get(),
+      this.config?.DRAFT_ON_WIND_EDIT ?? false,
+      this.config?.SORT_CLIMB_WIND_DESCENDING ?? true,
+    );
+    if (flags !== undefined) {
+      this.plans[index].flags |= flags;
+    }
+
+    if (notify) {
+      this.sendEvent('flightPlanManager.create', { syncClientID: this.syncClientID, planIndex: index });
+    }
+  }
+
+  delete(index: number, notify = true) {
+    this.assertFlightPlanExists(index);
+
+    this.plans[index].destroy();
+    this.plans[index] = undefined;
+
+    if (notify) {
+      this.sendEvent('flightPlanManager.delete', { syncClientID: this.syncClientID, planIndex: index });
+    }
+  }
+
+  deleteAll(notify = true) {
+    for (const plan of this.plans) {
+      plan?.destroy();
+    }
+
+    this.plans.length = 0;
+
+    if (notify) {
+      this.sendEvent('flightPlanManager.deleteAll', undefined);
+    }
+  }
+
+  reset(notify = true) {
+    const activePlan = this.has(FlightPlanIndex.Active) ? this.get(FlightPlanIndex.Active) : undefined;
+    const activeToLeg = activePlan?.activeLeg;
+
+    for (const plan of this.plans) {
+      if (!plan) {
+        continue;
+      }
+
+      // We only want to delete secondary plans if their active leg matches the active plan's active leg.
+      const shouldDeletePlan =
+        plan.index < FlightPlanIndex.FirstSecondary ||
+        activePlan === undefined ||
+        (activeToLeg === undefined && plan.activeLeg === undefined) ||
+        (activeToLeg !== undefined &&
+          plan.activeLeg !== undefined &&
+          FlightPlanUtils.areFlightPlanElementsSame(activeToLeg, plan.activeLeg) &&
+          activePlan.activeLegIndex === plan.activeLegIndex);
+
+      if (shouldDeletePlan) {
+        this.delete(plan.index, notify);
+      }
+    }
+  }
+
+  copy(from: number, to: number, options = CopyOptions.Default, notify = true) {
+    this.assertFlightPlanExists(from);
+
+    const fromPlan = this.get(from);
+    const newPlan = fromPlan.clone(to, options, this.time.get());
+
+    if (from === FlightPlanIndex.Uplink) {
+      newPlan.flags |= FlightPlanFlags.CompanyFlightPlan;
+    } else if (from === FlightPlanIndex.Active) {
+      newPlan.flags |= FlightPlanFlags.CopiedFromActive;
+    } else if (from >= FlightPlanIndex.FirstSecondary && to >= FlightPlanIndex.FirstSecondary) {
+      newPlan.flags = fromPlan.flags;
+    } else if (from === FlightPlanIndex.Temporary) {
+      newPlan.flags |= fromPlan.flags & FlightPlanFlags.EngineOutSid;
+    }
+
+    if (this.has(to)) {
+      const old = this.get(to);
+      old.destroy();
+    }
+    this.set(to, newPlan);
+    this.get(to).incrementVersion();
+
+    if (notify) {
+      this.sendEvent('flightPlanManager.copy', {
+        syncClientID: this.syncClientID,
+        planIndex: from,
+        targetPlanIndex: to,
+        options,
+      });
+    }
+  }
+
+  swap(a: number, b: number, notify = true) {
+    this.assertFlightPlanExists(a);
+    this.assertFlightPlanExists(b);
+
+    // Clone the plans, so we can give them a new index
+    const time = this.time.get();
+    const planA = this.get(a).clone(b, undefined, time);
+    const planB = this.get(b).clone(a, undefined, time);
+
+    const isSwappedWithActive = b === FlightPlanIndex.Active;
+    if (isSwappedWithActive) {
+      planB.flags &= 0;
+      planB.flags |= FlightPlanFlags.SwappedWithActive;
+    }
+
+    this.delete(a, false);
+    this.delete(b, false);
+
+    this.set(a, planB);
+    this.set(b, planA);
+
+    if (notify) {
+      this.sendEvent('flightPlanManager.swap', { syncClientID: this.syncClientID, planIndex: a, targetPlanIndex: b });
+    }
+  }
+
+  public async openBatch(name: string): Promise<FlightPlanBatch> {
+    const newBatch = FlightPlanBatchUtils.createBatch(name);
+
+    this.context.batchStack.push(newBatch);
+    this.sendEvent('flightPlanService.batchChange', {
+      syncClientID: this.syncClientID,
+      batchStack: this.context.batchStack,
+      type: 'open',
+      batch: newBatch,
+    });
+
+    return newBatch;
+  }
+
+  public async closeBatch(uuid: string): Promise<FlightPlanBatch> {
+    if (this.context.batchStack.length === 0) {
+      throw new Error('[BaseFlightPlan](closeBatch) No batches to close');
+    }
+
+    const innermostBatch = this.context.batchStack[this.context.batchStack.length - 1];
+
+    if (innermostBatch.id !== uuid) {
+      const targetBatch = this.context.batchStack.find((it) => it.id === uuid);
+
+      if (targetBatch) {
+        throw new Error(
+          `[FlightPlanService](closeBatch) Only the innermost batch can be closed, which is: (id=${innermostBatch.id.substring(0, 8)}..., name="${innermostBatch.name}").
+Tried to close (id=${targetBatch.id.substring(0, 8)}..., name="${targetBatch.name}").
+Make sure any calls to an RPC client are \`await\`ed`,
+        );
+      } else {
+        throw new Error(
+          `[FlightPlanService](closeBatch) Only the innermost batch can be closed, which is: (id=${innermostBatch.id.substring(0, 8)}..., name="${innermostBatch.name}"). A batch with id '${uuid.substring(0, 8)}...' was not found.`,
+        );
+      }
+    }
+
+    this.context.batchStack.pop();
+    this.sendEvent('flightPlanService.batchChange', {
+      syncClientID: this.syncClientID,
+      batchStack: this.context.batchStack,
+      type: 'close',
+      batch: innermostBatch,
+    });
+
+    return innermostBatch;
+  }
+
+  private sendEvent<k extends keyof FlightPlanEvents>(topic: k, data: FlightPlanEvents[k]): void {
+    this.ignoreSync = true;
+    this.syncPub.post(topic, data, true, false);
+    this.bus
+      .outbox<SyncFlightPlanEvents>()
+      .post(`SYNC_${topic}`, data as SyncFlightPlanEvents[`SYNC_${typeof topic}`], true, false);
+    this.ignoreSync = false;
+  }
+
+  private assertFlightPlanExists(index: number) {
+    if (!this.plans[index]) {
+      throw new Error(`[FMS/FlightPlanManager] Tried to access non-existent flight plan at index #${index}`);
+    }
+  }
+
+  private assertFlightPlanDoesntExist(index: number) {
+    if (this.has(index)) {
+      throw new Error(`[FMS/FlightPlanManager] Tried to create existent flight plan at index #${index}`);
+    }
+  }
+
+  private async processSyncEventQueue(): Promise<void> {
+    this.processingSyncEvents = true;
+
+    // Process all events in the queue
+    while (this.syncEventQueue.length !== 0) {
+      const [event, data] = this.syncEventQueue.shift();
+
+      // Dispatch the sync event to a specific plan, if necessary
+      if (event.startsWith('SYNC_flightPlan.') && 'planIndex' in data) {
+        if (this.has(data.planIndex)) {
+          const plan = data.forAlternate ? this.get(data.planIndex).alternateFlightPlan : this.get(data.planIndex);
+
+          await plan.processSyncEvent(event as keyof SyncFlightPlanEvents & `SYNC_flightPlan.${string}`, data);
+        }
+      }
+
+      const flightPlanEventsPub = this.bus.outbox<FlightPlanEvents>();
+
+      if (data.syncClientID !== this.syncClientID) {
+        // Send the event on the event bus locally, so things can react to it
+        flightPlanEventsPub.post(
+          event.replace('SYNC_', '') as keyof FlightPlanEvents,
+          {
+            ...data,
+            syncClientID: this.syncClientID,
+          },
+          false,
+          false,
+        );
+      }
+    }
+
+    this.processingSyncEvents = false;
+  }
+}

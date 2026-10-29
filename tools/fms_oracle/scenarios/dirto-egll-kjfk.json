@@ -1,0 +1,25 @@
+{
+  "name": "dirto-egll-kjfk",
+  "lat": 51.4706,
+  "lon": -0.4619,
+  "steps": [
+    { "uplink": "canned" },
+    { "run_ms": 5000 },
+    { "snapshot": "before" },
+    { "fms": "globalThis.__dirtoFix = fps.active.legElementAt(3).definition.waypoint;" },
+    { "fms": "await fps.directToLeg({ lat: 52.0, long: -1.5 }, 330, 5);" },
+    { "run_ms": 1000 },
+    { "snapshot": "dirto-leg-tmpy" },
+    { "fms": "await fps.temporaryInsert();" },
+    { "run_ms": 2000 },
+    { "snapshot": "dirto-leg" },
+    { "fms": "await fps.directToWaypoint({ lat: 54.5, long: -4.0 }, 290, fps.active.allLegs.find((l) => l.ident === 'N56W030').definition.waypoint);" },
+    { "fms": "await fps.temporaryInsert();" },
+    { "run_ms": 2000 },
+    { "snapshot": "dirto-wpt-in-plan" },
+    { "fms": "await fps.directToWaypoint({ lat: 55.5, long: -20.0 }, 275, globalThis.__dirtoFix);" },
+    { "fms": "await fps.temporaryInsert();" },
+    { "run_ms": 2000 },
+    { "snapshot": "dirto-wpt-off-plan" }
+  ]
+}

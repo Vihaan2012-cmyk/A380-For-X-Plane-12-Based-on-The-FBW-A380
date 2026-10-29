@@ -1,0 +1,8 @@
+{"charts":{
+ "0":{"charts":[{"name":"GENERAL INFO","type":"0","runway":null,"url":"https://example.org/cf/gen.pdf"}]},
+ "1":{"charts":[]},
+ "2":{"charts":[{"name":"AERODROME CHART","type":"2","runway":null,"url":"https://example.org/cf/adc.pdf"}]},
+ "6":{"charts":[{"name":"SID RWY 09","type":"6","runway":"09","url":"https://example.org/cf/sid.pdf"}]},
+ "7":{"charts":[]},
+ "8":{"charts":[{"name":"ILS RWY 27","type":"8","runway":"27","url":"https://example.org/cf/ils.pdf"}]}
+}}

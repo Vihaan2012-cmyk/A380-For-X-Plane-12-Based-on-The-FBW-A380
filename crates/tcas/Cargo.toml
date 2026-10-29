@@ -1,0 +1,14 @@
+[package]
+name = "tcas"
+version = "0.1.0"
+edition = "2021"
+description = "The A380X TCAS computer: traffic tracking, TA/RA logic and outputs, ported from FlyByWire's LegacyTcasComputer"
+publish = false
+
+[lib]
+doctest = false
+
+[dev-dependencies]
+serde_json = "1"
+
+[workspace]

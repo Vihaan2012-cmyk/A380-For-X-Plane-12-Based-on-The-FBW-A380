@@ -1,0 +1,77 @@
+{
+ "name": "squawk",
+ "steps": [
+  {
+   "press": "RMP_1_SQWK"
+  },
+  {
+   "run_ms": 300
+  },
+  {
+   "press": "RMP_1_DIGIT_7"
+  },
+  {
+   "press": "RMP_1_DIGIT_7"
+  },
+  {
+   "press": "RMP_1_DIGIT_0"
+  },
+  {
+   "press": "RMP_1_DIGIT_0"
+  },
+  {
+   "run_ms": 1500
+  },
+  {
+   "press": "RMP_1_DIGIT_8"
+  },
+  {
+   "run_ms": 300
+  },
+  {
+   "press": "RMP_1_DIGIT_1"
+  },
+  {
+   "press": "RMP_1_DIGIT_2"
+  },
+  {
+   "press": "RMP_1_DIGIT_CLR"
+  },
+  {
+   "run_ms": 400
+  },
+  {
+   "press": "RMP_1_DIGIT_3"
+  },
+  {
+   "press": "RMP_1_DIGIT_4"
+  },
+  {
+   "press": "RMP_1_DIGIT_5"
+  },
+  {
+   "press": "RMP_1_DIGIT_6"
+  },
+  {
+   "run_ms": 1500
+  },
+  {
+   "press": "RMP_1_ADK_3"
+  },
+  {
+   "run_ms": 1000
+  },
+  {
+   "press": "RMP_1_ADK_3"
+  },
+  {
+   "run_ms": 6000
+  },
+  {
+   "press": "RMP_1_VHF"
+  },
+  {
+   "run_ms": 300
+  }
+ ]
+}

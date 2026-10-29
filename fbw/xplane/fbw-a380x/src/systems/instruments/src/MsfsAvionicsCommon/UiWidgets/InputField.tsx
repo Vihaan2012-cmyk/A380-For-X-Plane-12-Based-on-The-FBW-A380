@@ -1,0 +1,719 @@
+// @ts-strict-ignore
+//  Copyright (c) 2024-2026 FlyByWire Simulations
+//  SPDX-License-Identifier: GPL-3.0
+
+import {
+  ViewProps,
+  Stream,
+  UI,
+  ScopedView,
+  Derived,
+  Writable,
+  Signal,
+  Readable,
+  Readables,
+  Bond,
+  ViewNode,
+} from 'xplane-js/ui';
+import { DataEntryFormat } from '../../MFD/pages/common/DataEntryFormats';
+import { A380FmsError } from '../../MFD/shared/A380FmsError';
+import { FmsError, FmsErrorType } from '@fmgc/FmsError';
+import { EfisSide } from '@flybywiresim/fbw-sdk';
+import { Bridge, KeyCodes, Text } from 'xplane-js/data';
+
+export enum InteractionMode {
+  Touchscreen,
+  Kccu,
+}
+
+export interface InputFieldProps<T, U = T, S = T extends U ? true : false> extends ViewProps {
+  dataEntryFormat: DataEntryFormat<T, U>;
+  /** Renders empty values with orange rectangles */
+  mandatory?: Readable<boolean> | boolean;
+  /** If inactive, will be rendered as static value */
+  inactive?: Readable<boolean> | boolean;
+  /** Whether value can be set (if disabled, rendered as input field but greyed out)  */
+  disabled?: Readable<boolean> | boolean;
+  /** Whether field can be cleared by user */
+  canBeCleared?: Readable<boolean> | boolean;
+  /** Value will be displayed in smaller font, if not entered by pilot (i.e. computed) */
+  enteredByPilot?: Readable<boolean>;
+  freeText?: boolean;
+  modifyValue?: S;
+  /** If defined, this component does not update the value prop, but rather calls this method. */
+  onModified?: (newValue: U | null) => void | Promise<unknown>;
+  /** Called for every character that is being typed */
+  onInput?: (newValue: string) => void;
+  /**
+   * Function which modifies data within flight plan. Called during validation phase, after data entry format has been checked
+   * @param newValue to be validated
+   * @returns whether validation was successful. If nothing is returned, success is assumed
+   */
+  dataHandlerDuringValidation?: (newValue: U | null, oldValue?: T | null) => Promise<boolean | void>;
+  errorHandler: (error: A380FmsError) => void;
+  handleFocusBlurExternally?: boolean;
+  containerStyle?: string;
+  alignText?: 'flex-start' | 'center' | 'flex-end' | Readable<'flex-start' | 'center' | 'flex-end'>;
+  /** Whether the temporary flight plan is active and should color this field yellow */
+  tmpyActive?: Readable<boolean>;
+  /** Only handles KCCU input for respective side, receives key name only */
+  hEventConsumer: Stream<[EfisSide, string]>;
+  /** Kccu uses the HW keys, and doesn't focus input fields */
+  interactionMode: Readable<InteractionMode>;
+
+  /** Additional class */
+  class?: string;
+
+  /** Used for OIT, where placeholders are [] for mandatory fields */
+  overrideEmptyMandatoryPlaceholder?: string;
+  // inViewEvent?: Consumer<boolean>; // Consider activating when we have a larger collision mesh for the screens
+
+  /* Whether to display the unit in a larger font size */
+  bigUnit?: boolean;
+
+  /** Indicates whether the input field is part of a fixed values dropdown. If so, all keyboard inputs are ignored.*/
+  fixedValuesDropDown?: boolean;
+
+  /** If true, text is rendered as white when input field is inactive, otherwise as green */
+  whiteInactive?: Readable<boolean>;
+}
+
+export type ConditionalInputFieldProps<T, U, S extends boolean> = S extends true
+  ? InputFieldProps<T, U> & {
+      value: Writable<T | null>;
+    }
+  : InputFieldProps<T, U> & {
+      readonlyValue: Readable<T | null>;
+    };
+
+/**
+ * Input field for text or numbers
+ */
+export class InputField<
+  T,
+  U = T,
+  S extends U extends T ? boolean : false = U extends T ? true : false,
+> extends ScopedView<ConditionalInputFieldProps<T, U, S>> {
+  private static readonly MAX_CHARACTERS_FREE_TEXT = 24;
+
+  // Make sure to collect all subscriptions here, otherwise page navigation doesn't work.
+  private readonly subs = [] as Bond[];
+
+  private readonly guid = `InputField-${Text.newGuid()}`;
+
+  public readonly topRef = UI.ref<HTMLDivElement>();
+
+  public readonly containerRef = UI.ref<HTMLDivElement>();
+
+  private readonly spanningDivRef = UI.ref<HTMLDivElement>();
+
+  public readonly textInputRef = UI.ref<HTMLSpanElement>();
+
+  private readonly caretRef = UI.ref<HTMLSpanElement>();
+
+  private readonly readValue = 'value' in this.props ? this.props.value : this.props.readonlyValue;
+
+  private readonly leadingUnit = Signal.of<string>('');
+
+  private readonly trailingUnit = Signal.of<string>('');
+
+  private readonly leadingUnitRef = UI.ref<HTMLSpanElement>();
+
+  private readonly trailingUnitRef = UI.ref<HTMLSpanElement>();
+
+  private readonly modifiedFieldValue = Signal.of<string | null>(null);
+
+  private readonly isFocused = Signal.of(false);
+
+  private readonly isValidating = Signal.of(false);
+
+  private readonly alignTextSub: Readable<'flex-start' | 'center' | 'flex-end'> = Readables.toReadable(
+    this.props.alignText ?? 'center',
+    true,
+  );
+
+  private readonly canOverFlow = this.props.freeText || this.props.dataEntryFormat.maxOverflowDigits !== undefined;
+
+  private isOverFlow = false;
+
+  private readonly mandatory = Readables.toReadable(this.props.mandatory ?? false, true);
+
+  private readonly inactive = Readables.toReadable(this.props.inactive ?? false, true);
+
+  private readonly disabled = Readables.toReadable(this.props.disabled ?? false, true);
+
+  private readonly canBeCleared = Readables.toReadable(this.props.canBeCleared ?? true, true);
+
+  private readonly unitVisibility = Derived.from(
+    ([value, inactive]) => {
+      return value === null && inactive ? 'hidden' : 'inherit';
+    },
+    this.readValue,
+    this.inactive,
+  ).scopedTo(this.scope);
+
+  private readonly valueSelected = Signal.of(false);
+
+  private readonly editing = Signal.of(false);
+
+  private onNewValue() {
+    // Don't update if field is being edited
+    if (this.isFocused.get() || this.isValidating.get()) {
+      return;
+    }
+
+    // Reset modifiedFieldValue
+    if (this.modifiedFieldValue.get() !== null) {
+      this.modifiedFieldValue.set(null);
+    }
+    if (this.readValue.get() !== null) {
+      if (this.canOverFlow) {
+        // If item was overflowing, check whether overflow is still needed
+        this.overflow((this.readValue.get()?.toString().length ?? 0) > this.props.dataEntryFormat.maxDigits);
+      }
+
+      if (this.mandatory.get()) {
+        this.textInputRef.peek()?.classList.remove('mandatory');
+      }
+    } else {
+      if (this.mandatory.get()) {
+        this.textInputRef.peek()?.classList.add('mandatory');
+      }
+    }
+
+    this.updateDisplayElement();
+  }
+
+  private updateDisplayElement() {
+    // If input was not modified, render props' value
+    if (this.modifiedFieldValue.get() == null) {
+      if (this.readValue.get() === null) {
+        this.populatePlaceholders();
+      } else {
+        const [formatted, leadingUnit, trailingUnit] = this.props.dataEntryFormat.format(this.readValue.get());
+        this.textInputRef.target.innerText = formatted ?? '';
+        this.leadingUnit.set(leadingUnit ?? '');
+        this.trailingUnit.set(trailingUnit ?? '');
+      }
+    } else {
+      // Else, render modifiedFieldValue
+      const numDigits = this.canOverFlow
+        ? this.props.freeText
+          ? InputField.MAX_CHARACTERS_FREE_TEXT
+          : this.props.dataEntryFormat.maxDigits + this.props.dataEntryFormat.maxOverflowDigits!
+        : this.props.dataEntryFormat.maxDigits;
+
+      if ((this.modifiedFieldValue.get()?.length ?? 0) < numDigits || !this.isFocused.get()) {
+        this.textInputRef.target.innerText = this.modifiedFieldValue.get() ?? '';
+        this.caretRef.target.innerText = '';
+      } else {
+        this.textInputRef.target.innerText = this.modifiedFieldValue.get()?.slice(0, numDigits - 1) ?? '';
+        this.caretRef.target.innerText = this.modifiedFieldValue.get()?.slice(numDigits - 1, numDigits) ?? '';
+      }
+    }
+  }
+
+  // Called when the input field changes
+  private onInput() {
+    if (this.canOverFlow && this.modifiedFieldValue.get()?.length === this.props.dataEntryFormat.maxDigits) {
+      this.overflow(true);
+    }
+
+    if (this.props.onInput) {
+      this.props.onInput(this.modifiedFieldValue.get() ?? '');
+    }
+  }
+
+  public overflow(overflow: boolean) {
+    if (this.topRef.peek() && this.containerRef.peek()) {
+      if (overflow) {
+        this.topRef.target.classList.add('overflow');
+        this.containerRef.target.classList.add('overflow');
+        this.containerRef.target.style.width = InputField.calculateWidthForDigits(
+          this.props.freeText
+            ? InputField.MAX_CHARACTERS_FREE_TEXT
+            : this.props.dataEntryFormat.maxOverflowDigits! +
+                this.props.dataEntryFormat.maxDigits +
+                (this.props.dataEntryFormat.unit?.length ?? 0) +
+                1, // Always a space for one extra character is displayed
+        );
+        this.isOverFlow = true;
+      } else {
+        this.topRef.target.classList.remove('overflow');
+        this.containerRef.target.classList.remove('overflow');
+        this.containerRef.target.style.width = '';
+        this.isOverFlow = false;
+
+        if (this.props.containerStyle) {
+          this.containerRef.target.setAttribute('style', this.props.containerStyle);
+        }
+      }
+    }
+  }
+
+  private onKeyDown(ev: KeyboardEvent) {
+    if (!this.isFocused.get() || this.props.fixedValuesDropDown) {
+      return;
+    }
+
+    if (ev.keyCode === KeyCodes.KEY_BACK_SPACE) {
+      this.handleBackspace();
+    }
+  }
+
+  private readonly onKeyDownHandler = this.onKeyDown.bind(this);
+
+  private handleBackspace() {
+    if (this.modifiedFieldValue.get() === null) {
+      this.modifiedFieldValue.set('');
+    } else if (this.modifiedFieldValue.get()?.length === 0) {
+      // Do nothing
+    } else {
+      this.modifiedFieldValue.set(this.modifiedFieldValue.get()?.slice(0, -1) ?? '');
+    }
+
+    this.onInput();
+  }
+
+  private onKeyPress = (ev: KeyboardEvent) => {
+    if (!this.isFocused.get() || this.props.fixedValuesDropDown) {
+      return;
+    }
+
+    // Un-select the text
+    this.valueSelected.set(false);
+
+    // ev.key is undefined, so we have to use the deprecated keyCode here
+    const key = String.fromCharCode(ev.keyCode).toUpperCase();
+
+    if (ev.keyCode === KeyCodes.KEY_ENTER) {
+      this.handleEnter();
+    }
+
+    if (key.match(/^[A-Z0-9/.+\- ]$/)) {
+      this.handleKeyInput(key);
+    }
+
+    if (key === ',') {
+      this.handleKeyInput('.');
+    }
+  };
+
+  private readonly onKeyPressHandler = this.onKeyPress.bind(this);
+
+  private handleKeyInput = (key: string) => {
+    if (this.modifiedFieldValue.get() === null) {
+      this.modifiedFieldValue.set('');
+      this.spanningDivRef.target.style.justifyContent = 'flex-start';
+    }
+
+    const modifiedFieldValueLength = this.modifiedFieldValue.get()?.length ?? 0;
+    if (
+      modifiedFieldValueLength < this.props.dataEntryFormat.maxDigits ||
+      (this.canOverFlow &&
+        modifiedFieldValueLength <
+          (this.props.freeText
+            ? InputField.MAX_CHARACTERS_FREE_TEXT
+            : this.props.dataEntryFormat.maxOverflowDigits! + this.props.dataEntryFormat.maxDigits))
+    ) {
+      this.modifiedFieldValue.set(`${this.modifiedFieldValue.get()}${key}`);
+      this.caretRef.target.style.display = 'inline';
+    }
+
+    this.onInput();
+  };
+
+  private handleEnter() {
+    if (this.props.handleFocusBlurExternally) {
+      this.onBlur(true);
+    } else {
+      this.textInputRef.target.blur();
+    }
+  }
+
+  public onFocus() {
+    if (!this.isFocused.get() && !this.isValidating.get() && !this.disabled.get() && !this.inactive.get()) {
+      if (this.props.interactionMode.get() === InteractionMode.Touchscreen) {
+        Bridge.signal('input.focus', this.guid, '', '', this.readValue.get(), false);
+      }
+      this.isFocused.set(true);
+
+      // After 20s, unfocus field, if some other weird focus error happens
+      setTimeout(() => {
+        if (this.isFocused.get()) {
+          Bridge.signal('input.blur', this.guid);
+        }
+      }, 20_000);
+      this.valueSelected.set(true);
+      this.editing.set(true);
+      if (this.mandatory.get()) {
+        this.textInputRef.target.classList.remove('mandatory');
+      }
+      this.modifiedFieldValue.set(null);
+      this.spanningDivRef.target.style.justifyContent = this.alignTextSub.get();
+      this.updateDisplayElement();
+    }
+  }
+
+  private onFocusHandler = this.onFocus.bind(this);
+
+  public async onBlur(validateAndUpdate: boolean = true) {
+    if (!this.disabled.get() && !this.inactive.get() && this.isFocused.get()) {
+      if (this.props.interactionMode.get() === InteractionMode.Touchscreen) {
+        Bridge.signal('input.blur', this.guid);
+      }
+      this.isFocused.set(false);
+      this.valueSelected.set(false);
+      this.caretRef.target.style.display = 'none';
+      this.updateDisplayElement();
+
+      if (validateAndUpdate) {
+        if (this.modifiedFieldValue.get() == null && this.readValue.get() !== null) {
+          // Enter is pressed after no modification
+          const [formatted] = this.props.dataEntryFormat.format(this.readValue.get());
+          await this.validateAndUpdate(formatted ?? '');
+        } else {
+          await this.validateAndUpdate(this.modifiedFieldValue.get() ?? '');
+        }
+
+        if (this.isOverFlow) {
+          this.overflow(false);
+        }
+      }
+
+      // Restore mandatory class for correct coloring of dot (e.g. non-placeholders)
+      if (this.readValue.get() === null && this.mandatory.get()) {
+        this.textInputRef.target.classList.add('mandatory');
+      }
+
+      this.spanningDivRef.target.style.justifyContent = this.alignTextSub.get();
+      this.editing.set(false);
+    }
+  }
+
+  private populatePlaceholders() {
+    const [formatted, unitLeading, unitTrailing] = this.props.dataEntryFormat.format(null);
+    this.leadingUnit.set(unitLeading ?? '');
+    this.trailingUnit.set(unitTrailing ?? '');
+
+    if (this.mandatory.get() && !this.inactive.get() && !this.disabled.get()) {
+      this.textInputRef.target.innerHTML =
+        formatted?.replace(/-/gi, this.props.overrideEmptyMandatoryPlaceholder ?? '\u25AF') ?? '';
+    } else {
+      this.textInputRef.target.innerText = formatted ?? '';
+    }
+  }
+
+  private async validateAndUpdate(input: string) {
+    this.isValidating.set(true);
+    let newValue = null;
+    let updateWasSuccessful = true;
+    const oldValue = this.readValue.get();
+    let valueChanged = false;
+    try {
+      newValue = await this.props.dataEntryFormat.parse(input);
+      valueChanged = newValue !== oldValue;
+      if (valueChanged && newValue === null && !this.canBeCleared.get()) {
+        throw new FmsError(FmsErrorType.NotAllowed);
+      }
+    } catch (msg: unknown) {
+      updateWasSuccessful = false;
+      if (msg instanceof FmsError && this.props.errorHandler) {
+        this.props.errorHandler(msg);
+        newValue = oldValue;
+      }
+    }
+
+    if (updateWasSuccessful && valueChanged) {
+      const artificialWaitingTime = new Promise((resolve) => setTimeout(resolve, 500));
+      if (this.props.dataHandlerDuringValidation) {
+        try {
+          const realWaitingTime = this.props.dataHandlerDuringValidation(newValue, oldValue);
+          const [validation] = await Promise.all([realWaitingTime, artificialWaitingTime]);
+
+          if (validation === false) {
+            updateWasSuccessful = false;
+          }
+        } catch {
+          updateWasSuccessful = false;
+          await artificialWaitingTime;
+        }
+      } else {
+        await artificialWaitingTime;
+      }
+      if (this.props.onModified) {
+        try {
+          await this.props.onModified(newValue);
+        } catch (msg: unknown) {
+          if (msg instanceof FmsError && this.props.errorHandler) {
+            this.props.errorHandler(msg);
+          }
+          updateWasSuccessful = false;
+        }
+      } else if ('value' in this.props && Readables.isWritable(this.props.value)) {
+        // If we have `value` in props, we know U extends T
+
+        this.props.value.set(newValue as T);
+      } else if (!this.props.dataHandlerDuringValidation) {
+        console.error(
+          'InputField: this.props.value not of type Subject, and no onModified handler or dataHandlerDuringValidation was defined',
+        );
+      }
+    }
+
+    this.modifiedFieldValue.set(null);
+    this.isValidating.set(false);
+    return updateWasSuccessful;
+  }
+
+  private onFocusTextInput() {
+    this.textInputRef.target.focus();
+  }
+
+  private onFocusTextInputHandler = this.onFocusTextInput.bind(this);
+
+  afterRender(node: ViewNode): void {
+    super.afterRender(node);
+
+    // Optional props
+    if (this.props.enteredByPilot === undefined) {
+      this.props.enteredByPilot = Signal.of(true);
+    }
+    if (this.props.alignText === undefined) {
+      this.props.alignText = 'flex-end';
+    }
+    if (this.props.handleFocusBlurExternally === undefined) {
+      this.props.handleFocusBlurExternally = false;
+    }
+    if (this.props.tmpyActive === undefined) {
+      this.props.tmpyActive = Signal.of(false);
+    }
+
+    this.spanningDivRef.target.style.minWidth = InputField.calculateWidthForDigits(
+      this.props.dataEntryFormat.maxDigits,
+    );
+
+    // Hide caret
+    this.caretRef.target.style.display = 'none';
+    this.caretRef.target.innerText = '';
+
+    // TODO sub leak!
+    const onNewValue = this.onNewValue.bind(this);
+    this.subs.push(this.readValue.watch(onNewValue, true));
+    if (this.props.dataEntryFormat.unitFamily) {
+      this.subs.push(this.props.dataEntryFormat.unitFamily.watch(onNewValue));
+    }
+    this.subs.push(this.modifiedFieldValue.watch(() => this.updateDisplayElement()));
+    this.subs.push(
+      this.mandatory.watch((val) => {
+        if (val && this.readValue.get() === null) {
+          this.textInputRef.target.classList.add('mandatory');
+        } else {
+          this.textInputRef.target.classList.remove('mandatory');
+        }
+        this.updateDisplayElement();
+      }, true),
+    );
+
+    this.subs.push(
+      this.inactive.watch((val) => {
+        if (val) {
+          this.textInputRef.target.tabIndex = 0;
+        } else {
+          if (!this.disabled.get()) {
+            this.textInputRef.target.tabIndex = -1;
+          }
+        }
+        this.updateDisplayElement();
+      }, true),
+    );
+
+    this.subs.push(
+      this.disabled.watch((val) => {
+        if (!this.inactive.get()) {
+          if (val) {
+            this.textInputRef.target.tabIndex = 0;
+            this.containerRef.target.classList.add('disabled');
+            this.textInputRef.target.classList.add('disabled');
+
+            if (this.mandatory.get() && this.readValue.get() === null) {
+              this.textInputRef.target.classList.remove('mandatory');
+            }
+          } else {
+            this.textInputRef.target.tabIndex = -1;
+            this.containerRef.target.classList.remove('disabled');
+            this.textInputRef.target.classList.remove('disabled');
+
+            if (this.mandatory.get() && this.readValue.get() === null) {
+              this.textInputRef.target.classList.add('mandatory');
+            }
+          }
+        }
+        this.updateDisplayElement();
+      }, true),
+    );
+
+    if (this.props.dataEntryFormat.reFormatTrigger) {
+      this.subs.push(this.props.dataEntryFormat.reFormatTrigger.watch(() => this.updateDisplayElement()));
+    }
+
+    this.textInputRef.target.addEventListener('keypress', this.onKeyPressHandler);
+    this.textInputRef.target.addEventListener('keydown', this.onKeyDownHandler);
+
+    if (!this.props.handleFocusBlurExternally) {
+      this.textInputRef.target.addEventListener('focus', this.onFocusHandler);
+      this.textInputRef.target.addEventListener('blur', this.onBlur.bind(this, true));
+      this.spanningDivRef.target.addEventListener('click', this.onFocusTextInputHandler);
+      this.leadingUnitRef.target.addEventListener('click', this.onFocusTextInputHandler);
+      this.trailingUnitRef.target.addEventListener('click', this.onFocusTextInputHandler);
+    }
+
+    this.props.hEventConsumer.listen((key) => {
+      if (!this.isFocused.get() || this.props.fixedValuesDropDown) {
+        return;
+      }
+
+      // Un-select the text
+      this.valueSelected.set(false);
+
+      if (key[1].match(/^[a-zA-Z0-9]{1}$/)) {
+        this.handleKeyInput(key[1]);
+      }
+
+      if (key[1] === 'ENT') {
+        this.handleEnter();
+      }
+
+      if (key[1] === 'SP') {
+        this.handleKeyInput(' ');
+      }
+
+      if (key[1] === 'SLASH') {
+        this.handleKeyInput('/');
+      }
+
+      if (key[1] === 'DOT') {
+        this.handleKeyInput('.');
+      }
+
+      if (key[1] === 'PLUSMINUS') {
+        const val = this.modifiedFieldValue.get();
+        if (val && val.substring(0, 1) === '+') {
+          this.modifiedFieldValue.set(`-${val.substring(1)}`);
+        } else if (val && val.substring(0, 1) === '-') {
+          this.modifiedFieldValue.set(`+${val.substring(1)}`);
+        } else {
+          this.modifiedFieldValue.set(`-${this.modifiedFieldValue.get() ?? ''}`);
+        }
+      }
+
+      if (key[1] === 'BACKSPACE') {
+        this.handleBackspace();
+      }
+
+      if (key[1] === 'ESC' || key[1] === 'ESC2') {
+        const [formatted] = this.props.dataEntryFormat.format(this.readValue.get());
+        this.modifiedFieldValue.set(formatted);
+        this.handleEnter();
+      }
+
+      if (key[1] === 'UP' || key[1] === 'RIGHT' || key[1] === 'DOWN' || key[1] === 'LEFT') {
+        // Unsupported atm
+      }
+    });
+
+    // preparation for automatic un-focusing if the node isn't in view anymore. Model changes needed FIXME
+    /* if (this.props.inViewEvent) {
+            this.subs.push(this.props.inViewEvent.whenChanged().handle((inView) =>
+            {
+                console.warn('inView: ' + inView);
+                if (!inView) {
+                    this.onBlur();
+                }
+            }));
+        } */
+  }
+
+  private static calculateWidthForDigits(digits: number): string {
+    // Aspect ratio for font: 2:3 WxH
+    return `${Math.round((digits * 27.0) / 1.5)}px`;
+  }
+
+  destroy(): void {
+    // Destroy all subscriptions to remove all references to this instance.
+    this.subs.forEach((x) => x.destroy());
+
+    this.textInputRef.peek()?.removeEventListener('keypress', this.onKeyPressHandler);
+    this.textInputRef.peek()?.removeEventListener('keydown', this.onKeyDownHandler);
+
+    if (!this.props.handleFocusBlurExternally) {
+      this.textInputRef.peek()?.removeEventListener('focus', this.onFocusHandler);
+      this.textInputRef.peek()?.removeEventListener('blur', this.onBlur.bind(this, true));
+      this.spanningDivRef.peek()?.removeEventListener('click', this.onFocusTextInputHandler);
+      this.leadingUnitRef.peek()?.removeEventListener('click', this.onFocusTextInputHandler);
+      this.trailingUnitRef.peek()?.removeEventListener('click', this.onFocusTextInputHandler);
+    }
+
+    this.props.dataEntryFormat?.destroy?.();
+
+    super.destroy();
+  }
+
+  render(): ViewNode {
+    return (
+      <div ref={this.topRef} class={`mfd-input-field-root ${this.props.class ?? ''}`}>
+        <div
+          ref={this.containerRef}
+          class={{ 'mfd-input-field-container': true, inactive: this.inactive }}
+          style={`${this.props.containerStyle ?? ''}`}
+        >
+          <span
+            ref={this.leadingUnitRef}
+            class={`mfd-label-unit ${this.props.bigUnit ? 'bigger' : ''} mfd-unit-leading mfd-input-field-unit`}
+            style={{ visibility: this.unitVisibility }}
+          >
+            {this.leadingUnit}
+          </span>
+          <div
+            ref={this.spanningDivRef}
+            class="mfd-input-field-text-input-container"
+            style={`justify-content: ${this.alignTextSub.get()};`}
+          >
+            <span
+              ref={this.textInputRef}
+              tabIndex={-1}
+              class={{
+                'mfd-input-field-text-input': true,
+                validating: this.isValidating,
+                computedByFms: this.props.enteredByPilot?.derive((v) => !v).scopedTo(this.scope) ?? false,
+                valueSelected: this.valueSelected,
+                tmpy: this.props.tmpyActive
+                  ? Derived.from(
+                      ([tmpy, focused]) => {
+                        return tmpy && !focused; // Typing is always blue
+                      },
+                      this.props.tmpyActive,
+                      this.isFocused,
+                    ).scopedTo(this.scope)
+                  : false,
+                editing: this.editing,
+                inactive: this.inactive,
+                white: this.props.whiteInactive ?? false,
+              }}
+            >
+              .
+            </span>
+            <span ref={this.caretRef} class="mfd-input-field-caret" />
+          </div>
+          <span
+            ref={this.trailingUnitRef}
+            class={`mfd-label-unit ${this.props.bigUnit ? 'bigger' : ''} mfd-unit-trailing mfd-input-field-unit`}
+            style={{ visibility: this.unitVisibility }}
+          >
+            {this.trailingUnit}
+          </span>
+        </div>
+      </div>
+    );
+  }
+}

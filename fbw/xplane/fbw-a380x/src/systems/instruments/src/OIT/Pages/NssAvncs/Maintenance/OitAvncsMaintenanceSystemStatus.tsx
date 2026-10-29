@@ -1,0 +1,72 @@
+/** @jsx UI.node */
+/** @jsxFrag UI.Group */
+//  Copyright (c) 2026 FlyByWire Simulations
+//  SPDX-License-Identifier: GPL-3.0
+
+import { Parts as UI, PartNode as ViewNode } from 'xplane-js/ui';
+import { DestroyableComponent } from '@flybywiresim/msfs-avionics-common';
+import { AbstractOitAvncsPageProps } from '../../../OIT';
+import { MaintenanceData } from '../../../System/MaintenanceData';
+
+interface OitAvncsMaintenanceSystemStatusProps extends AbstractOitAvncsPageProps {}
+
+export class OitAvncsMaintenanceSystemStatus extends DestroyableComponent<OitAvncsMaintenanceSystemStatusProps> {
+  private readonly data = MaintenanceData.instance();
+
+  private readonly bodyRef = UI.ref<HTMLDivElement>();
+
+  private redraw(active: ReadonlyMap<number, number>): void {
+    const body = this.bodyRef.peek();
+    if (!body) {
+      return;
+    }
+    while (body.firstChild) {
+      body.removeChild(body.firstChild);
+    }
+    const chapters = [...active.entries()].sort(([a], [b]) => a - b);
+    if (chapters.length === 0) {
+      const empty = document.createElement('div');
+      empty.className = 'oit-maint-empty';
+      empty.textContent = 'ALL SYSTEMS NORMAL';
+      body.appendChild(empty);
+      return;
+    }
+    for (const [ata, count] of chapters) {
+      const row = document.createElement('div');
+      row.className = 'oit-maint-row';
+      const name = document.createElement('div');
+      name.className = 'oit-ccom-inbox-msg-table-line f1 oit-amber-text';
+      name.textContent = this.data.chapterName(ata).toUpperCase();
+      const n = document.createElement('div');
+      n.className = 'oit-ccom-inbox-msg-table-line w15 tc oit-amber-text';
+      n.textContent = `${count}`;
+      row.append(name, n);
+      row.addEventListener('click', () => this.props.uiService.navigateTo(`nss-avncs/maintenance/system-status/${ata}`));
+      body.appendChild(row);
+    }
+  }
+
+  public afterMount(node: ViewNode): void {
+    super.afterMount(node);
+    this.subscriptions.push(
+      this.data.ataActive.watch((active) => this.redraw(active), true),
+      this.data.catalogueLoaded.watch(() => this.redraw(this.data.ataActive.get())),
+    );
+  }
+
+  render(): ViewNode {
+    return (
+      <>
+        <div class="oit-ccom-headline">System Status</div>
+        <div class="oit-ccom-inbox-msg-table">
+          <div class="fr ass">
+            <div class="oit-ccom-inbox-msg-table-header oit-table-ib f1">ATA Chapter</div>
+            <div class="oit-ccom-inbox-msg-table-header oit-table-ib w15">Active Faults</div>
+          </div>
+          <div class="oit-maint-table-body" ref={this.bodyRef} />
+        </div>
+        <div style="flex-grow: 1" />
+      </>
+    );
+  }
+}

@@ -1,0 +1,58 @@
+{
+  "name": "flight2-egll-kjfk-arr-hold",
+  "lat": 51.4706,
+  "lon": -0.4619,
+  "steps": [
+    {
+      "fms": "await fps.newCityPair('EGLL', 'KJFK', 'KBOS');"
+    },
+    {
+      "run_ms": 3000
+    },
+    {
+      "fms": "const p = [...fps.active.availableApproaches].sort((x, y) => x.ident.localeCompare(y.ident)); if (p.length) await fps.setApproach(p[0].databaseId);"
+    },
+    {
+      "run_ms": 2000
+    },
+    {
+      "fms": "const a = [...fps.active.availableArrivals].sort((x, y) => x.ident.localeCompare(y.ident)); if (a.length) await fps.setArrival(a[0].databaseId);"
+    },
+    {
+      "run_ms": 2000
+    },
+    {
+      "fms": "if (fps.hasTemporary) await fps.temporaryInsert();"
+    },
+    {
+      "run_ms": 5000
+    },
+    {
+      "fms": "const p = fps.active; let i = p.allLegs.findIndex((e, k) => k > 0 && !e.isDiscontinuity && e.definition && e.definition.waypoint && e.type === 'IF'); if (i < 0) i = 1; p.setActiveLegIndex(i + 1);"
+    },
+    {
+      "run_ms": 3000
+    },
+    {
+      "fms": "const p = fps.active; const i = p.activeLegIndex; await fps.addOrEditManualHold(i, { inboundMagneticCourse: 270, turnDirection: 'R', time: 1, type: 2 }, undefined, { inboundMagneticCourse: 270, turnDirection: 'R', time: 1, type: 0 }); if (fps.hasTemporary) await fps.temporaryInsert();"
+    },
+    {
+      "run_ms": 3000
+    },
+    {
+      "snapshot": "before-flight"
+    },
+    {
+      "fly": {
+        "start": "plan",
+        "kt": 220,
+        "flight_phase": 5,
+        "seconds": 420,
+        "sample_ms": 1000
+      }
+    },
+    {
+      "snapshot": "after-flight"
+    }
+  ]
+}

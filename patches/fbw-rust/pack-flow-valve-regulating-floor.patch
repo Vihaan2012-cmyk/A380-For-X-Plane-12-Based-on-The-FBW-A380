@@ -1,0 +1,23 @@
+diff --git a/fbw-a380x/src/wasm/systems/a380_systems/src/air_conditioning/local_controllers/full_digital_agu_controller.rs b/fbw-a380x/src/wasm/systems/a380_systems/src/air_conditioning/local_controllers/full_digital_agu_controller.rs
+index 0879e99..2f62239 100644
+--- a/fbw-a380x/src/wasm/systems/a380_systems/src/air_conditioning/local_controllers/full_digital_agu_controller.rs
++++ b/fbw-a380x/src/wasm/systems/a380_systems/src/air_conditioning/local_controllers/full_digital_agu_controller.rs
+@@ -338,6 +338,9 @@ pub struct PackFlowController<const ENGINES: usize> {
+ }
+ 
+ impl<const ENGINES: usize> PackFlowController<ENGINES> {
++    /// A flow control valve commanded open regulates off its seat.
++    const MIN_REGULATING_OPEN: f64 = 0.001;
++
+     fn new() -> Self {
+         Self {
+             should_open_fcv: false,
+@@ -407,7 +410,7 @@ impl<const ENGINES: usize> PackFlow for PackFlowController<ENGINES> {
+ impl<const ENGINES: usize> ControllerSignal<PackFlowValveSignal> for PackFlowController<ENGINES> {
+     fn signal(&self) -> Option<PackFlowValveSignal> {
+         let target_open = Ratio::new::<ratio>(if self.should_open_fcv {
+-            self.pid.output()
++            self.pid.output().max(Self::MIN_REGULATING_OPEN)
+         } else {
+             0.
+         });

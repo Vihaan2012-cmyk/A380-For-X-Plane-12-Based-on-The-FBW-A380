@@ -1,0 +1,11 @@
+{"charts":[
+ {"id":"XMPL101","name":"AIRPORT CHART","index_number":"10-9","category":"APT","type_code":"GD","icao_airport_identifier":"XMPL",
+  "image_day_url":"https://api.navigraph.com/v2/charts/XMPL/xmpl101_d.png","image_night_url":"https://api.navigraph.com/v2/charts/XMPL/xmpl101_n.png",
+  "is_georeferenced":true,"width":1000,"height":1400,
+  "bounding_boxes":{"planview":{"pixels":{"x1":100,"y1":1300,"x2":900,"y2":100},"latlng":{"lng1":10.0,"lat1":50.0,"lng2":10.1,"lat2":50.1}},
+   "insets":[{"pixels":{"x1":700,"y1":300,"x2":900,"y2":100}}]},
+  "procedures":[],"runways":["09","27"]},
+ {"id":"XMPL201","name":"RNAV RWY 09","index_number":"21-1","category":"APP","image_day_url":"https://api.navigraph.com/v2/charts/XMPL/xmpl201_d.png",
+  "image_night_url":"https://api.navigraph.com/v2/charts/XMPL/xmpl201_n.png","is_georeferenced":false,"bounding_boxes":null,"procedures":["R09"],"runways":["09"]},
+ {"id":"XMPL301","name":"ALPHA 1A","category":"DEP","image_day_url":"https://api.navigraph.com/v2/charts/XMPL/xmpl301_d.png","is_georeferenced":false}
+]}

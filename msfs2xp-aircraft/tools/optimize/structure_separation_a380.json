@@ -1,0 +1,8 @@
+{
+ "stab_centre_x": 1.2,
+ "fin": {"half_x": 1.6, "cut_z": [19.5, 27.5, 40.0], "cut_y": [8.0, 6.0, 6.0]},
+ "wingtip_x": 31.5,
+ "wing_max_y": 4.0,
+ "wing_max_z": 22.0,
+ "wing_cuts": [6.5, 11.52, 19.5]
+}

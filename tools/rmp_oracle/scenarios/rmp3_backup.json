@@ -1,0 +1,68 @@
+{
+ "name": "rmp3_backup",
+ "steps": [
+  {
+   "press": "RMP_3_DIGIT_1"
+  },
+  {
+   "press": "RMP_3_DIGIT_2"
+  },
+  {
+   "press": "RMP_3_DIGIT_5"
+  },
+  {
+   "press": "RMP_3_DIGIT_3"
+  },
+  {
+   "press": "RMP_3_DIGIT_5"
+  },
+  {
+   "press": "RMP_3_DIGIT_0"
+  },
+  {
+   "press": "RMP_3_LSK_1"
+  },
+  {
+   "run_ms": 300
+  },
+  {
+   "press": "RMP_3_ADK_1"
+  },
+  {
+   "run_ms": 500
+  },
+  {
+   "set": {
+    "L:A32NX_ELEC_DC_ESS_BUS_IS_POWERED": 0,
+    "L:A32NX_ELEC_DC_1_BUS_IS_POWERED": 1
+   }
+  },
+  {
+   "run_ms": 1500
+  },
+  {
+   "set": {
+    "L:A32NX_ELEC_DC_ESS_BUS_IS_POWERED": 1
+   }
+  },
+  {
+   "run_ms": 1500
+  },
+  {
+   "set": {
+    "L:A32NX_ELEC_DC_1_BUS_IS_POWERED": 0
+   }
+  },
+  {
+   "run_ms": 1500
+  },
+  {
+   "set": {
+    "L:A32NX_ELEC_DC_1_BUS_IS_POWERED": 1
+   }
+  },
+  {
+   "run_ms": 1000
+  }
+ ]
+}

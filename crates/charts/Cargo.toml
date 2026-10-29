@@ -1,0 +1,16 @@
+[package]
+name = "charts"
+version = "0.1.0"
+edition = "2021"
+description = "EFB chart sources: Navigraph, ChartFox, official AIP PDFs and local AMDB airport maps"
+license = "GPL-3.0-or-later"
+publish = false
+
+[lib]
+doctest = false
+
+[dependencies]
+serde_json = "1"
+getrandom = "0.3"
+
+[workspace]

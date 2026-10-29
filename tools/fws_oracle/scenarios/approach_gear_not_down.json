@@ -1,0 +1,38 @@
+{
+ "name": "approach_gear_not_down",
+ "steps": [
+  {
+   "state": "emu-12-approach"
+  },
+  {
+   "run_ms": 15000
+  },
+  {
+   "snapshot": "approach-gear-down"
+  },
+  {
+   "set": {
+    "GEAR HANDLE POSITION": 0,
+    "L:A32NX_GEAR_HANDLE_POSITION": 0,
+    "L:A32NX_LGCIU_1_LEFT_GEAR_DOWNLOCKED": 0,
+    "L:A32NX_LGCIU_1_NOSE_GEAR_DOWNLOCKED": 0,
+    "L:A32NX_LGCIU_1_RIGHT_GEAR_DOWNLOCKED": 0,
+    "L:A32NX_LGCIU_2_LEFT_GEAR_DOWNLOCKED": 0,
+    "L:A32NX_LGCIU_2_NOSE_GEAR_DOWNLOCKED": 0,
+    "L:A32NX_LGCIU_2_RIGHT_GEAR_DOWNLOCKED": 0,
+    "L:A32NX_LGCIU_1_LEFT_GEAR_UNLOCKED": 0,
+    "L:A32NX_LGCIU_1_NOSE_GEAR_UNLOCKED": 0,
+    "L:A32NX_LGCIU_1_RIGHT_GEAR_UNLOCKED": 0,
+    "L:A32NX_LGCIU_2_LEFT_GEAR_UNLOCKED": 0,
+    "L:A32NX_LGCIU_2_NOSE_GEAR_UNLOCKED": 0,
+    "L:A32NX_LGCIU_2_RIGHT_GEAR_UNLOCKED": 0
+   }
+  },
+  {
+   "run_ms": 10000
+  },
+  {
+   "snapshot": "approach-gear-up"
+  }
+ ]
+}

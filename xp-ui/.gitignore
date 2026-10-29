@@ -1,0 +1,9 @@
+probe/results-*.json
+probe/diff.txt
+lib/build.log
+lib/*.txt
+node_modules/
+probe/build-xpkit-goldens.ps1
+api-inventory.json
+api-map.json
+callsites.json

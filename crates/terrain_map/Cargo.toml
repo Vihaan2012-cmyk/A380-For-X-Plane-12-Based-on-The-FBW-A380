@@ -1,0 +1,10 @@
+[package]
+name = "terrain_map"
+version = "0.1.0"
+edition = "2021"
+description = "Probe-fed terrain grid, ND colour bands and VD profile for the A380 for X-Plane 12, without any simulator dependency"
+license = "GPL-3.0-or-later"
+
+[dependencies]
+
+[workspace]

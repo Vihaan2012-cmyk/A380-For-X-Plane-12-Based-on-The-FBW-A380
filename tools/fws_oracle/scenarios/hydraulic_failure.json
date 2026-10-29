@@ -1,0 +1,23 @@
+{
+ "name": "hydraulic_failure",
+ "steps": [
+  {
+   "state": "emu-10-cruise"
+  },
+  {
+   "run_ms": 15000
+  },
+  {
+   "snapshot": "cruise"
+  },
+  {
+   "state": "emu-16-green-hyd"
+  },
+  {
+   "run_ms": 10000
+  },
+  {
+   "snapshot": "green-hyd"
+  }
+ ]
+}

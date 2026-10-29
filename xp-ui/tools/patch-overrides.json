@@ -1,0 +1,21 @@
+{
+ "finds": {
+  "mfd.js|the master FMS keeps a backup": "keep",
+  "mfd.js|the climb thrust table lookup never goes below": "keep",
+  "sdv2.html|SDv2 is its own layer page": "<link rel=\"stylesheet\" href=\"sdv2.css\">"
+ },
+ "pfd.js": { ".map": "derive" },
+ "ewd.js": { ".items": "items" },
+ "SystemsHost.js": {
+  ".map": "map",
+  "defs.map": "map",
+  "def.items.map": "map",
+  "def.items": "items",
+  "def.trigger": "trigger",
+  "__pr.items": "items",
+  ".items": "items",
+  ".handle": "listen",
+  "global.SimVar": "xplaneJsData",
+  "global.xplaneJsData.GetSimVarValue": "Vars.read"
+ }
+}

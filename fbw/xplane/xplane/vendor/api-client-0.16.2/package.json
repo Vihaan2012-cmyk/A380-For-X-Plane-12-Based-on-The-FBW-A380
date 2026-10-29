@@ -1,0 +1,11 @@
+{
+  "name": "@flybywiresim/api-client",
+  "version": "0.16.2",
+  "private": true,
+  "author": "FlyByWire Simulations",
+  "license": "MIT",
+  "sideEffects": false,
+  "dependencies": {
+    "axios": "^0.21.4"
+  }
+}

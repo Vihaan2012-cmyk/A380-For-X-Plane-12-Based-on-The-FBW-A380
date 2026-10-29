@@ -1,0 +1,41 @@
+{
+ "name": "vhf3_data_emer",
+ "steps": [
+  {
+   "press": "RMP_1_LSK_3"
+  },
+  {
+   "press": "RMP_1_UP"
+  },
+  {
+   "press": "RMP_1_UP"
+  },
+  {
+   "run_ms": 300
+  },
+  {
+   "press": "RMP_1_DOWN"
+  },
+  {
+   "run_ms": 300
+  },
+  {
+   "press": "RMP_1_UP"
+  },
+  {
+   "press": "RMP_1_UP"
+  },
+  {
+   "press": "RMP_1_ADK_3"
+  },
+  {
+   "run_ms": 500
+  },
+  {
+   "press": "RMP_1_ADK_3"
+  },
+  {
+   "run_ms": 500
+  }
+ ]
+}

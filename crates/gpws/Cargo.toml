@@ -1,0 +1,13 @@
+[package]
+name = "gpws"
+version = "0.1.0"
+edition = "2021"
+description = "FlyByWire's A380X ground proximity warning logic translated to Rust, without any simulator dependency"
+license = "GPL-3.0-or-later"
+
+[dependencies]
+
+[dev-dependencies]
+serde_json = "1"
+
+[workspace]

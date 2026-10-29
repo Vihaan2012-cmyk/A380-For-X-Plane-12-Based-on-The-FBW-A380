@@ -1,0 +1,120 @@
+{
+ "updatedAt": "2026-10-22T11:12:30.903775380Z",
+ "servers": [],
+ "voiceServers": [],
+ "connections": {
+  "total": 1,
+  "supervisor": 0,
+  "atc": 3,
+  "observer": 1,
+  "pilot": 0,
+  "worldTour": 0,
+  "followMe": 0
+ },
+ "clients": {
+  "pilots": [],
+  "atcs": [
+   {
+    "id": 1,
+    "userId": 1,
+    "callsign": "LFML_TWR",
+    "serverId": "WS1-EUW2",
+    "softwareTypeId": "aurora/win",
+    "softwareVersion": "1.4.2",
+    "rating": 4,
+    "createdAt": "2026-10-22T07:00:03.000Z",
+    "time": 15147,
+    "atcSession": {
+     "frequency": 133.1,
+     "position": "TWR"
+    },
+    "lastTrack": {
+     "altitude": 0,
+     "groundSpeed": 0,
+     "heading": 0,
+     "latitude": 43.43667,
+     "longitude": 5.215,
+     "onGround": false,
+     "state": "En Route",
+     "timestamp": "2026-10-22T11:12:25.000Z"
+    },
+    "atis": {
+     "lines": [
+      "ts-1.eu-west-2.ivao.aero/LFML_TWR",
+      "Test information K recorded"
+     ],
+     "revision": "K",
+     "timestamp": "2026-10-22T11:11:43.000Z"
+    }
+   },
+   {
+    "id": 2,
+    "userId": 2,
+    "callsign": "LSGG_APP",
+    "serverId": "WS1-EUW2",
+    "softwareTypeId": "aurora/win",
+    "softwareVersion": "1.4.2",
+    "rating": 5,
+    "createdAt": "2026-10-22T07:00:03.000Z",
+    "time": 15147,
+    "atcSession": {
+     "frequency": 136.255,
+     "position": "APP"
+    },
+    "lastTrack": {
+     "altitude": 0,
+     "groundSpeed": 0,
+     "heading": 0,
+     "latitude": 46.23833,
+     "longitude": 6.10944,
+     "onGround": false,
+     "state": "En Route",
+     "timestamp": "2026-10-22T11:12:25.000Z"
+    },
+    "atis": {
+     "lines": [
+      "ts-1.eu-west-2.ivao.aero/LSGG_APP",
+      "Test information I recorded"
+     ],
+     "revision": "I",
+     "timestamp": "2026-10-22T11:11:43.000Z"
+    }
+   },
+   {
+    "id": 3,
+    "userId": 3,
+    "callsign": "LFML_OBS",
+    "serverId": "WS1-EUW2",
+    "softwareTypeId": "aurora/win",
+    "softwareVersion": "1.4.2",
+    "rating": 2,
+    "createdAt": "2026-10-22T07:00:03.000Z",
+    "time": 15147,
+    "atcSession": {
+     "frequency": 199.998,
+     "position": "OBS"
+    },
+    "lastTrack": {
+     "altitude": 0,
+     "groundSpeed": 0,
+     "heading": 0,
+     "latitude": 43.4,
+     "longitude": 5.2,
+     "onGround": false,
+     "state": "En Route",
+     "timestamp": "2026-10-22T11:12:25.000Z"
+    },
+    "atis": {
+     "lines": [
+      "ts-1.eu-west-2.ivao.aero/LFML_OBS",
+      "Test information A recorded"
+     ],
+     "revision": "A",
+     "timestamp": "2026-10-22T11:11:43.000Z"
+    }
+   }
+  ],
+  "followMe": [],
+  "observers": []
+ }
+}

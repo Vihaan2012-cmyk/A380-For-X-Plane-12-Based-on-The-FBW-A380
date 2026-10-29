@@ -1,0 +1,10 @@
+[package]
+name = "cpcs_extra"
+version = "0.1.0"
+edition = "2021"
+description = "Plugin-side cabin pressure control extras for the A380: FMS feed, landing elevation fallback, excess cabin altitude to emergency descent link, manual panel knobs, relief valves and cabin pressure sound"
+license = "GPL-3.0-or-later"
+
+[dependencies]
+
+[workspace]

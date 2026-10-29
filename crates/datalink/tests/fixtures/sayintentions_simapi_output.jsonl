@@ -1,0 +1,5 @@
+{"setvar": "COM_STBY_RADIO_SET_HZ", "value": "118500000"}
+{"setvar": "COM_RADIO_SET_HZ", "value": "121900000"}
+{"setvar": "COM2_STBY_RADIO_SET_HZ", "value": "128075000"}
+{"setvar": "TRANSPONDER_CODE_SET", "value": "4521"}
+not json

@@ -1,0 +1,15 @@
+{
+  "extends": "./tsconfig.int.base.json",
+  "compilerOptions": {
+    "jsxFactory": "FSComponent.buildComponent",
+    "jsxFragmentFactory": "FSComponent.Fragment"
+  },
+  "include": [
+    "E:/fbw-int/fbw-aircraft-ts/fbw-a380x/src/systems/instruments/src/Clock/**/*", "E:/fbw-int/fbw-aircraft-ts/fbw-a380x/src/systems/instruments/src/EWD/**/*",
+    "E:/fbw-int/fbw-aircraft-ts/fbw-a380x/src/systems/instruments/src/FCU/**/*", "E:/fbw-int/fbw-aircraft-ts/fbw-a380x/src/systems/instruments/src/HUD/**/*", "E:/fbw-int/fbw-aircraft-ts/fbw-a380x/src/systems/instruments/src/MFD/**/*",
+    "E:/fbw-int/fbw-aircraft-ts/fbw-a380x/src/systems/instruments/src/MsfsAvionicsCommon/**/*", "E:/fbw-int/fbw-aircraft-ts/fbw-a380x/src/systems/instruments/src/ND/**/*", "E:/fbw-int/fbw-aircraft-ts/fbw-a380x/src/systems/instruments/src/OIT/**/*",
+    "E:/fbw-int/fbw-aircraft-ts/fbw-a380x/src/systems/instruments/src/PFD/**/*", "E:/fbw-int/fbw-aircraft-ts/fbw-a380x/src/systems/instruments/src/RMP/**/*", "E:/fbw-int/fbw-aircraft-ts/fbw-a380x/src/systems/instruments/src/SDv2/**/*",
+    "E:/fbw-int/fbw-aircraft-ts/fbw-a380x/src/systems/instruments/src/popup/**/*", "E:/fbw-int/fbw-aircraft-ts/fbw-a380x/src/systems/systems-host/**/*", "E:/fbw-int/fbw-aircraft-ts/fbw-a380x/src/systems/extras-host/**/*"
+  ],
+  "exclude": ["**/*_check.ts", "**/node_modules/**", "**/*.js", "**/*.mjs", "**/*.test.ts", "**/*.spec.ts"]
+}

@@ -1,0 +1,23 @@
+{
+ "name": "engine_fire",
+ "steps": [
+  {
+   "state": "emu-10-cruise"
+  },
+  {
+   "run_ms": 15000
+  },
+  {
+   "snapshot": "cruise"
+  },
+  {
+   "state": "emu-15-eng2-fire"
+  },
+  {
+   "run_ms": 10000
+  },
+  {
+   "snapshot": "eng2-fire"
+  }
+ ]
+}

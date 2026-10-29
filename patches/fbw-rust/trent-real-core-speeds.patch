@@ -1,0 +1,120 @@
+diff --git a/fbw-a380x/src/wasm/systems/a380_systems/src/hydraulic/mod.rs b/fbw-a380x/src/wasm/systems/a380_systems/src/hydraulic/mod.rs
+index ea77f6c..cef82db 100644
+--- a/fbw-a380x/src/wasm/systems/a380_systems/src/hydraulic/mod.rs
++++ b/fbw-a380x/src/wasm/systems/a380_systems/src/hydraulic/mod.rs
+@@ -8119,7 +8119,9 @@ mod tests {
+             fn start_eng1(mut self, n2: Ratio) -> Self {
+                 self.write_by_name("GENERAL ENG STARTER ACTIVE:1", true);
+                 self.write_by_name("ENGINE_N2:1", n2);
++                self.write_by_name("ENGINE_N2_DISPLAY:1", n2);
+                 self.write_by_name("ENGINE_N3:1", n2);
++                self.write_by_name("ENGINE_N3_DISPLAY:1", n2);
+ 
+                 self
+             }
+@@ -8127,7 +8129,9 @@ mod tests {
+             fn start_eng2(mut self, n2: Ratio) -> Self {
+                 self.write_by_name("GENERAL ENG STARTER ACTIVE:2", true);
+                 self.write_by_name("ENGINE_N2:2", n2);
++                self.write_by_name("ENGINE_N2_DISPLAY:2", n2);
+                 self.write_by_name("ENGINE_N3:2", n2);
++                self.write_by_name("ENGINE_N3_DISPLAY:2", n2);
+ 
+                 self
+             }
+@@ -8135,7 +8139,9 @@ mod tests {
+             fn start_eng3(mut self, n2: Ratio) -> Self {
+                 self.write_by_name("GENERAL ENG STARTER ACTIVE:3", true);
+                 self.write_by_name("ENGINE_N2:3", n2);
++                self.write_by_name("ENGINE_N2_DISPLAY:3", n2);
+                 self.write_by_name("ENGINE_N3:3", n2);
++                self.write_by_name("ENGINE_N3_DISPLAY:3", n2);
+ 
+                 self
+             }
+@@ -8143,7 +8149,9 @@ mod tests {
+             fn start_eng4(mut self, n2: Ratio) -> Self {
+                 self.write_by_name("GENERAL ENG STARTER ACTIVE:4", true);
+                 self.write_by_name("ENGINE_N2:4", n2);
++                self.write_by_name("ENGINE_N2_DISPLAY:4", n2);
+                 self.write_by_name("ENGINE_N3:4", n2);
++                self.write_by_name("ENGINE_N3_DISPLAY:4", n2);
+ 
+                 self
+             }
+@@ -8151,7 +8159,9 @@ mod tests {
+             fn stop_eng1(mut self) -> Self {
+                 self.write_by_name("GENERAL ENG STARTER ACTIVE:1", false);
+                 self.write_by_name("ENGINE_N2:1", 0.);
++                self.write_by_name("ENGINE_N2_DISPLAY:1", 0.);
+                 self.write_by_name("ENGINE_N3:1", 0.);
++                self.write_by_name("ENGINE_N3_DISPLAY:1", 0.);
+ 
+                 self
+             }
+@@ -8159,7 +8169,9 @@ mod tests {
+             fn _stopping_eng1(mut self) -> Self {
+                 self.write_by_name("GENERAL ENG STARTER ACTIVE:1", false);
+                 self.write_by_name("ENGINE_N2:1", 25.);
++                self.write_by_name("ENGINE_N2_DISPLAY:1", 25.);
+                 self.write_by_name("ENGINE_N3:1", 25.);
++                self.write_by_name("ENGINE_N3_DISPLAY:1", 25.);
+ 
+                 self
+             }
+@@ -8167,7 +8179,9 @@ mod tests {
+             fn stop_eng2(mut self) -> Self {
+                 self.write_by_name("GENERAL ENG STARTER ACTIVE:2", false);
+                 self.write_by_name("ENGINE_N2:2", 0.);
++                self.write_by_name("ENGINE_N2_DISPLAY:2", 0.);
+                 self.write_by_name("ENGINE_N3:2", 0.);
++                self.write_by_name("ENGINE_N3_DISPLAY:2", 0.);
+ 
+                 self
+             }
+@@ -8175,7 +8189,9 @@ mod tests {
+             fn _stopping_eng2(mut self) -> Self {
+                 self.write_by_name("GENERAL ENG STARTER ACTIVE:2", false);
+                 self.write_by_name("ENGINE_N2:2", 25.);
++                self.write_by_name("ENGINE_N2_DISPLAY:2", 25.);
+                 self.write_by_name("ENGINE_N3:2", 25.);
++                self.write_by_name("ENGINE_N3_DISPLAY:2", 25.);
+ 
+                 self
+             }
+@@ -8183,7 +8199,9 @@ mod tests {
+             fn stop_eng3(mut self) -> Self {
+                 self.write_by_name("GENERAL ENG STARTER ACTIVE:3", false);
+                 self.write_by_name("ENGINE_N2:3", 0.);
++                self.write_by_name("ENGINE_N2_DISPLAY:3", 0.);
+                 self.write_by_name("ENGINE_N3:3", 0.);
++                self.write_by_name("ENGINE_N3_DISPLAY:3", 0.);
+ 
+                 self
+             }
+@@ -8191,7 +8209,9 @@ mod tests {
+             fn stop_eng4(mut self) -> Self {
+                 self.write_by_name("GENERAL ENG STARTER ACTIVE:4", false);
+                 self.write_by_name("ENGINE_N2:4", 0.);
++                self.write_by_name("ENGINE_N2_DISPLAY:4", 0.);
+                 self.write_by_name("ENGINE_N3:4", 0.);
++                self.write_by_name("ENGINE_N3_DISPLAY:4", 0.);
+ 
+                 self
+             }
+diff --git a/fbw-common/src/wasm/systems/systems/src/engine/trent_engine.rs b/fbw-common/src/wasm/systems/systems/src/engine/trent_engine.rs
+index fcda375..a9e8e01 100644
+--- a/fbw-common/src/wasm/systems/systems/src/engine/trent_engine.rs
++++ b/fbw-common/src/wasm/systems/systems/src/engine/trent_engine.rs
+@@ -51,9 +51,9 @@ impl TrentEngine {
+             corrected_n1: Ratio::new::<percent>(0.),
+             corrected_n2_id: context.get_identifier(format!("TURB ENG CORRECTED N2:{}", number)),
+             corrected_n2: Ratio::new::<percent>(0.),
+-            uncorrected_n2_id: context.get_identifier(format!("ENGINE_N2:{}", number)),
++            uncorrected_n2_id: context.get_identifier(format!("ENGINE_N2_DISPLAY:{}", number)),
+             uncorrected_n2: Ratio::new::<percent>(0.),
+-            uncorrected_n3_id: context.get_identifier(format!("ENGINE_N3:{}", number)),
++            uncorrected_n3_id: context.get_identifier(format!("ENGINE_N3_DISPLAY:{}", number)),
+             uncorrected_n3: Ratio::new::<percent>(0.),
+ 
+             n3_speed: AngularVelocity::default(),

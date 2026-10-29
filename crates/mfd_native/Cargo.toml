@@ -1,0 +1,12 @@
+[package]
+name = "mfd_native"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[dependencies]
+mfd_tree = { path = "../mfd_tree" }
+css_cascade = { path = "../css_cascade" }
+serde_json = "1"
+
+[workspace]

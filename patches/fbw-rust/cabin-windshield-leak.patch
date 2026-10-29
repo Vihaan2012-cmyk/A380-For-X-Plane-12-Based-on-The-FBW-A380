@@ -1,0 +1,84 @@
+diff --git a/fbw-common/src/wasm/systems/systems/src/air_conditioning/cabin_air.rs b/fbw-common/src/wasm/systems/systems/src/air_conditioning/cabin_air.rs
+index b3ae8f5..0a63904 100644
+--- a/fbw-common/src/wasm/systems/systems/src/air_conditioning/cabin_air.rs
++++ b/fbw-common/src/wasm/systems/systems/src/air_conditioning/cabin_air.rs
+@@ -3,8 +3,8 @@ use crate::{
+     failures::{Failure, FailureType},
+     shared::{AverageExt, CabinSimulation},
+     simulation::{
+-        InitContext, SimulationElement, SimulationElementVisitor, SimulatorWriter, UpdateContext,
+-        VariableIdentifier, Write,
++        InitContext, Read, SimulationElement, SimulationElementVisitor, SimulatorReader,
++        SimulatorWriter, UpdateContext, VariableIdentifier, Write,
+     },
+ };
+ use num_traits::Pow;
+@@ -41,6 +41,8 @@ pub struct CabinAirSimulation<C, const ZONES: usize> {
+     cabin_zones: [CabinZone<C>; ZONES],
+ 
+     hull_breach: Failure,
++    windshield_leak_area_id: VariableIdentifier,
++    windshield_leak_area_m2: f64,
+     constants: PhantomData<C>,
+ }
+ 
+@@ -71,6 +73,8 @@ impl<C: PressurizationConstants, const ZONES: usize> CabinAirSimulation<C, ZONES
+                 }),
+ 
+             hull_breach: Failure::new(FailureType::RapidDecompression),
++            windshield_leak_area_id: context.get_identifier("ENV_WINDSHIELD_LEAK_AREA_M2".to_owned()),
++            windshield_leak_area_m2: 0.,
+             constants: PhantomData,
+         }
+     }
+@@ -326,7 +330,8 @@ impl<C: PressurizationConstants, const ZONES: usize> CabinAirSimulation<C, ZONES
+         let leakage_area = C::CABIN_LEAKAGE_AREA
+             + C::SAFETY_VALVE_SIZE * safety_valve_open_amount.get::<ratio>()
+             + number_of_open_doors as f64 * C::DOOR_OPENING_AREA
+-            + C::HULL_BREACH_AREA * self.hull_breach.is_active() as u32 as f64; // sq m
++            + C::HULL_BREACH_AREA * self.hull_breach.is_active() as u32 as f64
++            + self.windshield_leak_area_m2.max(0.); // sq m
+ 
+         let pressure_ratio =
+             (self.filtered_exterior_pressure / self.internal_air.pressure()).get::<ratio>();
+@@ -393,6 +398,10 @@ impl<C: PressurizationConstants, const ZONES: usize> SimulationElement
+ 
+         visitor.visit(self);
+     }
++
++    fn read(&mut self, reader: &mut SimulatorReader) {
++        self.windshield_leak_area_m2 = reader.read(&self.windshield_leak_area_id);
++    }
+ }
+ 
+ #[derive(Clone)]
+@@ -1033,6 +1042,29 @@ mod cabin_air_tests {
+         );
+     }
+ 
++    #[test]
++    fn a_windshield_leak_lowers_cabin_pressure() {
++        let cruise = || {
++            test_bed_with()
++                .ambient_temperature_of(ThermodynamicTemperature::new::<degree_celsius>(-50.))
++                .ambient_pressure_of(InternationalStandardAtmosphere::pressure_at_altitude(
++                    Length::new::<foot>(39000.),
++                ))
++                .flying(true)
++                .with_flow()
++                .iterate(1)
++        };
++        let intact = cruise().iterate(20);
++        let mut leaking = cruise();
++        leaking.write_by_name("ENV_WINDSHIELD_LEAK_AREA_M2", 0.01);
++        let leaking = leaking.iterate(20);
++
++        assert_lt!(
++            leaking.cabin_pressure().get::<hectopascal>(),
++            intact.cabin_pressure().get::<hectopascal>() - 1.
++        );
++    }
++
+     #[test]
+     fn cabin_air_warms_up_with_pax_and_no_ac() {
+         let test_bed = test_bed_with()

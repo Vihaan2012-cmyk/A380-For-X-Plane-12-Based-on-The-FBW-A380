@@ -1,0 +1,5 @@
+{
+  "extends": "../../tsconfig.area.json",
+  "compilerOptions": { "ignoreDeprecations": "6.0" },
+  "files": ["index.ts", "bus_check.ts", "../../../spec/check/self-globals.d.ts"]
+}

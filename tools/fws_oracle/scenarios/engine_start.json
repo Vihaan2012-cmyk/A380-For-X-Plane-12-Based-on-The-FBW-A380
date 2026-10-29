@@ -1,0 +1,32 @@
+{
+ "name": "engine_start",
+ "steps": [
+  {
+   "state": "emu-04-apu"
+  },
+  {
+   "run_ms": 15000
+  },
+  {
+   "snapshot": "apu"
+  },
+  {
+   "state": "emu-05-engines-idle"
+  },
+  {
+   "run_ms": 10000
+  },
+  {
+   "snapshot": "engines-idle"
+  },
+  {
+   "state": "emu-06-taxi"
+  },
+  {
+   "run_ms": 5000
+  },
+  {
+   "snapshot": "taxi"
+  }
+ ]
+}

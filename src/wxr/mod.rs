@@ -1,0 +1,577 @@
+//! Weather radar on the A380X's ND, from X-Plane 12's real weather.
+//!
+//! FlyByWire never built a WXR picture: `EfisTawsBridge.ts:456-457` sets
+//! `wxr1Failed`/`wxr2Failed = Subject.create(true)` and never changes them,
+//! so both radars are permanently marked failed, and no FBW instrument
+//! binds a weather layer to draw even if they were not (`docs/map-data.md`
+//! section 3, confirmed again for this module: `rg -i wxr` and
+//! `weatherRadar|precipitation|radarReturn` over fbw-a380x and fbw-common
+//! turn up only the MFD SURV page's disconnected placeholder controls and
+//! the failure/selection plumbing below). This module supplies a real one:
+//!
+//! - `geometry.rs`: where a polar cell (azimuth, range, tilt) points on the
+//!   earth, and where a geo-referenced return sits on the ND.
+//! - `levels.rs`: X-Plane's precipitation and turbulence ratios classified
+//!   into the four Airbus WXR levels.
+//! - `sampler.rs`: `XPLMGetWeatherAtLocation` behind a trait, so the sweep
+//!   is testable without X-Plane.
+//! - `image.rs`: the classified, geo-referenced returns rasterised to RGBA.
+//!
+//! This file ties them together: a budgeted sweep run from the plugin's own
+//! tick (never a worker thread -- `XPLMGetWeatherAtLocation` is main-thread
+//! only, XPLMWeather.h), a point store so a return survives being sampled
+//! once and stays correctly placed as the aircraft moves and turns, and the
+//! `NATIVE_IMAGE` (docs/display-stream.md) the ND's screen stream draws.
+//!
+//! See `docs/wxr.md` for what is real, what this module had to invent, and
+//! why.
+
+mod geometry;
+mod image;
+mod levels;
+mod physics;
+pub(crate) mod sampler;
+
+use std::collections::HashMap;
+use std::sync::{Arc, Mutex, OnceLock};
+
+use levels::Level;
+use sampler::{Sample, WeatherSampler, XplmSampler};
+
+use crate::mapdata::terrain::geo::distance_wgs84;
+use crate::mapdata::terrain::terronnd::NativeImage;
+use crate::mapdata::terrain::types::Side;
+use crate::xp::Xplm;
+use crate::Vars;
+
+/// The antenna's azimuth cells, `±HALF_SECTOR_DEG` about the nose -- real
+/// airborne weather radar never scans aft, whatever the ND's own mode; 60°
+/// each side is a middle-of-the-road certified sector (X-Plane's own
+/// `sim/cockpit2/EFIS/EFIS_weather_sector_width`, DataRefs.txt:4185,
+/// documents the field with a 45° example; this plugin's own choice, not a
+/// FlyByWire figure, since FlyByWire has none -- `docs/wxr.md`).
+const HALF_SECTOR_DEG: f64 = 60.;
+const AZIMUTH_BINS: usize = 61;
+const RANGE_BINS: usize = 24;
+const TOTAL_CELLS: usize = AZIMUTH_BINS * RANGE_BINS;
+
+/// `XPLMGetWeatherAtLocation`'s header: "not intended to be used per-frame".
+/// This many calls a tick, per active side, spread the full sweep
+/// (`TOTAL_CELLS`) over several seconds instead.
+const SAMPLES_PER_TICK: usize = 6;
+
+const TILT_DEG: f64 = 0.;
+
+/// Beyond this, a stored return is dropped rather than carried forever
+/// (`docs/wxr.md`): well past the ND's longest WXR-relevant range (320 nm,
+/// `a380EfisRangeSettings`, `NavigationDisplay.ts:19`) with margin for the
+/// beam's own range.
+const MAX_STORE_RADIUS_NM: f64 = 400.;
+
+/// How often a side's image is rebuilt from the point store, once new
+/// samples have arrived: a full 768x1024 raster costs microseconds, but
+/// nothing needs it faster than a real WXR's own sweep-to-sweep update.
+const REBUILD_INTERVAL_S: f64 = 0.25;
+
+/// `a380EfisRangeSettings` (`NavigationDisplay.ts:19`): index -> nm. -1 is
+/// the OANS zoom, not a radar range.
+const ND_RANGES_NM: [f64; 8] = [-1., 10., 20., 40., 80., 160., 320., 640.];
+
+/// `EfisNdMode` (`NavigationDisplay.ts:33`): PLAN is north-up and excluded,
+/// same as terrain (`EfisTawsBridge.ts` `terrOnNd`).
+const ND_MODE_PLAN: f64 = 4.;
+const ND_MODE_ARC: f64 = 3.;
+
+/// The gauge's canvas, matching terronnd's (`terronnd.rs` `GAUGE_WIDTH`/
+/// `GAUGE_HEIGHT`, panel.cfg `0,0,768,1024`): the same physical ND map area,
+/// under the same opcode 60 rectangle.
+const CANVAS_WIDTH: u32 = 768;
+const CANVAS_HEIGHT: u32 = 1024;
+/// Ownship's pixel and the range ring's radius, approximated from the ND's
+/// real layout (`mapdata/terrain/navigation_display.rs`'s own, private,
+/// `ARC_MODE_CENTER_OFFSET_Y_A380X`/`ROSE_MODE_CENTER_OFFSET_Y_A380X` and
+/// pixel heights -- duplicated here rather than made `pub` there, since
+/// that file is not this module's to change; `docs/wxr.md` flags the exact
+/// pixel alignment with FlyByWire's compass rose as unverified).
+const ARC_CENTER_PX: (f64, f64) = (384., 640.);
+const ARC_MAX_RADIUS_PX: f64 = 480.;
+const ROSE_CENTER_PX: (f64, f64) = (384., 512.);
+const ROSE_MAX_RADIUS_PX: f64 = 420.;
+
+/// A classified, geo-referenced return, kept independent of any one side's
+/// range or mode (one antenna, two repeater displays).
+struct Point {
+    lat: f64,
+    lon: f64,
+    level: Level,
+}
+
+/// Buckets a point store's key to roughly a quarter of a nautical mile, fine
+/// enough for the smallest ND range (10 nm over `RANGE_BINS` cells is ~0.4
+/// nm apart) without a fresh bucket for every float rounding difference.
+const BUCKET_SCALE: f64 = 240.;
+
+fn bucket(lat: f64, lon: f64) -> (i32, i32) {
+    ((lat * BUCKET_SCALE).round() as i32, (lon * BUCKET_SCALE).round() as i32)
+}
+
+#[derive(Default)]
+struct SideState {
+    points: HashMap<(i32, i32), Point>,
+    cursor: usize,
+    /// Whether the ND is currently showing this image (the selector
+    /// L:vars this tick): `native_image` returns `None` when this is
+    /// false, so a deselected or failed radar draws nothing rather than a
+    /// stale picture (docs/display-stream.md's own convention: no image
+    /// yet is `None`, not black).
+    active: bool,
+    dirty: bool,
+    last_rebuild_s: f64,
+    image: Option<Arc<NativeImage>>,
+    generation: u64,
+    radials: Vec<physics::Radial>,
+    map: bool,
+}
+
+#[derive(Default)]
+struct State {
+    sides: [SideState; 2],
+    status: String,
+}
+
+fn status_line(vars: &Vars, controls: &Controls, failed: bool, active: [bool; 2]) -> String {
+    let n = |name: &str| read_named(vars, name).map_or_else(|| "-".to_owned(), |v| format!("{v}"));
+    let side = |s: char, i: usize| {
+        format!(
+            "{s}: active {} overlay {} mode {} range {} map {} elevn/tilt {}",
+            active[i] as u8,
+            n(&format!("A380X_EFIS_{s}_ACTIVE_OVERLAY")),
+            n(&format!("A32NX_EFIS_{s}_ND_MODE")),
+            n(&format!("A32NX_EFIS_{s}_ND_RANGE")),
+            controls.sides[i].map as u8,
+            controls.sides[i].mode,
+        )
+    };
+    format!(
+        "wxr: failed {} (sys {} wxr1 {} wxr2 {} off {} ac ess {} ac4 {} aesu reset {}/{}) | {} | {}",
+        failed as u8,
+        n("A32NX_WXR_TAWS_SYS_SELECTED"),
+        n("A32NX_WXR_1_FAILED"),
+        n("A32NX_WXR_2_FAILED"),
+        controls.off as u8,
+        n("A32NX_ELEC_AC_ESS_BUS_IS_POWERED"),
+        n("A32NX_ELEC_AC_4_BUS_IS_POWERED"),
+        n("A32NX_RESET_PANEL_AESU1"),
+        n("A32NX_RESET_PANEL_AESU2"),
+        side('L', 0),
+        side('R', 1),
+    )
+}
+
+fn state() -> &'static Mutex<State> {
+    static STATE: OnceLock<Mutex<State>> = OnceLock::new();
+    STATE.get_or_init(Default::default)
+}
+
+/// The aircraft's position and true heading, X-Plane's own datarefs (not
+/// FlyByWire's systems, so a plain `xplm.find` each tick rather than
+/// caching a `DataRef` -- four lookups a tick is not worth a struct field
+/// and the `Send`/`Sync` a static one would need; `mapdata/plugin.rs`'s
+/// `MapData` caches its own because it is a `Plugin` field, not a static).
+pub(crate) struct Aircraft {
+    pub(crate) lat: f64,
+    pub(crate) lon: f64,
+    pub(crate) alt_m: f64,
+    pub(crate) heading_true_deg: f64,
+}
+
+fn read_aircraft(xplm: &Xplm) -> Option<Aircraft> {
+    let lat = xplm.find("sim/flightmodel/position/latitude")?;
+    let lon = xplm.find("sim/flightmodel/position/longitude")?;
+    let elevation = xplm.find("sim/flightmodel/position/elevation")?;
+    let heading = xplm.find("sim/flightmodel/position/true_psi")?;
+    Some(Aircraft {
+        lat: xplm.get_d(lat),
+        lon: xplm.get_d(lon),
+        alt_m: xplm.get_d(elevation),
+        heading_true_deg: xplm.get_f(heading) as f64,
+    })
+}
+
+struct SideControls {
+    mode: i32,
+    elevn_m: f64,
+    tilt_deg: f64,
+    gain_pct: Option<f32>,
+    map: bool,
+}
+
+struct Controls {
+    off: bool,
+    turb_off: bool,
+    gcs_on: bool,
+    sides: [SideControls; 2],
+}
+
+const FEET_TO_METRES: f64 = 0.3048;
+
+fn read_controls(vars: &Vars, xplm: &Xplm) -> Controls {
+    let gcs_on = xplm.find("fbw/cockpit/SWITCH_RADAR_GCS").is_some_and(|d| xplm.get_f(d) > 0.5);
+    let flag = |name: &str| read_named(vars, name).is_some_and(|v| v != 0.);
+    let side = |s: char| {
+        let get = |name: &str| read_named(vars, &format!("A380X_WXR_{s}_{name}"));
+        SideControls {
+            mode: get("ELEVN_TILT").map_or(0, |v| v.round() as i32),
+            elevn_m: get("ELEVN_FT").unwrap_or(0.) * FEET_TO_METRES,
+            tilt_deg: get("TILT_DEG").unwrap_or(TILT_DEG).clamp(-15., 15.),
+            gain_pct: get("GAIN_MAN").is_some_and(|v| v != 0.).then(|| get("GAIN_PCT").unwrap_or(50.) as f32),
+            map: get("MODE_MAP").is_some_and(|v| v != 0.),
+        }
+    };
+    Controls { off: flag("A380X_WXR_OFF"), turb_off: flag("A380X_WXR_TURB_OFF"), gcs_on, sides: [side('L'), side('R')] }
+}
+
+fn beam_sample_point(aircraft: &Aircraft, c: &SideControls, azimuth: f64, range_nm: f64) -> (f64, f64, f64) {
+    let tilt = if c.mode == 2 { c.tilt_deg } else { TILT_DEG };
+    let (lat, lon, alt_m) = geometry::beam_point(aircraft.lat, aircraft.lon, aircraft.alt_m, aircraft.heading_true_deg, azimuth, range_nm, tilt);
+    (lat, lon, if c.mode == 1 { c.elevn_m } else { alt_m })
+}
+
+/// One of FlyByWire's LVars, read the same way the JS engine's `L:` writes
+/// land (`js_bridge.rs` `VarsHost::id`: stripped of `L:`, added under
+/// [`crate::NAMED`]). `None` until something has written it at least once.
+fn read_named(vars: &Vars, name: &str) -> Option<f64> {
+    let id = vars.ids.get(name)?;
+    Some(vars.slots[id.identifier_type()][id.identifier_index()].value)
+}
+
+/// What one side's ND needs to show WXR this tick, or `None` if it should
+/// not (PLAN mode, TERR or nothing selected, no range, or the radar is
+/// failed).
+struct SideConfig {
+    range_nm: f64,
+    arc_mode: bool,
+}
+
+fn side_config(vars: &Vars, side: char, wxr_failed: bool) -> Option<SideConfig> {
+    if wxr_failed {
+        return None;
+    }
+    let overlay = read_named(vars, &format!("A380X_EFIS_{side}_ACTIVE_OVERLAY"))?;
+    if overlay != 1. {
+        return None; // 0 none, 2 TERR (FcuBusPublisher.ts:16-17).
+    }
+    let mode = read_named(vars, &format!("A32NX_EFIS_{side}_ND_MODE"))?;
+    if mode == ND_MODE_PLAN {
+        return None;
+    }
+    let range_index = read_named(vars, &format!("A32NX_EFIS_{side}_ND_RANGE"))? as usize;
+    let range_nm = *ND_RANGES_NM.get(range_index)?;
+    if range_nm <= 0. {
+        return None;
+    }
+    Some(SideConfig { range_nm, arc_mode: mode == ND_MODE_ARC })
+}
+
+/// The single, shared WXR failure flag (`EfisTawsBridge.ts` `terrFailed`'s
+/// own pattern, `L:A32NX_WXR_TAWS_SYS_SELECTED` choosing between
+/// `wxr1Failed`/`wxr2Failed` for both NDs alike, not one flag per side).
+/// After `source_patches`' fix, these follow real AESU bus power instead of
+/// the stock, permanently-failed `true`.
+fn wxr_failed(vars: &Vars) -> bool {
+    let selected = read_named(vars, "A32NX_WXR_TAWS_SYS_SELECTED").unwrap_or(0.);
+    let flag = if selected == 1. {
+        "A32NX_WXR_1_FAILED"
+    } else if selected == 2. {
+        "A32NX_WXR_2_FAILED"
+    } else {
+        return true;
+    };
+    read_named(vars, flag).unwrap_or(1.) != 0.
+}
+
+fn cell_azimuth(i: usize) -> f64 {
+    -HALF_SECTOR_DEG + (i as f64) * (2. * HALF_SECTOR_DEG / (AZIMUTH_BINS - 1) as f64)
+}
+
+fn cell_range_nm(j: usize, max_range_nm: f64) -> f64 {
+    ((j + 1) as f64 / RANGE_BINS as f64) * max_range_nm
+}
+
+fn upsert(points: &mut HashMap<(i32, i32), Point>, lat: f64, lon: f64, level: Level) {
+    let key = bucket(lat, lon);
+    if level.is_none() {
+        points.remove(&key);
+    } else {
+        points.insert(key, Point { lat, lon, level });
+    }
+}
+
+/// Each tick: budgeted sampling for every side currently showing WXR, then
+/// (throttled) rasterising the sides whose picture changed. Main thread
+/// only, called from the plugin's own tick after the scripts (`lib.rs`
+/// "[slot tick-after-systems: wxr]"), so this tick's selector L:vars, just
+/// written by the scripts, are the ones read here.
+pub fn tick(vars: &Vars, xplm: &Xplm, time_s: f64) {
+    let Some(aircraft) = read_aircraft(xplm) else { return };
+    tick_with(vars, xplm, time_s, aircraft, &mut XplmSampler);
+}
+
+pub(crate) fn tick_with(vars: &Vars, xplm: &Xplm, time_s: f64, aircraft: Aircraft, sampler: &mut dyn WeatherSampler) {
+    let controls = read_controls(vars, xplm);
+    let failed = wxr_failed(vars) || controls.off;
+    let mut state = state().lock().unwrap_or_else(|e| e.into_inner());
+    let configs = [side_config(vars, 'L', failed), side_config(vars, 'R', failed)];
+    for (i, config) in configs.iter().enumerate() {
+        let now_active = config.is_some();
+        if now_active && !state.sides[i].active {
+            // Just switched on: rebuild promptly even with no new samples,
+            // so the picture is not blank for a whole rebuild interval.
+            state.sides[i].dirty = true;
+        }
+        state.sides[i].active = now_active;
+        let Some(config) = config else { continue };
+        if state.sides[i].map != controls.sides[i].map {
+            state.sides[i].map = controls.sides[i].map;
+            state.sides[i].points.clear();
+            state.sides[i].dirty = true;
+        }
+        if state.sides[i].radials.len() != AZIMUTH_BINS {
+            state.sides[i].radials = vec![physics::Radial::default(); AZIMUTH_BINS];
+        }
+        let bin_nm = config.range_nm / RANGE_BINS as f64;
+        for _ in 0..SAMPLES_PER_TICK {
+            let idx = state.sides[i].cursor;
+            state.sides[i].cursor = (idx + 1) % TOTAL_CELLS;
+            let (az_i, rg_i) = (idx / RANGE_BINS, idx % RANGE_BINS);
+            let azimuth = cell_azimuth(az_i);
+            let range_nm = cell_range_nm(rg_i, config.range_nm);
+            let c = &controls.sides[i];
+            let (lat, lon, alt_m) = beam_sample_point(&aircraft, c, azimuth, range_nm);
+            if rg_i == 0 {
+                state.sides[i].radials[az_i] = physics::Radial::default();
+            }
+            let sample = if c.map { Some(Sample::default()) } else { sampler.sample(lat, lon, alt_m) };
+            if let Some(sample) = sample {
+                let (ground_m, wet_ground) = crate::xp::probe_terrain_at(lat, lon).unwrap_or((-1000., true));
+                let cell = physics::Cell {
+                    precip_ratio: sample.precip_rate_alt,
+                    turbulence: sample.turbulence_alt,
+                    temp_c: sample.temp_c,
+                    storm_top_m: sample.storm_top_m,
+                    ground_m,
+                    wet_ground,
+                    beam_centre_m: alt_m,
+                    range_nm,
+                };
+                let settings = physics::Settings { gain_db: physics::gain_db(c.gain_pct), turbulence: !controls.turb_off, ground_clutter_suppression: controls.gcs_on, map_mode: c.map };
+                let level = physics::classify(&cell, &mut state.sides[i].radials[az_i], bin_nm, &settings);
+                upsert(&mut state.sides[i].points, lat, lon, level);
+                state.sides[i].dirty = true;
+            }
+        }
+    }
+    for side in state.sides.iter_mut() {
+        side.points.retain(|_, p| distance_wgs84(aircraft.lat, aircraft.lon, p.lat, p.lon) <= MAX_STORE_RADIUS_NM);
+    }
+    let status = status_line(vars, &controls, failed, [configs[0].is_some(), configs[1].is_some()]);
+    if status != state.status {
+        let returns = state.sides[0].points.len().max(state.sides[1].points.len());
+        crate::log(&format!("{status} | returns {returns}"));
+        state.status = status;
+    }
+    for (i, config) in configs.into_iter().enumerate() {
+        let Some(config) = config else { continue };
+        let side = &state.sides[i];
+        let due = time_s - side.last_rebuild_s >= REBUILD_INTERVAL_S;
+        if side.dirty && due {
+            rebuild(&mut state, i, &aircraft, &config, time_s);
+        }
+    }
+}
+
+fn rebuild(state: &mut State, side: usize, aircraft: &Aircraft, config: &SideConfig, time_s: f64) {
+    let (center_px, max_radius_px) = if config.arc_mode { (ARC_CENTER_PX, ARC_MAX_RADIUS_PX) } else { (ROSE_CENTER_PX, ROSE_MAX_RADIUS_PX) };
+    let view = image::View {
+        own_lat: aircraft.lat,
+        own_lon: aircraft.lon,
+        heading_true_deg: aircraft.heading_true_deg,
+        range_nm: config.range_nm,
+        half_sector_deg: HALF_SECTOR_DEG,
+        width: CANVAS_WIDTH,
+        height: CANVAS_HEIGHT,
+        center_px,
+        max_radius_px,
+        cell_half_px: (max_radius_px / RANGE_BINS as f64).max(3.),
+    };
+    let returns: Vec<image::Return> = state.sides[side].points.values().map(|p| image::Return { lat: p.lat, lon: p.lon, level: p.level }).collect();
+    let rgba = image::rasterize(&returns, &view);
+    let s = &mut state.sides[side];
+    s.generation += 1;
+    s.image = Some(Arc::new(NativeImage { width: CANVAS_WIDTH, height: CANVAS_HEIGHT, generation: s.generation, rgba: rgba.into() }));
+    s.dirty = false;
+    s.last_rebuild_s = time_s;
+}
+
+/// `WXR_L`/`WXR_R`'s image for a screen's `60 NATIVE_IMAGE` op
+/// (docs/display-stream.md): `None` whenever this ND is not currently
+/// showing WXR (deselected, PLAN mode, no range, or failed), so nothing is
+/// drawn and whatever else the screen composed (terrain, or nd.html's own
+/// background) shows instead.
+pub fn native_image(id: &str) -> Option<Arc<NativeImage>> {
+    let side = match id {
+        "WXR_L" => 0,
+        "WXR_R" => 1,
+        _ => return None,
+    };
+    let state = state().lock().unwrap_or_else(|e| e.into_inner());
+    let s = &state.sides[side];
+    if !s.active {
+        return None;
+    }
+    s.image.clone()
+}
+
+/// This side's WXR picture for a consumer that composites screen pixels
+/// directly, the same tuple shape and rule as
+/// `crate::mapdata::plugin::terrain_layer` (see that function's doc for the
+/// full compositing contract -- this is its mutually-exclusive twin in the
+/// same screen slot). `(width, height, generation, rgba)`, straight RGBA,
+/// row 0 at the top, already the ND's exact 768x1024 canvas
+/// (`CANVAS_WIDTH`/`CANVAS_HEIGHT`, matching `terrain_layer`'s size so the
+/// compositor needs no side-specific scaling). Unlike the terrain layer this
+/// one has no opaque background of its own -- mostly-transparent returns
+/// over nothing -- so it must still be drawn as the bottom layer, under the
+/// Chromium ND pixels, exactly where `native_image("WXR_L"/"WXR_R")` sits
+/// today in the `60 NATIVE_IMAGE` stream (docs/display-stream.md). `None`
+/// whenever this ND is not currently showing WXR (deselected, PLAN mode, no
+/// range, or the radar failed) or the side is unrecognised: draw nothing,
+/// same as the terrain layer being `None`, and let terrain's own layer (or
+/// neither) fill that slot instead.
+pub fn layer(side: Side) -> Option<(u32, u32, u64, Arc<[u8]>)> {
+    let image = native_image(&format!("WXR_{}", side.letter()))?;
+    Some((image.width, image.height, image.generation, image.rgba.clone()))
+}
+
+/// The one `SourcePatch` this module needs: FlyByWire's `wxr1Failed`/
+/// `wxr2Failed` are hardcoded `Subject.create(true)` and never updated
+/// (`EfisTawsBridge.ts:456-457,486-488`) -- with a real radar behind them,
+/// that hides a working one, so the fix earns the patch (`docs/wxr.md`
+/// explains the choice). The replacement reuses the exact bus-power and
+/// reset-panel signals this same file already computes for `terr1Failed`/
+/// `terr2Failed` (`onUpdate`, `EfisTawsBridge.ts:562-573`) rather than
+/// inventing a new failure condition: no `A380Failure::Wxr*` exists to
+/// gate on, so only power and the reset panel do, same as terrain's normal
+/// (non-extreme-latitude) case.
+pub fn source_patches() -> Vec<crate::source_patch::SourcePatch> {
+    const PATH: &str = "/Pages/VCockpit/Instruments/A380X/SystemsHost/SystemsHost.js";
+    vec![crate::source_patch::SourcePatch {
+        path: PATH.to_string(),
+        find: "      this.terr1Failed.set(\n        this.failuresConsumer.isActive(A380Failure.Terr1) || this.aesu1ResetPulled.get() || !this.acEssPowered.get() || extremeLatitude\n      );\n      this.terr2Failed.set(\n        this.failuresConsumer.isActive(A380Failure.Terr2) || this.aesu2ResetPulled.get() || !this.ac4Powered.get() || extremeLatitude\n      );"
+            .to_string(),
+        replace: "      this.terr1Failed.set(\n        this.failuresConsumer.isActive(A380Failure.Terr1) || this.aesu1ResetPulled.get() || !this.acEssPowered.get() || extremeLatitude\n      );\n      this.terr2Failed.set(\n        this.failuresConsumer.isActive(A380Failure.Terr2) || this.aesu2ResetPulled.get() || !this.ac4Powered.get() || extremeLatitude\n      );\n      this.wxr1Failed.set(this.aesu1ResetPulled.get() || !this.acEssPowered.get());\n      this.wxr2Failed.set(this.aesu2ResetPulled.get() || !this.ac4Powered.get());"
+            .to_string(),
+        reason: "wxr1Failed/wxr2Failed are hardcoded Subject.create(true) and never set again \
+                 (EfisTawsBridge.ts:456-457), so a working radar (src/wxr) would always show as \
+                 failed; this ties them to the same AESU bus power and reset-panel signals \
+                 terr1Failed/terr2Failed already use, since no WXR-specific failure exists to gate on"
+            .to_string(),
+    }]
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn azimuth_cells_span_the_sector_and_centre_on_the_nose() {
+        assert_eq!(cell_azimuth(0), -HALF_SECTOR_DEG);
+        assert_eq!(cell_azimuth(AZIMUTH_BINS - 1), HALF_SECTOR_DEG);
+        assert_eq!(cell_azimuth((AZIMUTH_BINS - 1) / 2), 0.);
+    }
+
+    #[test]
+    fn range_cells_reach_exactly_the_selected_range() {
+        assert!((cell_range_nm(RANGE_BINS - 1, 40.) - 40.).abs() < 1e-9);
+        assert!(cell_range_nm(0, 40.) > 0.);
+        assert!(cell_range_nm(0, 40.) < cell_range_nm(1, 40.));
+    }
+
+    #[test]
+    fn the_wxr_patch_matches_the_installed_systems_host_once() {
+        let Some(root) = std::env::var_os("FBW_HTML_UI") else { return };
+        for p in source_patches() {
+            let text = std::fs::read_to_string(std::path::Path::new(&root).join(p.path.trim_start_matches('/'))).unwrap();
+            assert_eq!(crate::source_patch::count(&text, &p.find), 1, "{}", p.path);
+        }
+    }
+
+    #[test]
+    fn elevn_samples_at_the_selected_altitude_and_tilt_raises_the_beam() {
+        let aircraft = Aircraft { lat: 47.0, lon: 11.0, alt_m: 3000., heading_true_deg: 90. };
+        let side = |mode, tilt_deg| SideControls { mode, elevn_m: 6000., tilt_deg, gain_pct: None, map: false };
+        assert_eq!(beam_sample_point(&aircraft, &side(1, 0.), 0., 40.).2, 6000.);
+        let level = beam_sample_point(&aircraft, &side(0, 10.), 0., 40.).2;
+        let tilted = beam_sample_point(&aircraft, &side(2, 10.), 0., 40.).2;
+        assert!(tilted > level + 10_000.);
+    }
+
+    #[test]
+    fn range_index_zero_is_the_oans_zoom_not_a_radar_range() {
+        // a380EfisRangeSettings[0] (NavigationDisplay.ts:19); side_config
+        // rejects it via its `range_nm <= 0.` check.
+        assert_eq!(ND_RANGES_NM[0], -1.);
+    }
+
+    #[test]
+    fn upsert_removes_a_cell_that_classifies_back_to_none() {
+        let mut points = HashMap::new();
+        upsert(&mut points, 10., 20., Level::Red);
+        assert_eq!(points.len(), 1);
+        upsert(&mut points, 10., 20., Level::None);
+        assert!(points.is_empty());
+    }
+
+    #[test]
+    fn bucketing_merges_points_a_few_hundredths_of_a_degree_apart() {
+        assert_eq!(bucket(10.001, 20.001), bucket(10.002, 20.002));
+        assert_ne!(bucket(10.0, 20.0), bucket(10.1, 20.1));
+    }
+
+    /// `layer`'s size and generation contract (same tuple shape and rule as
+    /// `mapdata::plugin::terrain_layer`, its twin for the XPHFBW
+    /// compositor): `None` until this side is active and rebuilt, then the
+    /// ND's exact 768x1024 canvas, and `generation` strictly higher after a
+    /// rebuild that actually changed the picture.
+    #[test]
+    fn layer_is_none_until_active_and_rebuilt_then_reports_full_size_and_a_rising_generation() {
+        let side = 1; // Side::Right: keep clear of any other test touching the shared state.
+        assert!(layer(Side::Right).is_none());
+
+        let aircraft = Aircraft { lat: 47.0, lon: 11.0, alt_m: 3000., heading_true_deg: 90. };
+        let config = SideConfig { range_nm: 40., arc_mode: true };
+        {
+            let mut state = state().lock().unwrap_or_else(|e| e.into_inner());
+            state.sides[side].active = true;
+            upsert(&mut state.sides[side].points, 47.01, 11.01, Level::Red);
+            rebuild(&mut state, side, &aircraft, &config, 1.0);
+        }
+        let (w, h, gen1, rgba) = layer(Side::Right).expect("rebuilt while active");
+        assert_eq!((w, h), (CANVAS_WIDTH, CANVAS_HEIGHT));
+        assert_eq!(rgba.len(), (w * h * 4) as usize);
+        assert!(gen1 > 0);
+
+        {
+            let mut state = state().lock().unwrap_or_else(|e| e.into_inner());
+            upsert(&mut state.sides[side].points, 47.02, 11.02, Level::Red);
+            rebuild(&mut state, side, &aircraft, &config, 2.0);
+        }
+        let (_, _, gen2, _) = layer(Side::Right).expect("rebuilt again");
+        assert!(gen2 > gen1);
+
+        // Deselecting hides the picture again, same as `native_image`'s own
+        // "not currently showing WXR" rule (this function's doc comment).
+        state().lock().unwrap_or_else(|e| e.into_inner()).sides[side].active = false;
+        assert!(layer(Side::Right).is_none());
+    }
+}

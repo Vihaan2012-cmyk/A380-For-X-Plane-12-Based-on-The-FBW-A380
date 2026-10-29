@@ -1,0 +1,16 @@
+[package]
+name = "efb_map"
+version = "0.1.0"
+edition = "2021"
+description = "EFB moving map: projection, tiling, gestures, layer visibility, label declutter, traffic aging and vector scene building"
+publish = false
+
+[lib]
+doctest = false
+
+[dependencies]
+mfd_tree = { path = "../mfd_tree" }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+[workspace]

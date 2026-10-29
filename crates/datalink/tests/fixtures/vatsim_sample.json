@@ -1,0 +1,148 @@
+{
+ "general": {
+  "version": 3,
+  "update_timestamp": "2026-10-22T11:12:24Z"
+ },
+ "controllers": [
+  {
+   "cid": 1000001,
+   "name": "Test Controller One",
+   "callsign": "EDDF_TWR",
+   "frequency": "118.700",
+   "facility": 4,
+   "rating": 5,
+   "server": "GERMANY",
+   "visual_range": 50,
+   "text_atis": [
+    "FRANKFURT TOWER"
+   ],
+   "last_updated": "2026-10-22T11:12:11Z",
+   "logon_time": "2026-10-22T08:00:00Z"
+  },
+  {
+   "cid": 1000002,
+   "name": "Test Controller Two",
+   "callsign": "JFK_GND",
+   "frequency": "121.900",
+   "facility": 3,
+   "rating": 4,
+   "server": "USA-EAST",
+   "visual_range": 20,
+   "text_atis": null,
+   "last_updated": "2026-10-22T11:12:11Z",
+   "logon_time": "2026-10-22T08:00:00Z"
+  },
+  {
+   "cid": 1000003,
+   "name": "Test Controller Three",
+   "callsign": "EDDM_TWR",
+   "frequency": "118.700",
+   "facility": 4,
+   "rating": 5,
+   "server": "GERMANY",
+   "visual_range": 50,
+   "text_atis": null,
+   "last_updated": "2026-10-22T11:12:11Z",
+   "logon_time": "2026-10-22T08:00:00Z"
+  },
+  {
+   "cid": 1000004,
+   "name": "Test Controller Four",
+   "callsign": "EDGG_CTR",
+   "frequency": "125.350",
+   "facility": 6,
+   "rating": 7,
+   "server": "GERMANY",
+   "visual_range": 600,
+   "text_atis": null,
+   "last_updated": "2026-10-22T11:12:11Z",
+   "logon_time": "2026-10-22T08:00:00Z"
+  },
+  {
+   "cid": 1000005,
+   "name": "Observer",
+   "callsign": "EDDF_OBS",
+   "frequency": "199.998",
+   "facility": 0,
+   "rating": 1,
+   "server": "GERMANY",
+   "visual_range": 40,
+   "text_atis": null,
+   "last_updated": "2026-10-22T11:12:11Z",
+   "logon_time": "2026-10-22T08:00:00Z"
+  },
+  {
+   "cid": 1000006,
+   "name": "Observer Two",
+   "callsign": "EK247",
+   "frequency": "199.998",
+   "facility": 0,
+   "rating": 1,
+   "server": "USA-SE",
+   "visual_range": 40,
+   "text_atis": null,
+   "last_updated": "2026-10-22T11:12:11Z",
+   "logon_time": "2026-10-22T08:00:00Z"
+  }
+ ],
+ "atis": [
+  {
+   "cid": 1000007,
+   "name": "Test ATIS",
+   "callsign": "EDDF_ATIS",
+   "frequency": "118.020",
+   "facility": 4,
+   "rating": 2,
+   "server": "GERMANY",
+   "visual_range": 50,
+   "atis_code": "B",
+   "text_atis": [
+    "EDDF ATIS B",
+    "1050Z",
+    "WIND 25006KT"
+   ],
+   "last_updated": "2026-10-22T11:12:20Z",
+   "logon_time": "2026-10-22T07:25:05Z"
+  }
+ ],
+ "pilots": [],
+ "servers": [],
+ "prefiles": [],
+ "facilities": [
+  {
+   "id": 0,
+   "short": "OBS",
+   "long": "Observer"
+  },
+  {
+   "id": 1,
+   "short": "FSS",
+   "long": "Flight Service Station"
+  },
+  {
+   "id": 2,
+   "short": "DEL",
+   "long": "Clearance Delivery"
+  },
+  {
+   "id": 3,
+   "short": "GND",
+   "long": "Ground"
+  },
+  {
+   "id": 4,
+   "short": "TWR",
+   "long": "Tower"
+  },
+  {
+   "id": 5,
+   "short": "APP",
+   "long": "Approach/Departure"
+  },
+  {
+   "id": 6,
+   "short": "CTR",
+   "long": "Enroute"
+  }
+ ]
+}

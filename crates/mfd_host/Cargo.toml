@@ -1,0 +1,23 @@
+[package]
+name = "mfd_host"
+version = "0.1.0"
+edition = "2021"
+description = "The native A380X MFD: page models from the native FMS host and variables, UI state, and KCCU/keyboard input to FMS commands"
+license = "GPL-3.0-or-later"
+publish = false
+
+[workspace]
+
+[lib]
+doctest = false
+
+[dependencies]
+mfd_tree = { path = "../mfd_tree" }
+mfd_native = { path = "../mfd_native" }
+mfd_pages_a = { path = "../mfd_pages_a" }
+mfd_pages_b = { path = "../mfd_pages_b" }
+mfd_pages_c = { path = "../mfd_pages_c" }
+mfd_pages_d = { path = "../mfd_pages_d" }
+fms = { path = "../fms" }
+fms_data = { path = "../fms_data" }
+fms_host = { path = "../fms_host" }

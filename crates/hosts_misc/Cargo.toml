@@ -1,0 +1,17 @@
+[package]
+name = "hosts_misc"
+version = "0.1.0"
+edition = "2021"
+description = "Remaining logic of FlyByWire's A380X SystemsHost and ExtrasHost views, as plain state machines"
+license = "GPL-3.0-or-later"
+publish = false
+
+[lib]
+doctest = false
+
+[dependencies]
+
+[dev-dependencies]
+serde_json = "1"
+
+[workspace]

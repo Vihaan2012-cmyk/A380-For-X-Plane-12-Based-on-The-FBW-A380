@@ -1,0 +1,11 @@
+[package]
+name = "fuel_mgmt"
+version = "0.1.0"
+edition = "2021"
+description = "A380 fuel jettison and trim-tank CG management logic: pure, no simulator dependency"
+publish = false
+
+[lib]
+doctest = false
+
+[workspace]

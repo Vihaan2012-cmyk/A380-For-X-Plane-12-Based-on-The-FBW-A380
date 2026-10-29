@@ -1,0 +1,8 @@
+{
+ "name": "power_up",
+ "steps": [
+  {
+   "run_ms": 2000
+  }
+ ]
+}

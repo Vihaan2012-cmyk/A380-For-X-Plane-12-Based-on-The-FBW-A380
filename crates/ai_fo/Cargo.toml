@@ -1,0 +1,14 @@
+[package]
+name = "ai_fo"
+version = "0.1.0"
+edition = "2021"
+description = "The A380 AI first officer as Pilot Monitoring: a flight-phase state machine from a sim snapshot to callouts, switch actions, radio tuning, MFD entries and PA calls, without any simulator dependency"
+license = "GPL-3.0-or-later"
+publish = false
+
+[lib]
+doctest = false
+
+[dependencies]
+
+[workspace]

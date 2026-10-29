@@ -1,0 +1,7 @@
+/target
+__pycache__/
+
+# Generated tool output
+/tools/walkaround/engine_cover_out/
+__pycache__/
+*.bak

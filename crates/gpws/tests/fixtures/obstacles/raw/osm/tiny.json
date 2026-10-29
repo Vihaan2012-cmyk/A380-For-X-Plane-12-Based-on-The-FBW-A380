@@ -1,0 +1,57 @@
+{
+ "elements": [
+  {
+   "type": "node",
+   "id": 1,
+   "lat": -33.87,
+   "lon": 151.21,
+   "tags": {
+    "man_made": "tower",
+    "height": "270"
+   }
+  },
+  {
+   "type": "node",
+   "id": 2,
+   "lat": 40.5003,
+   "lon": -74.0,
+   "tags": {
+    "man_made": "mast",
+    "height": "300"
+   }
+  },
+  {
+   "type": "node",
+   "id": 3,
+   "lat": -33.88,
+   "lon": 151.22,
+   "tags": {
+    "power": "tower",
+    "height": "40"
+   }
+  },
+  {
+   "type": "way",
+   "id": 4,
+   "center": {
+    "lat": -16.5,
+    "lon": 179.995
+   },
+   "tags": {
+    "man_made": "chimney",
+    "height": "100 m",
+    "ele": "10"
+   }
+  },
+  {
+   "type": "node",
+   "id": 5,
+   "lat": -16.5,
+   "lon": -179.995,
+   "tags": {
+    "man_made": "communications_tower",
+    "height": "656 ft"
+   }
+  }
+ ]
+}

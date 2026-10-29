@@ -1,0 +1,146 @@
+{
+ "name": "to_ldg_memos",
+ "steps": [
+  {
+   "state": "emu-05-engines-idle"
+  },
+  {
+   "set": {
+    "A:CABIN SEATBELTS ALERT SWITCH": 1,
+    "L:A32NX_FLAPS_HANDLE_INDEX": 1,
+    "L:A32NX_AUTOBRAKES_ARMED_MODE": 6,
+    "L:A32NX_FCDC_1_DISCRETE_WORD_4": 14168358912,
+    "L:A32NX_FCDC_2_DISCRETE_WORD_4": 14168358912
+   }
+  },
+  {
+   "run_ms": 40000
+  },
+  {
+   "snapshot": "phase2-before-timer"
+  },
+  {
+   "run_ms": 100000
+  },
+  {
+   "snapshot": "to-memo-after-120s"
+  },
+  {
+   "set": {
+    "L:A32NX_FCDC_1_DISCRETE_WORD_4": 12884901888,
+    "L:A32NX_FCDC_2_DISCRETE_WORD_4": 12884901888
+   }
+  },
+  {
+   "run_ms": 2000
+  },
+  {
+   "snapshot": "spoilers-disarmed"
+  },
+  {
+   "state": "emu-07-takeoff-roll"
+  },
+  {
+   "run_ms": 15000
+  },
+  {
+   "snapshot": "takeoff-roll"
+  },
+  {
+   "state": "emu-10-cruise"
+  },
+  {
+   "run_ms": 5000
+  },
+  {
+   "state": "emu-12-approach"
+  },
+  {
+   "set": {
+    "L:A32NX_RA_1_RADIO_ALTITUDE": 14046429184,
+    "L:A32NX_RA_2_RADIO_ALTITUDE": 14046429184,
+    "L:A32NX_RA_3_RADIO_ALTITUDE": 14046429184,
+    "L:A32NX_FLAPS_HANDLE_INDEX": 2
+   }
+  },
+  {
+   "run_ms": 4000
+  },
+  {
+   "snapshot": "approach-high"
+  },
+  {
+   "set": {
+    "L:A32NX_RA_1_RADIO_ALTITUDE": 14035582976,
+    "L:A32NX_RA_2_RADIO_ALTITUDE": 14035582976,
+    "L:A32NX_RA_3_RADIO_ALTITUDE": 14035582976,
+    "L:A32NX_LGCIU_1_DISCRETE_WORD_1": 14157873152,
+    "L:A32NX_LGCIU_2_DISCRETE_WORD_1": 14157873152,
+    "A:GEAR TOTAL PCT EXTENDED": 1,
+    "L:A32NX_FLAPS_HANDLE_INDEX": 4,
+    "L:A32NX_FCDC_1_DISCRETE_WORD_4": 14168358912,
+    "L:A32NX_FCDC_2_DISCRETE_WORD_4": 14168358912
+   }
+  },
+  {
+   "run_ms": 20000
+  },
+  {
+   "snapshot": "ldg-memo-approach-1200ft"
+  },
+  {
+   "set": {
+    "L:A380X_FM_LANDING_CONF3": 1
+   }
+  },
+  {
+   "run_ms": 2000
+  },
+  {
+   "snapshot": "conf3-flaps4-mismatch"
+  },
+  {
+   "set": {
+    "L:A32NX_RA_1_RADIO_ALTITUDE": 14027194368,
+    "L:A32NX_RA_2_RADIO_ALTITUDE": 14027194368,
+    "L:A32NX_RA_3_RADIO_ALTITUDE": 14027194368
+   }
+  },
+  {
+   "run_ms": 190000
+  },
+  {
+   "snapshot": "phase9"
+  },
+  {
+   "set": {
+    "A:PLANE ALT ABOVE GROUND MINUS CG": 0,
+    "L:A32NX_RA_1_RADIO_ALTITUDE": 13958643712,
+    "L:A32NX_RA_2_RADIO_ALTITUDE": 13958643712,
+    "L:A32NX_RA_3_RADIO_ALTITUDE": 13958643712
+   }
+  },
+  {
+   "run_ms": 10000
+  },
+  {
+   "snapshot": "touchdown"
+  },
+  {
+   "set": {
+    "L:A32NX_AUTOTHRUST_TLA:1": 0,
+    "L:A32NX_AUTOTHRUST_TLA:2": 0,
+    "L:A32NX_AUTOTHRUST_TLA:3": 0,
+    "L:A32NX_AUTOTHRUST_TLA:4": 0,
+    "L:A32NX_ADIRS_ADR_1_COMPUTED_AIRSPEED": 13994295296,
+    "L:A32NX_ADIRS_ADR_3_COMPUTED_AIRSPEED": 13994295296
+   }
+  },
+  {
+   "run_ms": 10000
+  },
+  {
+   "snapshot": "slow-rollout"
+  }
+ ]
+}

@@ -1,0 +1,41 @@
+{
+ "name": "cold_dark_powerup",
+ "steps": [
+  {
+   "state": "emu-01-cold-dark"
+  },
+  {
+   "run_ms": 3000
+  },
+  {
+   "snapshot": "cold-dark"
+  },
+  {
+   "state": "emu-02-batteries"
+  },
+  {
+   "run_ms": 10000
+  },
+  {
+   "snapshot": "batteries"
+  },
+  {
+   "state": "emu-03-ground-power"
+  },
+  {
+   "run_ms": 15000
+  },
+  {
+   "snapshot": "ground-power"
+  },
+  {
+   "state": "emu-04-apu"
+  },
+  {
+   "run_ms": 10000
+  },
+  {
+   "snapshot": "apu"
+  }
+ ]
+}

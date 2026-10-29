@@ -1,0 +1,86 @@
+{
+ "name": "landing_memos",
+ "steps": [
+  {
+   "state": "emu-05-engines-idle"
+  },
+  {
+   "run_ms": 10000
+  },
+  {
+   "snapshot": "engines-idle"
+  },
+  {
+   "state": "emu-06-taxi"
+  },
+  {
+   "run_ms": 12000
+  },
+  {
+   "snapshot": "taxi"
+  },
+  {
+   "state": "emu-07-takeoff-roll"
+  },
+  {
+   "run_ms": 12000
+  },
+  {
+   "snapshot": "takeoff-roll"
+  },
+  {
+   "state": "emu-08-initial-climb"
+  },
+  {
+   "run_ms": 12000
+  },
+  {
+   "snapshot": "initial-climb"
+  },
+  {
+   "state": "emu-09-climb"
+  },
+  {
+   "run_ms": 12000
+  },
+  {
+   "snapshot": "climb"
+  },
+  {
+   "state": "emu-10-cruise"
+  },
+  {
+   "run_ms": 12000
+  },
+  {
+   "snapshot": "cruise"
+  },
+  {
+   "state": "emu-11-descent"
+  },
+  {
+   "run_ms": 12000
+  },
+  {
+   "snapshot": "descent"
+  },
+  {
+   "state": "emu-12-approach"
+  },
+  {
+   "run_ms": 12000
+  },
+  {
+   "snapshot": "approach"
+  },
+  {
+   "state": "emu-13-rollout"
+  },
+  {
+   "run_ms": 12000
+  },
+  {
+   "snapshot": "rollout"
+  }
+ ]
+}

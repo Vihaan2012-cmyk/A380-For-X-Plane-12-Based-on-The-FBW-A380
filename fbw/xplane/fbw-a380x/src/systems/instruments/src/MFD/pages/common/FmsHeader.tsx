@@ -1,0 +1,104 @@
+import { UI, Signal, ViewNode } from 'xplane-js/ui';
+import { AbstractHeader } from './AbstractHeader';
+import { PageSelectorDropdownMenu } from '../../../MsfsAvionicsCommon/UiWidgets/PageSelectorDropdownMenu';
+import { activeFlightPlanFuelAndLoadUri, activeFlightPlanPageUri, dataStatusUri } from '../../shared/utils';
+
+/*
+ * Complete header for the FMS system
+ */
+export class FmsHeader extends AbstractHeader {
+  private readonly activeIsSelected = Signal.of(false);
+
+  private readonly positionIsSelected = Signal.of(false);
+
+  private readonly secIndexIsSelected = Signal.of(false);
+
+  private readonly dataIsSelected = Signal.of(false);
+
+  public afterRender(node: ViewNode): void {
+    super.afterRender(node);
+
+    this.subs.push(
+      this.props.uiService.activeUri.watch((val) => {
+        this.activeIsSelected.set(val.category === 'active');
+        this.positionIsSelected.set(val.category === 'position');
+        this.secIndexIsSelected.set(
+          val.category === 'sec' || val.category === 'sec1' || val.category === 'sec2' || val.category === 'sec3',
+        );
+        this.dataIsSelected.set(val.category === 'data');
+      }, true),
+    );
+  }
+
+  public destroy(): void {
+    // Destroy all subscriptions to remove all references to this instance.
+    this.subs.forEach((x) => x.destroy());
+
+    super.destroy();
+  }
+
+  render(): ViewNode {
+    return (
+      <>
+        {super.render()}
+        <div class="mfd-header-page-select-row">
+          <PageSelectorDropdownMenu
+            isActive={this.activeIsSelected}
+            label="ACTIVE"
+            menuItems={[
+              { label: 'F-PLN', action: () => this.props.uiService.navigateTo(activeFlightPlanPageUri) },
+              { label: 'PERF', action: () => this.props.uiService.navigateTo('fms/active/perf') },
+              { label: 'FUEL&LOAD', action: () => this.props.uiService.navigateTo(activeFlightPlanFuelAndLoadUri) },
+              { label: 'WIND', action: () => this.props.uiService.navigateTo('fms/active/wind') },
+              { label: 'INIT', action: () => this.props.uiService.navigateTo('fms/active/init') },
+            ]}
+            idPrefix={`${this.props.uiService.captOrFo}_MFD_pageSelectorActive`}
+            containerStyle="flex: 1"
+          />
+          <PageSelectorDropdownMenu
+            isActive={this.positionIsSelected}
+            label="POSITION"
+            menuItems={[
+              {
+                label: 'MONITOR',
+                action: () => this.props.uiService.navigateTo('fms/position/monitor'),
+              },
+              { label: 'REPORT', action: () => this.props.uiService.navigateTo('fms/position/report'), disabled: true },
+              { label: 'NAVAIDS', action: () => this.props.uiService.navigateTo('fms/position/navaids') },
+              { label: 'IRS', action: () => this.props.uiService.navigateTo('fms/position/irs') },
+              { label: 'GNSS', action: () => this.props.uiService.navigateTo('fms/position/gnss'), disabled: true },
+              { label: 'TIME', action: () => this.props.uiService.navigateTo('fms/position/time'), disabled: true },
+            ]}
+            idPrefix={`${this.props.uiService.captOrFo}_MFD_pageSelectorPosition`}
+            containerStyle="flex: 1"
+          />
+          <PageSelectorDropdownMenu
+            isActive={this.secIndexIsSelected}
+            label="SEC INDEX"
+            menuItems={[
+              { label: 'SEC 1', action: () => this.props.uiService.navigateTo('fms/sec/index/1') },
+              { label: 'SEC 2', action: () => this.props.uiService.navigateTo('fms/sec/index/2') },
+              { label: 'SEC 3', action: () => this.props.uiService.navigateTo('fms/sec/index/3') },
+            ]}
+            idPrefix={`${this.props.uiService.captOrFo}_MFD_pageSelectorSecIndex`}
+            containerStyle="flex: 1"
+          />
+          <PageSelectorDropdownMenu
+            isActive={this.dataIsSelected}
+            label="DATA"
+            menuItems={[
+              { label: 'STATUS', action: () => this.props.uiService.navigateTo(dataStatusUri) },
+              { label: 'WAYPOINT', action: () => this.props.uiService.navigateTo('fms/data/waypoint') },
+              { label: 'NAVAID', action: () => this.props.uiService.navigateTo('fms/data/navaid') },
+              { label: 'ROUTE', action: () => this.props.uiService.navigateTo('fms/data/route'), disabled: true },
+              { label: 'AIRPORT', action: () => this.props.uiService.navigateTo('fms/data/airport') },
+              { label: 'PRINTER', action: () => this.props.uiService.navigateTo('fms/data/printer'), disabled: true },
+            ]}
+            idPrefix={`${this.props.uiService.captOrFo}_MFD_pageSelectorData`}
+            containerStyle="flex: 1"
+          />
+        </div>
+      </>
+    );
+  }
+}

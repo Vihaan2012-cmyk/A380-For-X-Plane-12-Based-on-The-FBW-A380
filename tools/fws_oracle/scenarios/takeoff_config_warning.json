@@ -1,0 +1,59 @@
+{
+ "name": "takeoff_config_warning",
+ "steps": [
+  {
+   "state": "emu-06-taxi"
+  },
+  {
+   "run_ms": 15000
+  },
+  {
+   "snapshot": "taxi"
+  },
+  {
+   "set": {
+    "L:A32NX_FLAPS_HANDLE_INDEX": 0,
+    "L:A32NX_BTN_TOCONFIG": 1
+   }
+  },
+  {
+   "run_ms": 3000
+  },
+  {
+   "snapshot": "to-config-test-flaps-0"
+  },
+  {
+   "set": {
+    "L:A32NX_BTN_TOCONFIG": 0
+   }
+  },
+  {
+   "run_ms": 1000
+  },
+  {
+   "state": "emu-07-takeoff-roll"
+  },
+  {
+   "set": {
+    "L:A32NX_FLAPS_HANDLE_INDEX": 0
+   }
+  },
+  {
+   "run_ms": 5000
+  },
+  {
+   "snapshot": "takeoff-roll-flaps-0"
+  },
+  {
+   "set": {
+    "L:A32NX_FLAPS_HANDLE_INDEX": 1
+   }
+  },
+  {
+   "run_ms": 5000
+  },
+  {
+   "snapshot": "takeoff-roll-flaps-1"
+  }
+ ]
+}

@@ -1,0 +1,17 @@
+{
+  "name": "secondary",
+  "lat": 51.4706,
+  "lon": -0.4619,
+  "steps": [
+    { "uplink": "canned" },
+    { "run_ms": 5000 },
+    { "fms": "await fps.secondaryCopyFromActive(1, true);" },
+    { "run_ms": 2000 },
+    { "fms": "await fps.deleteElementAt(2, false, 3);" },
+    { "run_ms": 2000 },
+    { "snapshot": "sec1-edited" },
+    { "fms": "await fps.activeAndSecondarySwap(1, true);" },
+    { "run_ms": 5000 },
+    { "snapshot": "swapped" }
+  ]
+}

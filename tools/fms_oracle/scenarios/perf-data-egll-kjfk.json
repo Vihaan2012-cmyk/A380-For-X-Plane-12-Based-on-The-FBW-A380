@@ -1,0 +1,52 @@
+{
+  "name": "perf-data-egll-kjfk",
+  "lat": 51.4706,
+  "lon": -0.4619,
+  "steps": [
+    {
+      "uplink": "canned"
+    },
+    {
+      "run_ms": 5000
+    },
+    {
+      "fms": "const pd = fps.active.performanceData; fmc.bus.getPublisher().pub('oracle_perf_dump', { label: 'UPLINK', thrustReductionAltitude: pd.thrustReductionAltitude.get(), accelerationAltitude: pd.accelerationAltitude.get(), engineOutAccelerationAltitude: pd.engineOutAccelerationAltitude.get(), missedThrustReductionAltitude: pd.missedThrustReductionAltitude.get(), missedAccelerationAltitude: pd.missedAccelerationAltitude.get(), missedEngineOutAccelerationAltitude: pd.missedEngineOutAccelerationAltitude.get(), transitionAltitude: pd.transitionAltitude.get(), transitionLevel: pd.transitionLevel.get(), defaultThrustReductionAltitude: pd.defaultThrustReductionAltitude.get(), defaultMissedThrustReductionAltitude: pd.defaultMissedThrustReductionAltitude.get(), databaseTransitionAltitude: pd.databaseTransitionAltitude.get(), databaseTransitionLevel: pd.databaseTransitionLevel.get(), zeroFuelWeight: pd.zeroFuelWeight.get(), zeroFuelWeightCenterOfGravity: pd.zeroFuelWeightCenterOfGravity.get(), blockFuel: pd.blockFuel.get(), costIndex: pd.costIndex.get(), costIndexMode: pd.costIndexMode.get(), cruiseFlightLevel: pd.cruiseFlightLevel.get(), v1: pd.v1.get(), vr: pd.vr.get(), v2: pd.v2.get(), takeoffFlaps: pd.takeoffFlaps.get(), takeoffThsFor: pd.takeoffThsFor.get(), flexTakeoffTemperature: pd.flexTakeoffTemperature.get(), takeoffPowerSetting: pd.takeoffPowerSetting.get(), approachQnh: pd.approachQnh.get(), approachTemperature: pd.approachTemperature.get(), approachWindDirection: pd.approachWindDirection.get(), approachWindMagnitude: pd.approachWindMagnitude.get(), isApproachWindPilotEntered: pd.isApproachWindPilotEntered.get(), approachBaroMinimum: pd.approachBaroMinimum.get(), approachRadioMinimum: pd.approachRadioMinimum.get(), approachFlapsThreeSelected: pd.approachFlapsThreeSelected.get(), tropopause: pd.tropopause.get(), taxiFuel: pd.taxiFuel.get(), routeReserveFuelPercentage: pd.routeReserveFuelPercentage.get(), finalHoldingTime: pd.finalHoldingTime.get() });"
+    },
+    {
+      "run_ms": 500
+    },
+    {
+      "fms": "fps.setPerformanceData('zeroFuelWeight', 330, 0); fps.setPerformanceData('zeroFuelWeightCenterOfGravity', 38.5, 0); fps.setPerformanceData('blockFuel', 95, 0); fps.setPerformanceData('costIndex', 30, 0); fps.setPerformanceData('v1', 140, 0); fps.setPerformanceData('vr', 150, 0); fps.setPerformanceData('v2', 158, 0); fps.setPerformanceData('takeoffFlaps', 2, 0); fps.setPerformanceData('flexTakeoffTemperature', 45, 0); fps.setPerformanceData('takeoffPowerSetting', 1, 0); fps.setPerformanceData('pilotThrustReductionAltitude', 1585, 0); fps.setPerformanceData('approachQnh', 1013, 0); fps.setPerformanceData('approachTemperature', 15, 0); fps.setPerformanceData('approachBaroMinimum', 300, 0); fps.setPerformanceData('approachRadioMinimum', 0, 0);"
+    },
+    {
+      "fms": "fps.setApproachWind(220, 12, 0);"
+    },
+    {
+      "fms": "fmc.trySetCruiseFl(360, 0);"
+    },
+    {
+      "run_ms": 3000
+    },
+    {
+      "fms": "const pd = fps.active.performanceData; fmc.bus.getPublisher().pub('oracle_perf_dump', { label: 'ENTERED', thrustReductionAltitude: pd.thrustReductionAltitude.get(), accelerationAltitude: pd.accelerationAltitude.get(), engineOutAccelerationAltitude: pd.engineOutAccelerationAltitude.get(), missedThrustReductionAltitude: pd.missedThrustReductionAltitude.get(), missedAccelerationAltitude: pd.missedAccelerationAltitude.get(), missedEngineOutAccelerationAltitude: pd.missedEngineOutAccelerationAltitude.get(), transitionAltitude: pd.transitionAltitude.get(), transitionLevel: pd.transitionLevel.get(), defaultThrustReductionAltitude: pd.defaultThrustReductionAltitude.get(), defaultMissedThrustReductionAltitude: pd.defaultMissedThrustReductionAltitude.get(), databaseTransitionAltitude: pd.databaseTransitionAltitude.get(), databaseTransitionLevel: pd.databaseTransitionLevel.get(), zeroFuelWeight: pd.zeroFuelWeight.get(), zeroFuelWeightCenterOfGravity: pd.zeroFuelWeightCenterOfGravity.get(), blockFuel: pd.blockFuel.get(), costIndex: pd.costIndex.get(), costIndexMode: pd.costIndexMode.get(), cruiseFlightLevel: pd.cruiseFlightLevel.get(), v1: pd.v1.get(), vr: pd.vr.get(), v2: pd.v2.get(), takeoffFlaps: pd.takeoffFlaps.get(), takeoffThsFor: pd.takeoffThsFor.get(), flexTakeoffTemperature: pd.flexTakeoffTemperature.get(), takeoffPowerSetting: pd.takeoffPowerSetting.get(), approachQnh: pd.approachQnh.get(), approachTemperature: pd.approachTemperature.get(), approachWindDirection: pd.approachWindDirection.get(), approachWindMagnitude: pd.approachWindMagnitude.get(), isApproachWindPilotEntered: pd.isApproachWindPilotEntered.get(), approachBaroMinimum: pd.approachBaroMinimum.get(), approachRadioMinimum: pd.approachRadioMinimum.get(), approachFlapsThreeSelected: pd.approachFlapsThreeSelected.get(), tropopause: pd.tropopause.get(), taxiFuel: pd.taxiFuel.get(), routeReserveFuelPercentage: pd.routeReserveFuelPercentage.get(), finalHoldingTime: pd.finalHoldingTime.get() });"
+    },
+    {
+      "run_ms": 500
+    },
+    {
+      "fms": "fps.deleteApproachWind(0);"
+    },
+    {
+      "run_ms": 500
+    },
+    {
+      "fms": "const pd = fps.active.performanceData; fmc.bus.getPublisher().pub('oracle_perf_dump', { label: 'WIND_DELETED', thrustReductionAltitude: pd.thrustReductionAltitude.get(), accelerationAltitude: pd.accelerationAltitude.get(), engineOutAccelerationAltitude: pd.engineOutAccelerationAltitude.get(), missedThrustReductionAltitude: pd.missedThrustReductionAltitude.get(), missedAccelerationAltitude: pd.missedAccelerationAltitude.get(), missedEngineOutAccelerationAltitude: pd.missedEngineOutAccelerationAltitude.get(), transitionAltitude: pd.transitionAltitude.get(), transitionLevel: pd.transitionLevel.get(), defaultThrustReductionAltitude: pd.defaultThrustReductionAltitude.get(), defaultMissedThrustReductionAltitude: pd.defaultMissedThrustReductionAltitude.get(), databaseTransitionAltitude: pd.databaseTransitionAltitude.get(), databaseTransitionLevel: pd.databaseTransitionLevel.get(), zeroFuelWeight: pd.zeroFuelWeight.get(), zeroFuelWeightCenterOfGravity: pd.zeroFuelWeightCenterOfGravity.get(), blockFuel: pd.blockFuel.get(), costIndex: pd.costIndex.get(), costIndexMode: pd.costIndexMode.get(), cruiseFlightLevel: pd.cruiseFlightLevel.get(), v1: pd.v1.get(), vr: pd.vr.get(), v2: pd.v2.get(), takeoffFlaps: pd.takeoffFlaps.get(), takeoffThsFor: pd.takeoffThsFor.get(), flexTakeoffTemperature: pd.flexTakeoffTemperature.get(), takeoffPowerSetting: pd.takeoffPowerSetting.get(), approachQnh: pd.approachQnh.get(), approachTemperature: pd.approachTemperature.get(), approachWindDirection: pd.approachWindDirection.get(), approachWindMagnitude: pd.approachWindMagnitude.get(), isApproachWindPilotEntered: pd.isApproachWindPilotEntered.get(), approachBaroMinimum: pd.approachBaroMinimum.get(), approachRadioMinimum: pd.approachRadioMinimum.get(), approachFlapsThreeSelected: pd.approachFlapsThreeSelected.get(), tropopause: pd.tropopause.get(), taxiFuel: pd.taxiFuel.get(), routeReserveFuelPercentage: pd.routeReserveFuelPercentage.get(), finalHoldingTime: pd.finalHoldingTime.get() });"
+    },
+    {
+      "run_ms": 500
+    },
+    {
+      "snapshot": "end"
+    }
+  ]
+}

@@ -1,0 +1,64 @@
+import { Vars } from 'xplane-js/data';
+export const Vmo = 340; // kt, Vmo 340kts
+export const Mmo = 0.89; // mach, Mmo Mach 0.89
+
+export const VfeF1 = 263; // kt, Vmo with FLAPS 1
+export const VfeF1F = 222; // kt, Vmo with FLAPS 1+F
+export const VfeF2 = 220; // kt, Vmo with FLAPS 2
+export const VfeF3 = 196; // kt, Vmo with FLAPS 3
+export const VfeFF = 182; // kt, Vmo with FLAPS FULL
+
+export const Vmcl = 123; // kt
+export const Vmcl2 = 147; // kt
+
+export const Vle = 250; // kt, Gear extended
+export const Mle = 0.55; // mach, Gear extended
+
+export const Vlo = 250; // kt, Gear operating
+export const Mlo = 0.55; // mach, Gear operating
+
+export const VloGravityGearExtension = 220; // kt
+export const MloGravityGearExtension = 0.48; // mach
+
+export const maxCertifiedAlt = 43_100; // feet
+/** The maximum certified flight level */
+export const maxCertifiedFlightLevel = maxCertifiedAlt / 100;
+
+export const defaultTropopauseAlt = 36_090; // feet
+
+export const minZfwCg = 23; // %
+export const maxZfwCg = 48; // %
+
+export const minZfw = 270_000; // kg, no reference yet
+export let maxZfw = 373_000; // kg
+
+export const minGw = 270_000; // kg
+export let maxGw = 512_000; // kg
+export let maxTow = 510_000; // kg
+export let maxLw = 395_000; // kg
+
+function weightVariantLimit(name: string, fallback: number): number {
+  try {
+    const v = Vars.read(`L:A380X_WV_${name}_KG`, 'number');
+    return typeof v === 'number' && v > 0 ? v : fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+export function refreshWeightVariant(): void {
+  maxZfw = weightVariantLimit('MZFW', maxZfw);
+  maxGw = weightVariantLimit('MRW', maxGw);
+  maxTow = weightVariantLimit('MTOW', maxTow);
+  maxLw = weightVariantLimit('MLW', maxLw);
+  maxJtsnGw = maxGw;
+}
+
+export const maxBlockFuel = 289_982; // kg
+export const maxTaxiFuel = 9_889; // kg
+export const maxRteRsvFuel = 49_986; // kg
+export const maxRteRsvFuelPerc = 15; // %
+export let maxJtsnGw = maxGw; // kg
+export const maxAltnFuel = 289_982; // kg
+export const maxFinalFuel = 100_018; // kg
+export const maxMinDestFuel = 250_000; //kg

@@ -1,0 +1,13 @@
+{
+  "extends": "./tsconfig.int.base.json",
+  "compilerOptions": {
+    "jsxFactory": "React.createElement",
+    "jsxFragmentFactory": "React.Fragment"
+  },
+  "include": [
+    "E:/fbw-int/fbw-aircraft-ts/fbw-a380x/src/systems/instruments/src/BAT/**/*", "E:/fbw-int/fbw-aircraft-ts/fbw-a380x/src/systems/instruments/src/Common/**/*", "E:/fbw-int/fbw-aircraft-ts/fbw-a380x/src/systems/instruments/src/EFB/**/*",
+    "E:/fbw-int/fbw-aircraft-ts/fbw-a380x/src/systems/instruments/src/ISISlegacy/**/*", "E:/fbw-int/fbw-aircraft-ts/fbw-a380x/src/systems/instruments/src/OITlegacy/**/*", "E:/fbw-int/fbw-aircraft-ts/fbw-a380x/src/systems/instruments/src/RTPI/**/*",
+    "E:/fbw-int/fbw-aircraft-ts/fbw-a380x/src/systems/instruments/src/SD/**/*"
+  ],
+  "exclude": ["**/*_check.ts", "**/node_modules/**", "**/*.js", "**/*.mjs", "**/*.test.ts", "**/*.spec.ts"]
+}

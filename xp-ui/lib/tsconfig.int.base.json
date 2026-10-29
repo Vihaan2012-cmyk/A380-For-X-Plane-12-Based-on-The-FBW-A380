@@ -1,0 +1,52 @@
+{
+  "compilerOptions": {
+    "target": "es2017",
+    "strict": false,
+    "noEmit": true,
+    "resolveJsonModule": true,
+    "skipLibCheck": true,
+    "typeRoots": [
+      "E:/fbw-int/fbw-aircraft-ts/fbw-common/src/typings",
+      "E:/fbw-int/fbw-aircraft-ts/node_modules/@types"
+    ],
+    "types": ["*"],
+    "moduleResolution": "bundler",
+    "module": "preserve",
+    "allowSyntheticDefaultImports": true,
+    "forceConsistentCasingInFileNames": true,
+    "incremental": false,
+    "jsx": "react",
+    "paths": {
+      "@microsoft/msfs-sdk": ["E:/fbw-int/clean-avionics/lib/src/index.ts"], "xp-ui": ["E:/fbw-int/clean-avionics/lib/src/index.ts"],
+      "xp-kit": ["E:/fbw-int/clean-avionics/lib/src/index.ts"],
+      "@atsu/*": ["E:/fbw-int/fbw-aircraft-ts/fbw-a380x/src/systems/atsu/src/*"],
+      "@datalink/aoc": ["E:/fbw-int/fbw-aircraft-ts/fbw-common/src/systems/datalink/aoc/src/index.ts"],
+      "@datalink/atc": ["E:/fbw-int/fbw-aircraft-ts/fbw-common/src/systems/datalink/atc/src/index.ts"],
+      "@datalink/common": ["E:/fbw-int/fbw-aircraft-ts/fbw-common/src/systems/datalink/common/src/index.ts"],
+      "@datalink/router": ["E:/fbw-int/fbw-aircraft-ts/fbw-common/src/systems/datalink/router/src/index.ts"],
+      "@failures": ["E:/fbw-int/fbw-aircraft-ts/fbw-a380x/src/systems/failures/src/index.ts"],
+      "@flybywiresim/bat": ["E:/fbw-int/fbw-aircraft-ts/fbw-common/src/systems/instruments/src/BAT/index.ts"],
+      "@flybywiresim/checklists": ["E:/fbw-int/fbw-aircraft-ts/fbw-common/src/systems/shared/src/checklists/index.ts"],
+      "@flybywiresim/clock": ["E:/fbw-int/fbw-aircraft-ts/fbw-common/src/systems/instruments/src/Clock/index.ts"],
+      "@flybywiresim/fbw-sdk": ["E:/fbw-int/fbw-aircraft-ts/fbw-common/src/systems/index.ts"],
+      "@flybywiresim/fbw-sdk-react": ["E:/fbw-int/fbw-aircraft-ts/fbw-common/src/systems/index-react.ts"],
+      "@flybywiresim/flypad": ["E:/fbw-int/fbw-aircraft-ts/fbw-common/src/systems/instruments/src/EFB/index.ts"],
+      "@flybywiresim/msfs-avionics-common": ["E:/fbw-int/fbw-aircraft-ts/fbw-common/src/systems/instruments/src/MsfsAvionicsCommon/index.ts"],
+      "@flybywiresim/navigation-display": ["E:/fbw-int/fbw-aircraft-ts/fbw-common/src/systems/instruments/src/ND/index.ts"],
+      "@flybywiresim/oanc": ["E:/fbw-int/fbw-aircraft-ts/fbw-common/src/systems/instruments/src/OANC/index.ts"],
+      "@flybywiresim/pfd": ["E:/fbw-int/fbw-aircraft-ts/fbw-common/src/systems/instruments/src/PFD/index.ts"],
+      "@flybywiresim/hud": ["E:/fbw-int/fbw-aircraft-ts/fbw-common/src/systems/instruments/src/HUD/index.ts"],
+      "@flybywiresim/rmp": ["E:/fbw-int/fbw-aircraft-ts/fbw-common/src/systems/instruments/src/RMP/index.ts"],
+      "@flybywiresim/popup": ["E:/fbw-int/fbw-aircraft-ts/fbw-common/src/systems/instruments/src/popup/index.ts"],
+      "@fmgc/*": ["E:/fbw-int/fbw-aircraft-ts/fbw-a32nx/src/systems/fmgc/src/*"],
+      "@instruments/common/*": ["E:/fbw-int/fbw-aircraft-ts/fbw-a380x/src/systems/instruments/src/Common/*"],
+      "@localization/*": ["E:/fbw-int/fbw-aircraft-ts/fbw-a380x/src/localization/*"],
+      "@sentry/*": ["E:/fbw-int/fbw-aircraft-ts/fbw-a380x/src/systems/sentry-client/src/*"],
+      "@shared/*": ["E:/fbw-int/fbw-aircraft-ts/fbw-a380x/src/systems/shared/src/*"],
+      "@simbridge/*": ["E:/fbw-int/fbw-aircraft-ts/fbw-a32nx/src/systems/simbridge-client/src/*"],
+      "@tcas/*": ["E:/fbw-int/fbw-aircraft-ts/fbw-a380x/src/systems/tcas/src/*"],
+      "@typings/*": ["E:/fbw-int/fbw-aircraft-ts/fbw-a380x/src/typings"],
+      "@providers/*": ["E:/fbw-int/fbw-aircraft-ts/fbw-a380x/src/systems/instruments/src/MsfsAvionicsCommon/providers/*"]
+    }
+  }
+}

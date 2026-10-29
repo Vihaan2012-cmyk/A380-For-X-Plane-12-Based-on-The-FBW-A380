@@ -1,0 +1,1751 @@
+{
+ "name": "ecl_complete_reset",
+ "steps": [
+  {
+   "state": "emu-04-apu"
+  },
+  {
+   "run_ms": 2000
+  },
+  {
+   "set": {
+    "A:CABIN SEATBELTS ALERT SWITCH": 0,
+    "A:LIGHT BEACON": 0,
+    "L:A32NX_FLAPS_HANDLE_INDEX": 0,
+    "L:A32NX_AUTOBRAKES_ARMED_MODE": 0,
+    "L:A32NX_FCDC_1_DISCRETE_WORD_4": 14159446016,
+    "L:A32NX_FCDC_2_DISCRETE_WORD_4": 14159446016,
+    "L:A32NX_SEC_1_HEALTHY": 1,
+    "L:A32NX_SEC_1_RUDDER_ACTUAL_POSITION": 13958643712,
+    "L:PUSH_OVHD_OXYGEN_CREW": 0,
+    "L:XMLVAR_SWITCH_OVHD_INTLT_EMEREXIT_Position": 1,
+    "L:A380X_FM_LANDING_CONF3": 0,
+    "A:FUELSYSTEM VALVE SWITCH:1": 0,
+    "A:FUELSYSTEM VALVE SWITCH:2": 0,
+    "A:FUELSYSTEM VALVE SWITCH:3": 0,
+    "A:FUELSYSTEM VALVE SWITCH:4": 0,
+    "A:FUELSYSTEM PUMP ACTIVE:1": 1,
+    "A:FUELSYSTEM PUMP ACTIVE:2": 1,
+    "A:FUELSYSTEM PUMP ACTIVE:3": 1,
+    "A:FUELSYSTEM PUMP ACTIVE:4": 1,
+    "A:FUELSYSTEM PUMP ACTIVE:5": 1,
+    "A:FUELSYSTEM PUMP ACTIVE:6": 1,
+    "A:FUELSYSTEM PUMP ACTIVE:7": 1,
+    "A:FUELSYSTEM PUMP ACTIVE:8": 1
+   }
+  },
+  {
+   "run_ms": 1000
+  },
+  {
+   "set": {
+    "L:A32NX_BTN_CL": 1
+   }
+  },
+  {
+   "run_ms": 200
+  },
+  {
+   "set": {
+    "L:A32NX_BTN_CL": 0
+   }
+  },
+  {
+   "run_ms": 600
+  },
+  {
+   "snapshot": "menu"
+  },
+  {
+   "set": {
+    "L:A32NX_BTN_CHECK_LH": 1
+   }
+  },
+  {
+   "run_ms": 200
+  },
+  {
+   "set": {
+    "L:A32NX_BTN_CHECK_LH": 0
+   }
+  },
+  {
+   "run_ms": 600
+  },
+  {
+   "snapshot": "cp-open"
+  },
+  {
+   "set": {
+    "L:A32NX_BTN_CHECK_LH": 1
+   }
+  },
+  {
+   "run_ms": 200
+  },
+  {
+   "set": {
+    "L:A32NX_BTN_CHECK_LH": 0
+   }
+  },
+  {
+   "run_ms": 600
+  },
+  {
+   "set": {
+    "L:A32NX_BTN_CHECK_LH": 1
+   }
+  },
+  {
+   "run_ms": 200
+  },
+  {
+   "set": {
+    "L:A32NX_BTN_CHECK_LH": 0
+   }
+  },
+  {
+   "run_ms": 600
+  },
+  {
+   "snapshot": "cp-on-seatbelts"
+  },
+  {
+   "set": {
+    "A:CABIN SEATBELTS ALERT SWITCH": 1
+   }
+  },
+  {
+   "run_ms": 500
+  },
+  {
+   "snapshot": "cp-seatbelts-sensed"
+  },
+  {
+   "set": {
+    "L:A32NX_BTN_CHECK_LH": 1
+   }
+  },
+  {
+   "run_ms": 200
+  },
+  {
+   "set": {
+    "L:A32NX_BTN_CHECK_LH": 0
+   }
+  },
+  {
+   "run_ms": 600
+  },
+  {
+   "snapshot": "cp-on-complete"
+  },
+  {
+   "set": {
+    "L:A32NX_BTN_DOWN": 1
+   }
+  },
+  {
+   "run_ms": 200
+  },
+  {
+   "set": {
+    "L:A32NX_BTN_DOWN": 0
+   }
+  },
+  {
+   "run_ms": 600
+  },
+  {
+   "snapshot": "cp-on-reset"
+  },
+  {
+   "set": {
+    "L:A32NX_BTN_UP": 1
+   }
+  },
+  {
+   "run_ms": 200
+  },
+  {
+   "set": {
+    "L:A32NX_BTN_UP": 0
+   }
+  },
+  {
+   "run_ms": 600
+  },
+  {
+   "snapshot": "cp-back-on-complete"
+  },
+  {
+   "set": {
+    "L:A32NX_BTN_CHECK_LH": 1
+   }
+  },
+  {
+   "run_ms": 200
+  },
+  {
+   "set": {
+    "L:A32NX_BTN_CHECK_LH": 0
+   }
+  },
+  {
+   "run_ms": 600
+  },
+  {
+   "set": {
+    "L:A32NX_BTN_CL": 1
+   }
+  },
+  {
+   "run_ms": 200
+  },
+  {
+   "set": {
+    "L:A32NX_BTN_CL": 0
+   }
+  },
+  {
+   "run_ms": 600
+  },
+  {
+   "snapshot": "menu-bs"
+  },
+  {
+   "set": {
+    "L:A32NX_BTN_CHECK_LH": 1
+   }
+  },
+  {
+   "run_ms": 200
+  },
+  {
+   "set": {
+    "L:A32NX_BTN_CHECK_LH": 0
+   }
+  },
+  {
+   "run_ms": 600
+  },
+  {
+   "snapshot": "bs-open"
+  },
+  {
+   "set": {
+    "L:A32NX_BTN_CHECK_LH": 1
+   }
+  },
+  {
+   "run_ms": 200
+  },
+  {
+   "set": {
+    "L:A32NX_BTN_CHECK_LH": 0
+   }
+  },
+  {
+   "run_ms": 600
+  },
+  {
+   "snapshot": "bs-1"
+  },
+  {
+   "set": {
+    "L:A32NX_BTN_UP": 1
+   }
+  },
+  {
+   "run_ms": 200
+  },
+  {
+   "set": {
+    "L:A32NX_BTN_UP": 0
+   }
+  },
+  {
+   "run_ms": 600
+  },
+  {
+   "snapshot": "bs-up"
+  },
+  {
+   "set": {
+    "L:A32NX_BTN_CHECK_LH": 1
+   }
+  },
+  {
+   "run_ms": 200
+  },
+  {
+   "set": {
+    "L:A32NX_BTN_CHECK_LH": 0
+   }
+  },
+  {
+   "run_ms": 600
+  },
+  {
+   "snapshot": "bs-untick"
+  },
+  {
+   "set": {
+    "L:A32NX_BTN_CHECK_LH": 1
+   }
+  },
+  {
+   "run_ms": 200
+  },
+  {
+   "set": {
+    "L:A32NX_BTN_CHECK_LH": 0
+   }
+  },
+  {
+   "run_ms": 600
+  },
+  {
+   "set": {
+    "L:A32NX_BTN_CHECK_LH": 1
+   }
+  },
+  {
+   "run_ms": 200
+  },
+  {
+   "set": {
+    "L:A32NX_BTN_CHECK_LH": 0
+   }
+  },
+  {
+   "run_ms": 600
+  },
+  {
+   "snapshot": "bs-on-beacon"
+  },
+  {
+   "set": {
+    "A:LIGHT BEACON": 1
+   }
+  },
+  {
+   "run_ms": 500
+  },
+  {
+   "snapshot": "bs-on-complete"
+  },
+  {
+   "set": {
+    "L:A32NX_BTN_CHECK_LH": 1
+   }
+  },
+  {
+   "run_ms": 200
+  },
+  {
+   "set": {
+    "L:A32NX_BTN_CHECK_LH": 0
+   }
+  },
+  {
+   "run_ms": 600
+  },
+  {
+   "set": {
+    "L:A32NX_BTN_CL": 1
+   }
+  },
+  {
+   "run_ms": 200
+  },
+  {
+   "set": {
+    "L:A32NX_BTN_CL": 0
+   }
+  },
+  {
+   "run_ms": 600
+  },
+  {
+   "snapshot": "menu-as"
+  },
+  {
+   "set": {
+    "L:A32NX_BTN_UP": 1
+   }
+  },
+  {
+   "run_ms": 200
+  },
+  {
+   "set": {
+    "L:A32NX_BTN_UP": 0
+   }
+  },
+  {
+   "run_ms": 600
+  },
+  {
+   "set": {
+    "L:A32NX_BTN_CHECK_LH": 1
+   }
+  },
+  {
+   "run_ms": 200
+  },
+  {
+   "set": {
+    "L:A32NX_BTN_CHECK_LH": 0
+   }
+  },
+  {
+   "run_ms": 600
+  },
+  {
+   "snapshot": "bs-reopened-on-reset"
+  },
+  {
+   "set": {
+    "L:A32NX_BTN_CHECK_LH": 1
+   }
+  },
+  {
+   "run_ms": 200
+  },
+  {
+   "set": {
+    "L:A32NX_BTN_CHECK_LH": 0
+   }
+  },
+  {
+   "run_ms": 600
+  },
+  {
+   "snapshot": "bs-reset"
+  },
+  {
+   "set": {
+    "L:A32NX_BTN_CHECK_LH": 1
+   }
+  },
+  {
+   "run_ms": 200
+  },
+  {
+   "set": {
+    "L:A32NX_BTN_CHECK_LH": 0
+   }
+  },
+  {
+   "run_ms": 600
+  },
+  {
+   "set": {
+    "L:A32NX_BTN_CHECK_LH": 1
+   }
+  },
+  {
+   "run_ms": 200
+  },
+  {
+   "set": {
+    "L:A32NX_BTN_CHECK_LH": 0
+   }
+  },
+  {
+   "run_ms": 600
+  },
+  {
+   "snapshot": "bs-on-complete-2"
+  },
+  {
+   "set": {
+    "L:A32NX_BTN_CHECK_LH": 1
+   }
+  },
+  {
+   "run_ms": 200
+  },
+  {
+   "set": {
+    "L:A32NX_BTN_CHECK_LH": 0
+   }
+  },
+  {
+   "run_ms": 600
+  },
+  {
+   "set": {
+    "L:A32NX_BTN_CL": 1
+   }
+  },
+  {
+   "run_ms": 200
+  },
+  {
+   "set": {
+    "L:A32NX_BTN_CL": 0
+   }
+  },
+  {
+   "run_ms": 600
+  },
+  {
+   "snapshot": "menu-as-2"
+  },
+  {
+   "set": {
+    "L:A32NX_BTN_CHECK_LH": 1
+   }
+  },
+  {
+   "run_ms": 200
+  },
+  {
+   "set": {
+    "L:A32NX_BTN_CHECK_LH": 0
+   }
+  },
+  {
+   "run_ms": 600
+  },
+  {
+   "snapshot": "as-open"
+  },
+  {
+   "set": {
+    "L:A32NX_BTN_CHECK_LH": 1
+   }
+  },
+  {
+   "run_ms": 200
+  },
+  {
+   "set": {
+    "L:A32NX_BTN_CHECK_LH": 0
+   }
+  },
+  {
+   "run_ms": 600
+  },
+  {
+   "set": {
+    "L:A32NX_BTN_CHECK_LH": 1
+   }
+  },
+  {
+   "run_ms": 200
+  },
+  {
+   "set": {
+    "L:A32NX_BTN_CHECK_LH": 0
+   }
+  },
+  {
+   "run_ms": 600
+  },
+  {
+   "snapshot": "as-on-trim"
+  },
+  {
+   "set": {
+    "L:A32NX_SEC_1_RUDDER_ACTUAL_POSITION": 12884901888
+   }
+  },
+  {
+   "run_ms": 500
+  },
+  {
+   "snapshot": "as-on-complete"
+  },
+  {
+   "set": {
+    "L:A32NX_BTN_DOWN": 1
+   }
+  },
+  {
+   "run_ms": 200
+  },
+  {
+   "set": {
+    "L:A32NX_BTN_DOWN": 0
+   }
+  },
+  {
+   "run_ms": 600
+  },
+  {
+   "set": {
+    "L:A32NX_BTN_CHECK_LH": 1
+   }
+  },
+  {
+   "run_ms": 200
+  },
+  {
+   "set": {
+    "L:A32NX_BTN_CHECK_LH": 0
+   }
+  },
+  {
+   "run_ms": 600
+  },
+  {
+   "snapshot": "as-reset-incomplete"
+  },
+  {
+   "set": {
+    "L:A32NX_BTN_CHECK_LH": 1
+   }
+  },
+  {
+   "run_ms": 200
+  },
+  {
+   "set": {
+    "L:A32NX_BTN_CHECK_LH": 0
+   }
+  },
+  {
+   "run_ms": 600
+  },
+  {
+   "set": {
+    "L:A32NX_BTN_CHECK_LH": 1
+   }
+  },
+  {
+   "run_ms": 200
+  },
+  {
+   "set": {
+    "L:A32NX_BTN_CHECK_LH": 0
+   }
+  },
+  {
+   "run_ms": 600
+  },
+  {
+   "snapshot": "as-on-complete-2"
+  },
+  {
+   "set": {
+    "L:A32NX_BTN_CHECK_LH": 1
+   }
+  },
+  {
+   "run_ms": 200
+  },
+  {
+   "set": {
+    "L:A32NX_BTN_CHECK_LH": 0
+   }
+  },
+  {
+   "run_ms": 600
+  },
+  {
+   "set": {
+    "L:A32NX_BTN_CL": 1
+   }
+  },
+  {
+   "run_ms": 200
+  },
+  {
+   "set": {
+    "L:A32NX_BTN_CL": 0
+   }
+  },
+  {
+   "run_ms": 600
+  },
+  {
+   "snapshot": "menu-taxi"
+  },
+  {
+   "set": {
+    "L:A32NX_BTN_CHECK_LH": 1
+   }
+  },
+  {
+   "run_ms": 200
+  },
+  {
+   "set": {
+    "L:A32NX_BTN_CHECK_LH": 0
+   }
+  },
+  {
+   "run_ms": 600
+  },
+  {
+   "set": {
+    "L:A32NX_BTN_CHECK_LH": 1
+   }
+  },
+  {
+   "run_ms": 200
+  },
+  {
+   "set": {
+    "L:A32NX_BTN_CHECK_LH": 0
+   }
+  },
+  {
+   "run_ms": 600
+  },
+  {
+   "set": {
+    "L:A32NX_BTN_CHECK_LH": 1
+   }
+  },
+  {
+   "run_ms": 200
+  },
+  {
+   "set": {
+    "L:A32NX_BTN_CHECK_LH": 0
+   }
+  },
+  {
+   "run_ms": 600
+  },
+  {
+   "set": {
+    "L:A32NX_BTN_CHECK_LH": 1
+   }
+  },
+  {
+   "run_ms": 200
+  },
+  {
+   "set": {
+    "L:A32NX_BTN_CHECK_LH": 0
+   }
+  },
+  {
+   "run_ms": 600
+  },
+  {
+   "snapshot": "taxi-on-spoilers"
+  },
+  {
+   "set": {
+    "L:A32NX_FCDC_1_DISCRETE_WORD_4": 14172422144,
+    "L:A32NX_FCDC_2_DISCRETE_WORD_4": 14172422144
+   }
+  },
+  {
+   "run_ms": 500
+  },
+  {
+   "set": {
+    "L:A32NX_FLAPS_HANDLE_INDEX": 2
+   }
+  },
+  {
+   "run_ms": 500
+  },
+  {
+   "set": {
+    "L:A32NX_AUTOBRAKES_ARMED_MODE": 6
+   }
+  },
+  {
+   "run_ms": 500
+  },
+  {
+   "snapshot": "taxi-on-toconfig"
+  },
+  {
+   "set": {
+    "L:A32NX_BTN_TOCONFIG": 1
+   }
+  },
+  {
+   "run_ms": 200
+  },
+  {
+   "set": {
+    "L:A32NX_BTN_TOCONFIG": 0
+   }
+  },
+  {
+   "run_ms": 1600
+  },
+  {
+   "set": {
+    "L:A32NX_BTN_DOWN": 1
+   }
+  },
+  {
+   "run_ms": 200
+  },
+  {
+   "set": {
+    "L:A32NX_BTN_DOWN": 0
+   }
+  },
+  {
+   "run_ms": 600
+  },
+  {
+   "snapshot": "taxi-on-complete"
+  },
+  {
+   "set": {
+    "L:A32NX_BTN_CHECK_LH": 1
+   }
+  },
+  {
+   "run_ms": 200
+  },
+  {
+   "set": {
+    "L:A32NX_BTN_CHECK_LH": 0
+   }
+  },
+  {
+   "run_ms": 600
+  },
+  {
+   "set": {
+    "L:A32NX_BTN_CL": 1
+   }
+  },
+  {
+   "run_ms": 200
+  },
+  {
+   "set": {
+    "L:A32NX_BTN_CL": 0
+   }
+  },
+  {
+   "run_ms": 600
+  },
+  {
+   "snapshot": "menu-lineup"
+  },
+  {
+   "set": {
+    "L:A32NX_BTN_CHECK_LH": 1
+   }
+  },
+  {
+   "run_ms": 200
+  },
+  {
+   "set": {
+    "L:A32NX_BTN_CHECK_LH": 0
+   }
+  },
+  {
+   "run_ms": 600
+  },
+  {
+   "set": {
+    "L:A32NX_BTN_CHECK_LH": 1
+   }
+  },
+  {
+   "run_ms": 200
+  },
+  {
+   "set": {
+    "L:A32NX_BTN_CHECK_LH": 0
+   }
+  },
+  {
+   "run_ms": 600
+  },
+  {
+   "set": {
+    "L:A32NX_BTN_CHECK_LH": 1
+   }
+  },
+  {
+   "run_ms": 200
+  },
+  {
+   "set": {
+    "L:A32NX_BTN_CHECK_LH": 0
+   }
+  },
+  {
+   "run_ms": 600
+  },
+  {
+   "snapshot": "lineup-on-complete"
+  },
+  {
+   "set": {
+    "L:A32NX_BTN_CHECK_LH": 1
+   }
+  },
+  {
+   "run_ms": 200
+  },
+  {
+   "set": {
+    "L:A32NX_BTN_CHECK_LH": 0
+   }
+  },
+  {
+   "run_ms": 600
+  },
+  {
+   "set": {
+    "L:A32NX_BTN_CL": 1
+   }
+  },
+  {
+   "run_ms": 200
+  },
+  {
+   "set": {
+    "L:A32NX_BTN_CL": 0
+   }
+  },
+  {
+   "run_ms": 600
+  },
+  {
+   "snapshot": "menu-atod"
+  },
+  {
+   "set": {
+    "L:A32NX_BTN_CHECK_LH": 1
+   }
+  },
+  {
+   "run_ms": 200
+  },
+  {
+   "set": {
+    "L:A32NX_BTN_CHECK_LH": 0
+   }
+  },
+  {
+   "run_ms": 600
+  },
+  {
+   "snapshot": "atod-activate"
+  },
+  {
+   "set": {
+    "L:A32NX_BTN_DOWN": 1
+   }
+  },
+  {
+   "run_ms": 200
+  },
+  {
+   "set": {
+    "L:A32NX_BTN_DOWN": 0
+   }
+  },
+  {
+   "run_ms": 600
+  },
+  {
+   "snapshot": "atod-page-clear"
+  },
+  {
+   "set": {
+    "L:A32NX_BTN_UP": 1
+   }
+  },
+  {
+   "run_ms": 200
+  },
+  {
+   "set": {
+    "L:A32NX_BTN_UP": 0
+   }
+  },
+  {
+   "run_ms": 600
+  },
+  {
+   "snapshot": "atod-back-activate"
+  },
+  {
+   "set": {
+    "L:A32NX_BTN_CHECK_LH": 1
+   }
+  },
+  {
+   "run_ms": 200
+  },
+  {
+   "set": {
+    "L:A32NX_BTN_CHECK_LH": 0
+   }
+  },
+  {
+   "run_ms": 600
+  },
+  {
+   "snapshot": "atod-activated"
+  },
+  {
+   "set": {
+    "L:A32NX_BTN_CHECK_LH": 1
+   }
+  },
+  {
+   "run_ms": 200
+  },
+  {
+   "set": {
+    "L:A32NX_BTN_CHECK_LH": 0
+   }
+  },
+  {
+   "run_ms": 600
+  },
+  {
+   "snapshot": "atod-untick"
+  },
+  {
+   "set": {
+    "L:A32NX_BTN_CHECK_LH": 1
+   }
+  },
+  {
+   "run_ms": 200
+  },
+  {
+   "set": {
+    "L:A32NX_BTN_CHECK_LH": 0
+   }
+  },
+  {
+   "run_ms": 600
+  },
+  {
+   "set": {
+    "L:A32NX_BTN_CHECK_LH": 1
+   }
+  },
+  {
+   "run_ms": 200
+  },
+  {
+   "set": {
+    "L:A32NX_BTN_CHECK_LH": 0
+   }
+  },
+  {
+   "run_ms": 600
+  },
+  {
+   "snapshot": "atod-on-proc-complete"
+  },
+  {
+   "set": {
+    "L:A32NX_BTN_UP": 1
+   }
+  },
+  {
+   "run_ms": 200
+  },
+  {
+   "set": {
+    "L:A32NX_BTN_UP": 0
+   }
+  },
+  {
+   "run_ms": 600
+  },
+  {
+   "snapshot": "atod-up"
+  },
+  {
+   "set": {
+    "L:A32NX_BTN_DOWN": 1
+   }
+  },
+  {
+   "run_ms": 200
+  },
+  {
+   "set": {
+    "L:A32NX_BTN_DOWN": 0
+   }
+  },
+  {
+   "run_ms": 600
+  },
+  {
+   "snapshot": "atod-down"
+  },
+  {
+   "set": {
+    "L:A32NX_BTN_CHECK_LH": 1
+   }
+  },
+  {
+   "run_ms": 200
+  },
+  {
+   "set": {
+    "L:A32NX_BTN_CHECK_LH": 0
+   }
+  },
+  {
+   "run_ms": 600
+  },
+  {
+   "snapshot": "atod-on-recall"
+  },
+  {
+   "set": {
+    "L:A32NX_BTN_CHECK_LH": 1
+   }
+  },
+  {
+   "run_ms": 200
+  },
+  {
+   "set": {
+    "L:A32NX_BTN_CHECK_LH": 0
+   }
+  },
+  {
+   "run_ms": 600
+  },
+  {
+   "snapshot": "atod-recalled"
+  },
+  {
+   "set": {
+    "L:A32NX_BTN_CHECK_LH": 1
+   }
+  },
+  {
+   "run_ms": 200
+  },
+  {
+   "set": {
+    "L:A32NX_BTN_CHECK_LH": 0
+   }
+  },
+  {
+   "run_ms": 600
+  },
+  {
+   "snapshot": "atod-complete-2"
+  },
+  {
+   "set": {
+    "L:A32NX_BTN_DOWN": 1
+   }
+  },
+  {
+   "run_ms": 200
+  },
+  {
+   "set": {
+    "L:A32NX_BTN_DOWN": 0
+   }
+  },
+  {
+   "run_ms": 600
+  },
+  {
+   "snapshot": "atod-page-clear-2"
+  },
+  {
+   "set": {
+    "L:A32NX_BTN_CHECK_LH": 1
+   }
+  },
+  {
+   "run_ms": 200
+  },
+  {
+   "set": {
+    "L:A32NX_BTN_CHECK_LH": 0
+   }
+  },
+  {
+   "run_ms": 600
+  },
+  {
+   "snapshot": "menu-approach"
+  },
+  {
+   "set": {
+    "L:A32NX_BTN_CHECK_LH": 1
+   }
+  },
+  {
+   "run_ms": 200
+  },
+  {
+   "set": {
+    "L:A32NX_BTN_CHECK_LH": 0
+   }
+  },
+  {
+   "run_ms": 600
+  },
+  {
+   "snapshot": "appr-open"
+  },
+  {
+   "set": {
+    "L:A32NX_BTN_CHECK_LH": 1
+   }
+  },
+  {
+   "run_ms": 200
+  },
+  {
+   "set": {
+    "L:A32NX_BTN_CHECK_LH": 0
+   }
+  },
+  {
+   "run_ms": 600
+  },
+  {
+   "set": {
+    "L:A32NX_BTN_CHECK_LH": 1
+   }
+  },
+  {
+   "run_ms": 200
+  },
+  {
+   "set": {
+    "L:A32NX_BTN_CHECK_LH": 0
+   }
+  },
+  {
+   "run_ms": 600
+  },
+  {
+   "set": {
+    "L:A32NX_BTN_CHECK_LH": 1
+   }
+  },
+  {
+   "run_ms": 200
+  },
+  {
+   "set": {
+    "L:A32NX_BTN_CHECK_LH": 0
+   }
+  },
+  {
+   "run_ms": 600
+  },
+  {
+   "snapshot": "appr-on-complete"
+  },
+  {
+   "set": {
+    "L:A32NX_BTN_CHECK_LH": 1
+   }
+  },
+  {
+   "run_ms": 200
+  },
+  {
+   "set": {
+    "L:A32NX_BTN_CHECK_LH": 0
+   }
+  },
+  {
+   "run_ms": 600
+  },
+  {
+   "set": {
+    "L:A32NX_BTN_CL": 1
+   }
+  },
+  {
+   "run_ms": 200
+  },
+  {
+   "set": {
+    "L:A32NX_BTN_CL": 0
+   }
+  },
+  {
+   "run_ms": 600
+  },
+  {
+   "snapshot": "menu-landing"
+  },
+  {
+   "set": {
+    "L:A32NX_BTN_CHECK_LH": 1
+   }
+  },
+  {
+   "run_ms": 200
+  },
+  {
+   "set": {
+    "L:A32NX_BTN_CHECK_LH": 0
+   }
+  },
+  {
+   "run_ms": 600
+  },
+  {
+   "snapshot": "ldg-on-flaps"
+  },
+  {
+   "set": {
+    "L:A32NX_FLAPS_HANDLE_INDEX": 4
+   }
+  },
+  {
+   "run_ms": 500
+  },
+  {
+   "snapshot": "ldg-on-complete"
+  },
+  {
+   "set": {
+    "L:A32NX_BTN_CHECK_LH": 1
+   }
+  },
+  {
+   "run_ms": 200
+  },
+  {
+   "set": {
+    "L:A32NX_BTN_CHECK_LH": 0
+   }
+  },
+  {
+   "run_ms": 600
+  },
+  {
+   "set": {
+    "L:A32NX_BTN_CL": 1
+   }
+  },
+  {
+   "run_ms": 200
+  },
+  {
+   "set": {
+    "L:A32NX_BTN_CL": 0
+   }
+  },
+  {
+   "run_ms": 600
+  },
+  {
+   "snapshot": "menu-parking"
+  },
+  {
+   "set": {
+    "L:A32NX_BTN_CHECK_LH": 1
+   }
+  },
+  {
+   "run_ms": 200
+  },
+  {
+   "set": {
+    "L:A32NX_BTN_CHECK_LH": 0
+   }
+  },
+  {
+   "run_ms": 600
+  },
+  {
+   "snapshot": "park-open"
+  },
+  {
+   "set": {
+    "L:A32NX_BTN_CHECK_LH": 1
+   }
+  },
+  {
+   "run_ms": 200
+  },
+  {
+   "set": {
+    "L:A32NX_BTN_CHECK_LH": 0
+   }
+  },
+  {
+   "run_ms": 600
+  },
+  {
+   "set": {
+    "L:A32NX_BTN_CHECK_LH": 1
+   }
+  },
+  {
+   "run_ms": 200
+  },
+  {
+   "set": {
+    "L:A32NX_BTN_CHECK_LH": 0
+   }
+  },
+  {
+   "run_ms": 600
+  },
+  {
+   "snapshot": "park-on-pumps"
+  },
+  {
+   "set": {
+    "A:FUELSYSTEM PUMP ACTIVE:1": 0,
+    "A:FUELSYSTEM PUMP ACTIVE:2": 0,
+    "A:FUELSYSTEM PUMP ACTIVE:3": 0,
+    "A:FUELSYSTEM PUMP ACTIVE:4": 0,
+    "A:FUELSYSTEM PUMP ACTIVE:5": 0,
+    "A:FUELSYSTEM PUMP ACTIVE:6": 0,
+    "A:FUELSYSTEM PUMP ACTIVE:7": 0,
+    "A:FUELSYSTEM PUMP ACTIVE:8": 0
+   }
+  },
+  {
+   "run_ms": 500
+  },
+  {
+   "snapshot": "park-on-complete"
+  },
+  {
+   "set": {
+    "L:A32NX_BTN_CHECK_LH": 1
+   }
+  },
+  {
+   "run_ms": 200
+  },
+  {
+   "set": {
+    "L:A32NX_BTN_CHECK_LH": 0
+   }
+  },
+  {
+   "run_ms": 600
+  },
+  {
+   "set": {
+    "L:A32NX_BTN_CL": 1
+   }
+  },
+  {
+   "run_ms": 200
+  },
+  {
+   "set": {
+    "L:A32NX_BTN_CL": 0
+   }
+  },
+  {
+   "run_ms": 600
+  },
+  {
+   "snapshot": "menu-securing"
+  },
+  {
+   "set": {
+    "L:A32NX_BTN_CHECK_LH": 1
+   }
+  },
+  {
+   "run_ms": 200
+  },
+  {
+   "set": {
+    "L:A32NX_BTN_CHECK_LH": 0
+   }
+  },
+  {
+   "run_ms": 600
+  },
+  {
+   "snapshot": "sec-open"
+  },
+  {
+   "set": {
+    "L:PUSH_OVHD_OXYGEN_CREW": 1
+   }
+  },
+  {
+   "run_ms": 500
+  },
+  {
+   "snapshot": "sec-oxygen"
+  },
+  {
+   "set": {
+    "L:XMLVAR_SWITCH_OVHD_INTLT_EMEREXIT_Position": 2
+   }
+  },
+  {
+   "run_ms": 500
+  },
+  {
+   "snapshot": "sec-emer-exit"
+  },
+  {
+   "set": {
+    "L:A32NX_BTN_CHECK_LH": 1
+   }
+  },
+  {
+   "run_ms": 200
+  },
+  {
+   "set": {
+    "L:A32NX_BTN_CHECK_LH": 0
+   }
+  },
+  {
+   "run_ms": 600
+  },
+  {
+   "set": {
+    "L:A32NX_BTN_CHECK_LH": 1
+   }
+  },
+  {
+   "run_ms": 200
+  },
+  {
+   "set": {
+    "L:A32NX_BTN_CHECK_LH": 0
+   }
+  },
+  {
+   "run_ms": 600
+  },
+  {
+   "snapshot": "sec-on-complete"
+  },
+  {
+   "set": {
+    "L:A32NX_BTN_CHECK_LH": 1
+   }
+  },
+  {
+   "run_ms": 200
+  },
+  {
+   "set": {
+    "L:A32NX_BTN_CHECK_LH": 0
+   }
+  },
+  {
+   "run_ms": 600
+  },
+  {
+   "set": {
+    "L:A32NX_BTN_CL": 1
+   }
+  },
+  {
+   "run_ms": 200
+  },
+  {
+   "set": {
+    "L:A32NX_BTN_CL": 0
+   }
+  },
+  {
+   "run_ms": 600
+  },
+  {
+   "snapshot": "menu-all-complete"
+  },
+  {
+   "set": {
+    "L:A32NX_BTN_DOWN": 1
+   }
+  },
+  {
+   "run_ms": 200
+  },
+  {
+   "set": {
+    "L:A32NX_BTN_DOWN": 0
+   }
+  },
+  {
+   "run_ms": 600
+  },
+  {
+   "set": {
+    "L:A32NX_BTN_DOWN": 1
+   }
+  },
+  {
+   "run_ms": 200
+  },
+  {
+   "set": {
+    "L:A32NX_BTN_DOWN": 0
+   }
+  },
+  {
+   "run_ms": 600
+  },
+  {
+   "snapshot": "menu-on-as"
+  },
+  {
+   "set": {
+    "L:A32NX_BTN_CHECK_LH": 1
+   }
+  },
+  {
+   "run_ms": 200
+  },
+  {
+   "set": {
+    "L:A32NX_BTN_CHECK_LH": 0
+   }
+  },
+  {
+   "run_ms": 600
+  },
+  {
+   "snapshot": "as-reopened-on-reset"
+  },
+  {
+   "set": {
+    "L:A32NX_BTN_UP": 1
+   }
+  },
+  {
+   "run_ms": 200
+  },
+  {
+   "set": {
+    "L:A32NX_BTN_UP": 0
+   }
+  },
+  {
+   "run_ms": 600
+  },
+  {
+   "snapshot": "as-reset-up"
+  },
+  {
+   "set": {
+    "L:A32NX_BTN_DOWN": 1
+   }
+  },
+  {
+   "run_ms": 200
+  },
+  {
+   "set": {
+    "L:A32NX_BTN_DOWN": 0
+   }
+  },
+  {
+   "run_ms": 600
+  },
+  {
+   "set": {
+    "L:A32NX_BTN_CHECK_LH": 1
+   }
+  },
+  {
+   "run_ms": 200
+  },
+  {
+   "set": {
+    "L:A32NX_BTN_CHECK_LH": 0
+   }
+  },
+  {
+   "run_ms": 600
+  },
+  {
+   "snapshot": "as-reset-later"
+  },
+  {
+   "set": {
+    "L:A32NX_BTN_CLR": 1
+   }
+  },
+  {
+   "run_ms": 200
+  },
+  {
+   "set": {
+    "L:A32NX_BTN_CLR": 0
+   }
+  },
+  {
+   "run_ms": 600
+  },
+  {
+   "snapshot": "clr-to-menu"
+  },
+  {
+   "set": {
+    "L:A32NX_BTN_CLR": 1
+   }
+  },
+  {
+   "run_ms": 200
+  },
+  {
+   "set": {
+    "L:A32NX_BTN_CLR": 0
+   }
+  },
+  {
+   "run_ms": 600
+  },
+  {
+   "set": {
+    "L:A32NX_BTN_CL": 1
+   }
+  },
+  {
+   "run_ms": 200
+  },
+  {
+   "set": {
+    "L:A32NX_BTN_CL": 0
+   }
+  },
+  {
+   "run_ms": 600
+  },
+  {
+   "snapshot": "menu-after-clr"
+  },
+  {
+   "set": {
+    "L:A32NX_BTN_CL": 1
+   }
+  },
+  {
+   "run_ms": 200
+  },
+  {
+   "set": {
+    "L:A32NX_BTN_CL": 0
+   }
+  },
+  {
+   "run_ms": 600
+  },
+  {
+   "run_ms": 500
+  }
+ ]
+}

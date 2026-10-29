@@ -1,0 +1,18 @@
+.efbn-back{position:fixed;left:0;top:0;right:0;bottom:0;z-index:70;background:transparent;}
+.efbn-back.dim{background:rgba(0,0,0,0.5);}
+select.efbn-sel{display:inline-flex;align-items:center;position:relative;overflow:hidden;}
+.efbn-sel-v{display:block;flex:0 1 auto;min-width:0;margin:0 18px 0 4px;overflow:hidden;white-space:pre;}
+.efbn-sel-t{display:block;overflow:hidden;}
+.efbn-sel-o{display:block;height:0;overflow:hidden;visibility:hidden;}
+.efbn-sel-a{position:absolute;top:50%;right:4.5px;width:8px;height:4px;margin-top:-2px;overflow:visible;}
+.efbn-modal{position:fixed;z-index:72;left:415px;top:330px;width:600px;box-sizing:border-box;background:#2f3135;border:1px solid rgba(255,255,255,0.12);border-radius:14px;padding:22px;box-shadow:0 10px 30px rgba(0,0,0,0.45);display:flex;flex-direction:column;gap:16px;font:600 15px 'Manrope','Segoe UI',sans-serif;color:#f2f2f2;}
+.efbn-modal-in{height:40px;box-sizing:border-box;border:1px solid rgba(255,255,255,0.12);border-radius:9px;background:#2c2e32;color:#f2f2f2;font:600 15px 'Manrope','Segoe UI',sans-serif;padding:0 12px;}
+.efbn-modal-b{display:flex;justify-content:flex-end;gap:10px;}
+.efbn-modal-b button{height:38px;padding:0 18px;border-radius:9px;border:1px solid rgba(255,255,255,0.1);background:#3a3c40;color:#fff;font:600 14px 'Manrope','Segoe UI',sans-serif;}
+.efbn-kb{position:fixed;z-index:80;left:0;right:0;bottom:0;padding:10px 12px 14px;background:rgba(30,31,34,0.97);border-top:1px solid rgba(255,255,255,0.12);display:flex;flex-direction:column;gap:8px;}
+.efbn-kb-row{display:flex;justify-content:center;gap:8px;}
+.efbn-key{width:84px;height:54px;flex:none;border:1px solid rgba(255,255,255,0.1);border-radius:9px;background:#3a3c40;color:#f2f2f2;font:600 19px 'Manrope','Segoe UI',sans-serif;padding:0;}
+.efbn-key.wide{width:126px;font-size:15px;}
+.efbn-key.space{width:520px;font-size:15px;}
+.efbn-key.on{border-color:#ff4d6a;}
+.efbn-key.go{background:linear-gradient(90deg,#f0703a,#ff3f7a);border-color:transparent;}

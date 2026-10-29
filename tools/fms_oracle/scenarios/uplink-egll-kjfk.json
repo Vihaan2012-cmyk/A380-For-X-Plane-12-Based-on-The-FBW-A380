@@ -1,0 +1,13 @@
+{
+  "name": "uplink-egll-kjfk",
+  "lat": 51.4706,
+  "lon": -0.4619,
+  "steps": [
+    { "uplink": "canned" },
+    { "run_ms": 10000 },
+    { "snapshot": "inserted" },
+    { "page": ["ACTIVE", "F-PLN"] },
+    { "run_ms": 3000 },
+    { "snapshot": "fpln-page" }
+  ]
+}

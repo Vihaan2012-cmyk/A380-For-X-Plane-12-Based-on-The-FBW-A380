@@ -1,0 +1,19 @@
+{
+  "name": "city-pair-procedures",
+  "lat": 51.4706,
+  "lon": -0.4619,
+  "steps": [
+    { "fms": "await fps.newCityPair('EGLL', 'KJFK', 'KBOS');" },
+    { "run_ms": 3000 },
+    { "fms": "const r = fps.active.availableOriginRunways.map((x) => x.ident).sort(); await fps.setOriginRunway(r[0]);" },
+    { "run_ms": 2000 },
+    { "fms": "const d = [...fps.active.availableDepartures].sort((a, b) => a.ident.localeCompare(b.ident)); if (d.length) await fps.setDepartureProcedure(d[0].databaseId);" },
+    { "run_ms": 2000 },
+    { "fms": "const a = [...fps.active.availableArrivals].sort((x, y) => x.ident.localeCompare(y.ident)); if (a.length) await fps.setArrival(a[0].databaseId);" },
+    { "run_ms": 2000 },
+    { "fms": "const p = [...fps.active.availableApproaches].sort((x, y) => x.ident.localeCompare(y.ident)); if (p.length) await fps.setApproach(p[0].databaseId);" },
+    { "fms": "if (fps.hasTemporary) await fps.temporaryInsert();" },
+    { "run_ms": 5000 },
+    { "snapshot": "procedures" }
+  ]
+}

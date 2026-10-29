@@ -1,0 +1,1 @@
+{ "extends": "../../tsconfig.area.json", "compilerOptions": { "baseUrl": "../..", "ignoreDeprecations": "6.0" }, "include": ["./*.ts", "../../../spec/check/self-globals.d.ts"] }

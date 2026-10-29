@@ -1,0 +1,12 @@
+{
+  "name": "xplane-js-tools",
+  "private": true,
+  "description": "Inventory, conversion and gate tools for JS Library for X-Plane",
+  "license": "GPL-3.0",
+  "dependencies": {
+    "prettier": "3.3.3",
+    "ts-morph": "28.0.0",
+    "typescript": "6.0.3"
+  },
+  "type": "module"
+}

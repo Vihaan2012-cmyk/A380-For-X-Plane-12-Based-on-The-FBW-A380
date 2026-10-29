@@ -1,0 +1,17 @@
+[package]
+name = "fap_pages"
+version = "0.1.0"
+edition = "2021"
+description = "Native FAP page trees built from the cids FapView, painted by the a380-displays DomDisplay"
+license = "GPL-3.0-or-later"
+publish = false
+
+[lib]
+doctest = false
+
+[dependencies]
+mfd_tree = { path = "../mfd_tree" }
+cids = { path = "../cids" }
+serde_json = "1"
+
+[workspace]

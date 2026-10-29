@@ -1,0 +1,24 @@
+{
+  "name": "altn-egll-kjfk",
+  "lat": 51.4706,
+  "lon": -0.4619,
+  "steps": [
+    { "uplink": "canned" },
+    { "run_ms": 5000 },
+    { "snapshot": "uplinked" },
+    { "fms": "await fps.setAlternate('KBOS');" },
+    { "run_ms": 2000 },
+    { "snapshot": "altn-kbos" },
+    { "fms": "await fps.enableAltn(10, 120);" },
+    { "fms": "await fps.temporaryInsert();" },
+    { "run_ms": 3000 },
+    { "snapshot": "altn-enabled" },
+    { "fms": "await fps.setAlternate('KEWR');" },
+    { "run_ms": 2000 },
+    { "snapshot": "altn-after-enable" },
+    { "fms": "await fps.newDest(6, 'KJFK');" },
+    { "fms": "await fps.temporaryInsert();" },
+    { "run_ms": 3000 },
+    { "snapshot": "new-dest" }
+  ]
+}

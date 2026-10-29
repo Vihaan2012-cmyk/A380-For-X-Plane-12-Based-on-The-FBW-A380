@@ -1,0 +1,14 @@
+[package]
+name = "cids"
+version = "0.1.0"
+edition = "2021"
+description = "A380 cabin intercommunication data system and flight attendant panel logic, as plain state machines"
+license = "GPL-3.0-or-later"
+publish = false
+
+[lib]
+doctest = false
+
+[dependencies]
+
+[workspace]

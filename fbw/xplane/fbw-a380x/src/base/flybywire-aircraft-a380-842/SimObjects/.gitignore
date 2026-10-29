@@ -1,0 +1,3 @@
+*.gltf
+*.glb
+**/model/*.bin

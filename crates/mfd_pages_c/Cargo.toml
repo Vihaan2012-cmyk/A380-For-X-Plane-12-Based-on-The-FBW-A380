@@ -1,0 +1,10 @@
+[package]
+name = "mfd_pages_c"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+mfd_tree = { path = "../mfd_tree" }
+mfd_pages_a = { path = "../mfd_pages_a" }
+
+[workspace]

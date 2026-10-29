@@ -1,0 +1,132 @@
+{
+ "updatedAt": "2026-10-22T12:00:00.000000000Z",
+ "servers": [],
+ "voiceServers": [],
+ "connections": {
+  "total": 3,
+  "supervisor": 0,
+  "atc": 0,
+  "observer": 0,
+  "pilot": 3,
+  "worldTour": 0,
+  "followMe": 0
+ },
+ "clients": {
+  "pilots": [
+   {
+    "id": 11,
+    "userId": 11,
+    "callsign": "TST510",
+    "serverId": "TEST",
+    "softwareTypeId": "test/win",
+    "softwareVersion": "1.0.0",
+    "rating": 2,
+    "createdAt": "2026-10-22T11:00:00.000Z",
+    "time": 3600,
+    "pilotSession": {
+     "simulatorId": "TEST",
+     "textureId": 1
+    },
+    "lastTrack": {
+     "altitude": 8000,
+     "altitudeDifference": 0,
+     "arrivalDistance": 30.0,
+     "departureDistance": 10.0,
+     "groundSpeed": 250,
+     "heading": 180,
+     "latitude": 43.5,
+     "longitude": 5.2,
+     "onGround": false,
+     "state": "Departing",
+     "timestamp": "2026-10-22T11:59:50.000Z",
+     "transponder": 2000,
+     "transponderMode": "C",
+     "time": 3590
+    },
+    "flightPlan": {
+     "id": 21,
+     "revision": 1,
+     "aircraftId": "A20N",
+     "aircraftNumber": 1,
+     "departureId": "LFML",
+     "arrivalId": "LFMN",
+     "alternativeId": "LFMT",
+     "alternative2Id": null,
+     "route": "DCT",
+     "remarks": "TEST",
+     "speed": "N0450",
+     "level": "F240",
+     "flightRules": "I",
+     "flightType": "S",
+     "eet": 2700,
+     "endurance": 9000,
+     "departureTime": 41400,
+     "actualDepartureTime": 41500,
+     "peopleOnBoard": 100,
+     "createdAt": "2026-10-22T11:00:00.000Z",
+     "aircraft": {
+      "icaoCode": "A20N",
+      "model": "A320neo",
+      "wakeTurbulence": "M",
+      "military": "N",
+      "description": "L2J"
+     },
+     "aircraftEquipments": "SDE2FGHIRWY",
+     "aircraftTransponderTypes": "LB1"
+    }
+   },
+   {
+    "id": 12,
+    "userId": 12,
+    "callsign": "TST620",
+    "serverId": "TEST",
+    "softwareTypeId": "test/win",
+    "softwareVersion": "1.0.0",
+    "rating": 2,
+    "createdAt": "2026-10-22T11:00:00.000Z",
+    "time": 3600,
+    "pilotSession": {
+     "simulatorId": "TEST",
+     "textureId": 1
+    },
+    "lastTrack": {
+     "altitude": 150,
+     "altitudeDifference": 0,
+     "arrivalDistance": 0.0,
+     "departureDistance": 0.0,
+     "groundSpeed": 0,
+     "heading": 315,
+     "latitude": 43.44,
+     "longitude": 5.22,
+     "onGround": true,
+     "state": "Boarding",
+     "timestamp": "2026-10-22T11:59:30.000Z",
+     "transponder": 7000,
+     "transponderMode": "S",
+     "time": 3570
+    },
+    "flightPlan": null
+   },
+   {
+    "id": 13,
+    "userId": 13,
+    "callsign": "TST730",
+    "serverId": "TEST",
+    "softwareTypeId": "test/win",
+    "softwareVersion": "1.0.0",
+    "rating": 2,
+    "createdAt": "2026-10-22T11:59:00.000Z",
+    "time": 60,
+    "pilotSession": {
+     "simulatorId": "TEST",
+     "textureId": 1
+    },
+    "lastTrack": null,
+    "flightPlan": null
+   }
+  ],
+  "atcs": [],
+  "followMe": [],
+  "observers": []
+ }
+}
