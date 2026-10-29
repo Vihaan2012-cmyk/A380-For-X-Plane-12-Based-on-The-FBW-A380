@@ -285,9 +285,6 @@ export const Liveries: FC<{ addon: Addon }> = ({ addon }) => {
         </div>
 
         <div className="flex flex-wrap items-center gap-3">
-          <Chip active onClick={() => undefined}>
-            Aircraft is A380
-          </Chip>
           {FACETS.map(({ key, label }) => (
             <FacetMenu
               key={key}
