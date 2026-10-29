@@ -23,14 +23,18 @@ PREVIEW_WIDTH = 960
 AIRLINES = [
     ("Air France", "France", "AF", "A380-861", "GP7270"),
     ("ANA", "Japan", "NH", "A380-841", "Trent 970"),
+    ("Asiana Airlines", "South Korea", "OZ", "A380-841", "Trent 970"),
     ("British Airways", "United Kingdom", "BA", "A380-841", "Trent 970"),
     ("China Southern", "China", "CZ", "A380-841", "Trent 970"),
     ("Emirates", "United Arab Emirates", "EK", "A380-861", "GP7270"),
     ("Etihad", "United Arab Emirates", "EY", "A380-861", "GP7270"),
+    ("Global Airlines", "United Kingdom", "", "A380-841", "Trent 970"),
+    ("Korean Air", "South Korea", "KE", "A380-861", "GP7270"),
     ("Lufthansa", "Germany", "LH", "A380-841", "Trent 970"),
     ("Qantas", "Australia", "QF", "A380-842", "Trent 972"),
     ("Qatar Airways", "Qatar", "QR", "A380-861", "GP7270"),
     ("Singapore Airlines", "Singapore", "SQ", "A380-841", "Trent 970"),
+    ("Thai Airways", "Thailand", "TG", "A380-841", "Trent 970"),
 ]
 REGISTRATION = re.compile(r"^(?:[A-Z0-9]{1,2}-[A-Z0-9]{2,5}|JA\d{3}[A-Z]|N\d{1,5}[A-Z]{0,2})$")
 
