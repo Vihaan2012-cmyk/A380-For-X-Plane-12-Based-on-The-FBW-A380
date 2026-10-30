@@ -200,15 +200,16 @@ mod tests {
 
     /// Every `find` above must still match its built file exactly once, or the
     /// patch runs unchanged and the ECL silently goes back to being
-    /// one-click-per-session. Skipped (not failed) where the build is absent,
-    /// same as the `--ignored` tests that need it.
+    /// one-click-per-session. Skipped (not failed) unless FBW_HTML_UI names
+    /// the installed aircraft's html_ui (the API-renamed build these patches
+    /// target, not FlyByWire's own `HTML_UI` build below).
     #[test]
     fn every_ecl_patch_matches_its_built_file_exactly_once() {
-        let root = Path::new(HTML_UI);
-        if !root.is_dir() {
-            println!("skipped: {HTML_UI} is not built (docs/js-build.md)");
+        let Some(root) = std::env::var_os("FBW_HTML_UI").map(PathBuf::from) else {
+            println!("skipped: FBW_HTML_UI does not name the html_ui the patches run on");
             return;
-        }
+        };
+        let root = root.as_path();
         for patch in source_patches() {
             let file = root.join(patch.path.trim_start_matches('/').replace('/', "\\"));
             let text = match std::fs::read_to_string(&file) {

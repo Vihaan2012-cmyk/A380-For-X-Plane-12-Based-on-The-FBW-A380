@@ -48,7 +48,8 @@ async function opFromLivery(livery, fileValues) {
   let prev = {};
   try { prev = JSON.parse(settings['xphfbw.liveryValues'] || '{}'); } catch {}
   const op = opFind(livery);
-  const wanted = { ...(op ? op.values : {}), ...(fileValues || {}) };
+  const settable = Object.fromEntries(Object.entries(fileValues || {}).filter(([k]) => k.startsWith('xphfbw.') || k in DEFAULTS));
+  const wanted = { ...(op ? op.values : {}), ...settable };
   const out = {};
   const mine = opUserKeys();
   const untouched = (k) => !mine.includes(k) && (opCurrent(k) === String(DEFAULTS[k] ?? '') || (k in prev && String(prev[k]) === opCurrent(k)));

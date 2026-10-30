@@ -58,6 +58,16 @@ impl Correctness {
         }
     }
 
+    /// A new spawn: fresh aspects and failures, keeping the fbw/failure/
+    /// datarefs and commands, which a second registration could not create
+    /// and dropping the first would remove.
+    pub fn rebuild(&mut self, vars: &mut Vars, start_state: StartState) {
+        self.start_state = start_state;
+        self.aspects = aspects::a380(vars);
+        self.failures = Failures::new();
+        self.ticked = false;
+    }
+
     /// The previous tick's post_tick, and what its key events do.
     pub fn after_previous_tick(&mut self, vars: &mut Vars) {
         if !self.ticked {

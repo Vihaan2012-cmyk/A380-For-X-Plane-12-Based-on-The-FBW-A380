@@ -1,4 +1,4 @@
-"""usage: bake_fbw_ao.py <aircraft objects dir> <FBW MSFS texture dir> <backup dir> [--only NAME,...] [--out DIR] [--text-work DIR,...]
+"""usage: bake_fbw_ao.py <aircraft objects dir> <FBW MSFS texture dir> <backup dir> [--only NAME,...] [--out DIR] [--text-work DIR,...] [--copies JSON] [--local X] [--global X] [--floor X]
 
 Puts FlyByWire's own ambient occlusion (the red channel of each material's MSFS COMP texture) into the
 X-Plane albedo it belongs to, the way MSFS shows it: MSFS applies that occlusion to ambient light only, so
@@ -12,6 +12,7 @@ occlusion, since FBW's map describes the panel under it, not the text."""
 
 import io
 import json
+import os
 import re
 import shutil
 import sys
@@ -20,9 +21,9 @@ from pathlib import Path
 import numpy as np
 from PIL import Image, ImageFilter
 
-LOCAL = 1.0
-GLOBAL = 0.40
-FLOOR = 0.22
+LOCAL = float(os.environ.get("BAKE_AO_LOCAL", 1.0))
+GLOBAL = float(os.environ.get("BAKE_AO_GLOBAL", 0.40))
+FLOOR = float(os.environ.get("BAKE_AO_FLOOR", 0.22))
 BLUR_FRACTION = 0.03
 SKIP = re.compile(r"DECAL|EMIS|TXTLIT|_LIT|DISPLAY|GLASS|BLUR|SCREEN|KEYBOARD", re.I)
 
@@ -159,5 +160,8 @@ if __name__ == "__main__":
     out = a[a.index("--out") + 1] if "--out" in a else None
     works = a[a.index("--text-work") + 1].split(",") if "--text-work" in a else ()
     copies = a[a.index("--copies") + 1] if "--copies" in a else None
-    pos = [x for i, x in enumerate(a) if not x.startswith("--") and (i == 0 or a[i - 1] not in ("--only", "--out", "--text-work", "--copies"))]
+    for flag, name in (("--local", "LOCAL"), ("--global", "GLOBAL"), ("--floor", "FLOOR")):
+        if flag in a:
+            globals()[name] = float(a[a.index(flag) + 1])
+    pos = [x for i, x in enumerate(a) if not x.startswith("--") and (i == 0 or a[i - 1] not in ("--only", "--out", "--text-work", "--copies", "--local", "--global", "--floor"))]
     main(pos[0], pos[1], pos[2], only, out, works, copies)

@@ -29,6 +29,7 @@ pub mod xp_names;
 mod baro_link;
 mod cockpit_tweaks;
 mod encoder_accel;
+mod false_glideslope;
 pub mod user_prefs;
 pub mod remote;
 pub mod xphfbw_bridge;
@@ -1511,6 +1512,9 @@ struct Plugin {
     gaps_logged: bool,
     #[cfg(feature = "js")]
     xphfbw: Option<xphfbw_host::XphfbwHost>,
+    /// Times XPHFBW was started again after its process went away.
+    #[cfg(feature = "js")]
+    xphfbw_relaunches: u32,
     /// The `xphfbw/` status datarefs, its three commands, and the "XPHFBW
     /// settings" aircraft menu entry (docs/briefs/xphfbw-js-bridge.md,
     /// "Custom datarefs and commands").
@@ -1574,6 +1578,28 @@ pub(crate) fn hardware_axis(avail: c_int, value: f32) -> Option<f64> {
     (avail != 0).then_some(value as f64)
 }
 
+/// An axis read as centred until it first moves: at load X-Plane reports the
+/// yaw axis at a value the stick never sent (13.6%), which steered the nosewheel.
+#[derive(Clone, Copy, Default)]
+pub(crate) struct WakingAxis {
+    start: Option<f64>,
+    moved: bool,
+}
+
+impl WakingAxis {
+    pub(crate) fn read(&mut self, value: Option<f64>) -> Option<f64> {
+        let v = value?;
+        if !self.moved {
+            match self.start {
+                None => self.start = Some(v),
+                Some(s) if (v - s).abs() > 1e-4 => self.moved = true,
+                Some(_) => {}
+            }
+        }
+        Some(if self.moved { v } else { 0. })
+    }
+}
+
 pub(crate) fn latch_axes(seen: &mut [bool], avail: &[c_int]) {
     for (s, a) in seen.iter_mut().zip(avail) {
         *s |= *a != 0;
@@ -1587,6 +1613,7 @@ struct PrimRefs {
     /// `sim/joystick/yoke_heading_ratio` (`read()`'s comment says why).
     yaw_axis_avail: Option<DataRef>,
     yaw_axis_seen: std::cell::Cell<bool>,
+    yaw_axis_waking: std::cell::Cell<WakingAxis>,
     yaw_axis_value: Option<DataRef>,
     mag_psi: Option<DataRef>,
     altitude_ind: Option<DataRef>,
@@ -1617,6 +1644,7 @@ impl PrimRefs {
             yoke_roll: xplm.find("sim/joystick/yoke_roll_ratio"),
             yaw_axis_avail: xplm.find("sim/joystick/joy_mapped_axis_avail"),
             yaw_axis_seen: std::cell::Cell::new(false),
+            yaw_axis_waking: std::cell::Cell::new(WakingAxis::default()),
             yaw_axis_value: xplm.find("sim/joystick/joy_mapped_axis_value"),
             mag_psi: xplm.find("sim/flightmodel/position/mag_psi"),
             altitude_ind: xplm.find("sim/cockpit2/gauges/indicators/altitude_ft_pilot"),
@@ -1660,7 +1688,10 @@ impl PrimRefs {
                 if avail[YAW_AXIS] != 0 {
                     self.yaw_axis_seen.set(true);
                 }
-                hardware_axis(self.yaw_axis_seen.get() as c_int, value[YAW_AXIS]).unwrap_or(0.)
+                let mut waking = self.yaw_axis_waking.get();
+                let reading = waking.read(hardware_axis(self.yaw_axis_seen.get() as c_int, value[YAW_AXIS]));
+                self.yaw_axis_waking.set(waking);
+                reading.unwrap_or(0.)
             }
             _ => 0.,
         };
@@ -1981,28 +2012,8 @@ impl Plugin {
         // fbw/hevent/ commands.
         #[cfg(feature = "js")]
         let js = js_bridge::JsHost::find(xplm);
-        // XPHFBW's bridge (xphfbw_host.rs): only once start_systems actually
-        // started XPHFBW.exe (session_tag() is set only then, in
-        // start_xphfbw). The pid is not captured there yet, so a dead
-        // process is not detected this way for now (xphfbw_host.rs's own
-        // `gone()`/`check_gone` degrade to never-gone, not a crash).
         #[cfg(feature = "js")]
-        let xphfbw: Option<xphfbw_host::XphfbwHost> = session_tag().and_then(|tag| {
-            let panel_cfg = js_bridge::plugin_dir()
-                .and_then(|dir| dir.parent().and_then(|p| p.parent()).map(|p| p.to_path_buf()))
-                .and_then(|aircraft| std::fs::read_to_string(aircraft.join("panel").join("panel.cfg")).ok());
-            // XPHFBW's pid, so the host notices the app going away and hands
-            // the screens back to the QuickJS engine (rule 7).
-            let pid = match &simulation {
-                remote::Systems::Remote(r) => r.process_id(),
-                _ => None,
-            };
-            let host = panel_cfg.and_then(|cfg| xphfbw_host::XphfbwHost::start(&tag, xplm, &cfg, pid));
-            if host.is_none() {
-                log("XPHFBW: could not start the plugin's side of the js-bridge; the QuickJS engine keeps the displays");
-            }
-            host
-        });
+        let xphfbw = start_xphfbw_host(&simulation, xplm);
         // [slot new: deep] The deep-systems areas. Resolves every variable
         // id it reads and writes here, once, and builds the deep failure
         // catalogue's id set once, so its per-frame work is reads, writes
@@ -2172,12 +2183,29 @@ impl Plugin {
             gaps_logged: false,
             #[cfg(feature = "js")]
             xphfbw,
+            #[cfg(feature = "js")]
+            xphfbw_relaunches: 0,
             xphfbw_datarefs: xphfbw_datarefs::XphfbwDatarefs::new(),
             // [slot init: deep]
             deep,
             // [slot init: xp_force_sink]
             xp_force_sink,
             xp_consequence_ids,
+        }
+    }
+
+    fn relaunch_systems(&mut self, xplm: &Xplm) {
+        #[cfg(feature = "js")]
+        {
+            self.xphfbw = None;
+        }
+        self.simulation = start_systems(start_state::detect(xplm, &mut self.vars), &mut self.vars);
+        #[cfg(feature = "js")]
+        {
+            self.xphfbw = start_xphfbw_host(&self.simulation, xplm);
+            if let Some(host) = self.xphfbw.as_mut() {
+                host.mark_ready();
+            }
         }
     }
 
@@ -2217,7 +2245,7 @@ impl Plugin {
         let built = self.start_state_built;
         self.simulation.rebuild(state, &mut self.vars);
         self.prims = prim::Prims::new(&mut self.vars, state.into());
-        self.correctness = correctness::Correctness::new(&mut self.vars, xplm, state);
+        self.correctness.rebuild(&mut self.vars, state);
         self.fadec = fadec::Fadec::new(&mut self.vars, xplm);
         self.deep = deep::plugin::DeepLayer::new(&mut self.vars, Some(xplm));
         if start_state::engines_running_state(state) {
@@ -3014,7 +3042,13 @@ impl Plugin {
         }
         if cmds.restart_app {
             log("XPHFBW: restart_app pressed; relaunching the systems backend");
-            self.simulation = start_systems(start_state::detect(xplm, &mut self.vars), &mut self.vars);
+            self.relaunch_systems(xplm);
+        }
+        #[cfg(feature = "js")]
+        if self.xphfbw.as_ref().is_some_and(|h| h.gone()) && self.xphfbw_relaunches < XPHFBW_MAX_RELAUNCHES {
+            self.xphfbw_relaunches += 1;
+            log(&format!("XPHFBW: its process went away; starting it again ({} of {XPHFBW_MAX_RELAUNCHES})", self.xphfbw_relaunches));
+            self.relaunch_systems(xplm);
         }
         let status = xphfbw_status(&self.simulation);
         self.xphfbw_datarefs.update(&status, session_tag().as_deref());
@@ -3419,6 +3453,29 @@ fn seed_overhead_defaults() {
     for (name, value) in OVERHEAD_DEFAULT_VALUES {
         study::web::queue_write(name, *value);
     }
+}
+
+#[cfg(feature = "js")]
+const XPHFBW_MAX_RELAUNCHES: u32 = 2;
+
+/// XPHFBW's bridge (xphfbw_host.rs): only once start_systems actually started
+/// XPHFBW.exe (session_tag() is set only then, in start_xphfbw), with its pid
+/// so the host notices the app going away.
+#[cfg(feature = "js")]
+fn start_xphfbw_host(simulation: &remote::Systems, xplm: &Xplm) -> Option<xphfbw_host::XphfbwHost> {
+    let tag = session_tag()?;
+    let panel_cfg = js_bridge::plugin_dir()
+        .and_then(|dir| dir.parent().and_then(|p| p.parent()).map(|p| p.to_path_buf()))
+        .and_then(|aircraft| std::fs::read_to_string(aircraft.join("panel").join("panel.cfg")).ok());
+    let pid = match simulation {
+        remote::Systems::Remote(r) => r.process_id(),
+        _ => None,
+    };
+    let host = panel_cfg.and_then(|cfg| xphfbw_host::XphfbwHost::start(&tag, xplm, &cfg, pid));
+    if host.is_none() {
+        log("XPHFBW: could not start the plugin's side of the js-bridge; the QuickJS engine keeps the displays");
+    }
+    host
 }
 
 fn start_systems(start_state: StartState, vars: &mut Vars) -> remote::Systems {
@@ -3919,6 +3976,16 @@ mod tests {
     /// set (unlike the pitch/roll axes' overrides). `hardware_axis` is the
     /// replacement: the raw `joy_mapped_axis_avail`/`_value` reading, `None`
     /// with nothing providing it.
+    #[test]
+    fn an_axis_reads_centred_until_it_moves_from_its_load_value() {
+        let mut a = WakingAxis::default();
+        assert_eq!(a.read(None), None);
+        assert_eq!(a.read(Some(0.1361)), Some(0.));
+        assert_eq!(a.read(Some(0.1361)), Some(0.), "X-Plane's stale load value");
+        assert_eq!(a.read(Some(0.0476)), Some(0.0476));
+        assert_eq!(a.read(Some(0.1361)), Some(0.1361), "once moved, every reading is the stick's");
+    }
+
     #[test]
     fn hardware_axis_is_none_with_no_peripheral_providing_it() {
         // (build fix, INT-P4) `assert_eq!` -> a tolerance for the `Some`

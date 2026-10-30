@@ -1032,6 +1032,11 @@ mod tests {
             self
         }
 
+        fn preset_quick_mode(mut self, on: bool) -> Self {
+            self.write_by_name("AIRCRAFT_PRESET_QUICK_MODE", on);
+            self
+        }
+
         fn start_on(mut self) -> Self {
             self.write_by_name("OVHD_APU_START_PB_IS_ON", true);
             self
@@ -1803,6 +1808,35 @@ mod tests {
             );
 
             assert!(!test_bed.apu_is_available());
+        }
+
+        #[test]
+        fn pw980_in_preset_quick_mode_starts_and_stops_within_a_few_frames() {
+            let frame = Duration::from_millis(50);
+            let mut test_bed = test_bed_pw980().preset_quick_mode(true).starting_apu();
+            for _ in 0..4 {
+                test_bed = test_bed.run(frame);
+            }
+            assert!(test_bed.apu_is_available(), "n={:.2}%", test_bed.n().value().get::<percent>());
+            assert!(test_bed.egt().value().get::<degree_celsius>() < 700.);
+
+            test_bed = test_bed.master_off();
+            for _ in 0..4 {
+                test_bed = test_bed.run(frame);
+            }
+            assert!(!test_bed.apu_is_available());
+            assert!(test_bed.n().value().get::<percent>() < 0.5, "n={:.2}%", test_bed.n().value().get::<percent>());
+        }
+
+        #[test]
+        fn pw980_without_quick_mode_still_takes_its_real_start_time() {
+            let mut test_bed = test_bed_pw980().starting_apu();
+            let mut seconds = 0;
+            while !test_bed.apu_is_available() && seconds < 120 {
+                test_bed = test_bed.run(Duration::from_secs(1));
+                seconds += 1;
+            }
+            assert!((10..120).contains(&seconds), "available after {seconds} s");
         }
 
         #[rstest]

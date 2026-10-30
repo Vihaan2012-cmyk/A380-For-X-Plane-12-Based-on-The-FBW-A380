@@ -270,7 +270,6 @@ struct Refs {
     flap_detents: Option<DataRef>,
     tug_connected: Option<DataRef>,
     yoke_roll: Option<DataRef>,
-    yoke_heading: Option<DataRef>,
     on_ground: Option<DataRef>,
 }
 
@@ -306,7 +305,6 @@ impl Refs {
             flap_detents: f("sim/aircraft/controls/acf_flap_detents"),
             tug_connected: f("bp/connected"),
             yoke_roll: f("sim/joystick/yoke_roll_ratio"),
-            yoke_heading: f("sim/joystick/yoke_heading_ratio"),
             on_ground: f("sim/flightmodel/failures/onground_any"),
         }
     }
@@ -392,6 +390,7 @@ pub struct Handling {
     /// brake, right toe brake, flaps, tiller, yaw (rudder pedals, W99).
     axes: [Option<f64>; 5],
     axis_seen: [bool; AXES],
+    yaw_waking: crate::WakingAxis,
     flaps_lever: Lever,
     gear_lever: Lever,
     park_lever: Lever,
@@ -480,6 +479,7 @@ impl Handling {
             registered: Vec::new(),
             axes: [None; 5],
             axis_seen: [false; AXES],
+            yaw_waking: crate::WakingAxis::default(),
             flaps_lever: Lever::new("fbw/cockpit/flaps_lever"),
             gear_lever: Lever::new("fbw/cockpit/lever_landing_gear"),
             park_lever: Lever::new("fbw/cockpit/lever_parking_brake"),
@@ -572,7 +572,7 @@ impl Handling {
         let target = if crate::app_settings::current().roll_steering && on_ground { 1. } else { 0. };
         self.roll_share = step_toward(self.roll_share, target, dt / ROLL_STEERING_FADE_S);
         let roll = self.refs.yoke_roll.map_or(0., |d| xplm.get_f(d) as f64);
-        let yaw = self.axes[4].map(|_| self.refs.yoke_heading.map_or(0., |d| xplm.get_f(d) as f64));
+        let yaw = self.yaw_waking.read(self.axes[4]);
         self.rudder_axis = rudder_axis(yaw, roll, self.roll_share);
         vars.write(&self.ids.rudder_pedal_position, 100. * self.rudder_axis);
 

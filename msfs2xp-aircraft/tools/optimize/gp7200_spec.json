@@ -1,0 +1,3509 @@
+{
+ "title": "GP7200 on A380 - measured spec for 1:1 modelling",
+ "units": "metres",
+ "frame": "engine axis; station s = 0 at the spinner tip, positive aft; r = distance from the axis; top/bottom are the vertical meridian, inboard/outboard the horizontal",
+ "station_zero": {
+  "value": "spinner tip",
+  "nacelle_link": "nose-cowl/fan-cowl split at s = 0.26",
+  "source": "TCDS IM.E.026 + p.106: spinner tip to fan case front flange 0.213 m (4.93 - 4.72 m dims). The split is put 0.05 m aft of that flange: photo Airbus_Lagardere_-_GP7200_engine_MSN111_(1).JPG shows the inlet outer barrel ending at the fan case front; the Trent analogue (FBW Trent mesh + p.111/p.112) gives +0.19 m; the TEC aft flange (4.92) then sits at the fan nozzle exit, inside the drawn core cowl; the red fan-plane line on the cowl lands at s ~0.41, just behind the fan case front. Uncertainty +-0.12 m on the whole nacelle relative to the engine."
+ },
+ "key_stations": {
+  "source": "Airbus A380 AC (ac_a380_1223.pdf) PDF p.107, FIGURE-2-12-0-991-004-A01 Nacelle Dimensions - GP 7200 Engine: outline read from the PDF vector path; stations piecewise-linear between the printed dims (nose cowl 1.5 top / 1.17 bottom, fan cowl 2.18, thrust reverser 2.52, fan nozzle to plug tip 2.11); anchors (x pt, s m) [(167.92, -1.24), (178.9, -0.91), (219.3, 0.26), (293.1, 2.44), (378.9, 4.96), (448.5, 7.07)]",
+  "highlight_top": -1.24,
+  "highlight_bottom": -0.905,
+  "lip_skin_aft_joint_top": -1.036,
+  "lip_skin_aft_joint_bottom": -0.675,
+  "fan_case_front_flange": 0.213,
+  "nose_cowl_fan_cowl_split": 0.26,
+  "red_fan_plane_line": [
+   0.38,
+   0.47
+  ],
+  "red_line_source": "photos ILA_2010_-_gravitat-OFF_-_Airbus_380_079.jpg (E1 and E2, 0.11-0.15 m aft of the split at 163 and 148 px/m) and Airbus_A380_(F-WWDD)_..._(248-28).jpg (~0.2 m)",
+  "fan_cowl_tr_split": 2.44,
+  "tr_actuator_fittings": [
+   3.39,
+   3.63
+  ],
+  "tr_panel_line": 4.179,
+  "fan_nozzle_exit": 4.967,
+  "upper_fairing_tip": 5.218,
+  "core_cowl_end_primary_nozzle_start": 5.303,
+  "core_nozzle_exit": 5.917,
+  "plug_tip": 7.07,
+  "engine_aft_flange": 4.92,
+  "inlet_scarf": "top highlight 0.33 m ahead of bottom (6.1 deg)"
+ },
+ "outer_nacelle": {
+  "source": "Airbus A380 AC (ac_a380_1223.pdf) PDF p.107, FIGURE-2-12-0-991-004-A01 Nacelle Dimensions - GP 7200 Engine: outline read from the PDF vector path; stations piecewise-linear between the printed dims (nose cowl 1.5 top / 1.17 bottom, fan cowl 2.18, thrust reverser 2.52, fan nozzle to plug tip 2.11); anchors (x pt, s m) [(167.92, -1.24), (178.9, -0.91), (219.3, 0.26), (293.1, 2.44), (378.9, 4.96), (448.5, 7.07)]; Airbus A380 AC (ac_a380_1223.pdf) PDF p.107, FIGURE-2-12-0-991-004-A01 Nacelle Dimensions - GP 7200 Engine: radius = (axis y 249.13 pt - y) / 33.37 pt/m; radial scale set so the side-view height (126.8 pt) equals the 3.8 m front-view width (front view on p.108 is a circle 121 x 121 pt; the 3.9 m height on p.107 includes the small pylon-junction bump); axis = plug tip and core-nozzle centres (y 249.12-249.17 pt)",
+  "symmetry": "not axisymmetric: keel further from the axis than the crown (inlet and max section drooped below the axis), plan view assumed symmetric",
+  "top": [
+   [
+    -1.24,
+    1.42
+   ],
+   [
+    -1.19,
+    1.505
+   ],
+   [
+    -1.14,
+    1.536
+   ],
+   [
+    -1.09,
+    1.56
+   ],
+   [
+    -1.04,
+    1.58
+   ],
+   [
+    -0.99,
+    1.596
+   ],
+   [
+    -0.94,
+    1.611
+   ],
+   [
+    -0.89,
+    1.624
+   ],
+   [
+    -0.84,
+    1.637
+   ],
+   [
+    -0.79,
+    1.65
+   ],
+   [
+    -0.74,
+    1.662
+   ],
+   [
+    -0.69,
+    1.674
+   ],
+   [
+    -0.64,
+    1.685
+   ],
+   [
+    -0.59,
+    1.696
+   ],
+   [
+    -0.54,
+    1.706
+   ],
+   [
+    -0.49,
+    1.716
+   ],
+   [
+    -0.44,
+    1.725
+   ],
+   [
+    -0.39,
+    1.734
+   ],
+   [
+    -0.34,
+    1.743
+   ],
+   [
+    -0.29,
+    1.752
+   ],
+   [
+    -0.24,
+    1.76
+   ],
+   [
+    -0.19,
+    1.769
+   ],
+   [
+    -0.14,
+    1.777
+   ],
+   [
+    -0.09,
+    1.784
+   ],
+   [
+    -0.04,
+    1.792
+   ],
+   [
+    0.01,
+    1.799
+   ],
+   [
+    0.06,
+    1.804
+   ],
+   [
+    0.11,
+    1.808
+   ],
+   [
+    0.16,
+    1.811
+   ],
+   [
+    0.21,
+    1.814
+   ],
+   [
+    0.26,
+    1.815
+   ],
+   [
+    0.31,
+    1.817
+   ],
+   [
+    0.36,
+    1.817
+   ],
+   [
+    0.41,
+    1.817
+   ],
+   [
+    0.46,
+    1.817
+   ],
+   [
+    0.51,
+    1.817
+   ],
+   [
+    0.56,
+    1.816
+   ],
+   [
+    0.61,
+    1.816
+   ],
+   [
+    0.66,
+    1.816
+   ],
+   [
+    0.71,
+    1.815
+   ],
+   [
+    0.76,
+    1.815
+   ],
+   [
+    0.81,
+    1.816
+   ],
+   [
+    0.86,
+    1.816
+   ],
+   [
+    0.91,
+    1.816
+   ],
+   [
+    0.96,
+    1.817
+   ],
+   [
+    1.01,
+    1.817
+   ],
+   [
+    1.06,
+    1.818
+   ],
+   [
+    1.11,
+    1.818
+   ],
+   [
+    1.16,
+    1.819
+   ],
+   [
+    1.21,
+    1.819
+   ],
+   [
+    1.26,
+    1.819
+   ],
+   [
+    1.31,
+    1.82
+   ],
+   [
+    1.36,
+    1.82
+   ],
+   [
+    1.41,
+    1.82
+   ],
+   [
+    1.46,
+    1.82
+   ],
+   [
+    1.51,
+    1.82
+   ],
+   [
+    1.56,
+    1.82
+   ],
+   [
+    1.61,
+    1.819
+   ],
+   [
+    1.66,
+    1.819
+   ],
+   [
+    1.71,
+    1.819
+   ],
+   [
+    1.76,
+    1.819
+   ],
+   [
+    1.81,
+    1.819
+   ],
+   [
+    1.86,
+    1.818
+   ],
+   [
+    1.91,
+    1.818
+   ],
+   [
+    1.96,
+    1.817
+   ],
+   [
+    2.01,
+    1.817
+   ],
+   [
+    2.06,
+    1.816
+   ],
+   [
+    2.11,
+    1.815
+   ],
+   [
+    2.16,
+    1.814
+   ],
+   [
+    2.21,
+    1.812
+   ],
+   [
+    2.26,
+    1.81
+   ],
+   [
+    2.31,
+    1.806
+   ],
+   [
+    2.36,
+    1.803
+   ],
+   [
+    2.41,
+    1.798
+   ],
+   [
+    2.46,
+    1.763
+   ],
+   [
+    2.51,
+    1.761
+   ],
+   [
+    2.56,
+    1.757
+   ],
+   [
+    2.61,
+    1.752
+   ],
+   [
+    2.66,
+    1.747
+   ],
+   [
+    2.71,
+    1.742
+   ],
+   [
+    2.76,
+    1.737
+   ],
+   [
+    2.81,
+    1.732
+   ],
+   [
+    2.86,
+    1.727
+   ],
+   [
+    2.91,
+    1.723
+   ],
+   [
+    2.96,
+    1.718
+   ],
+   [
+    3.01,
+    1.713
+   ],
+   [
+    3.06,
+    1.708
+   ],
+   [
+    3.11,
+    1.703
+   ],
+   [
+    3.16,
+    1.697
+   ],
+   [
+    3.21,
+    1.691
+   ],
+   [
+    3.26,
+    1.685
+   ],
+   [
+    3.31,
+    1.679
+   ],
+   [
+    3.36,
+    1.673
+   ],
+   [
+    3.41,
+    1.664
+   ],
+   [
+    3.46,
+    1.657
+   ],
+   [
+    3.51,
+    1.652
+   ],
+   [
+    3.56,
+    1.649
+   ],
+   [
+    3.61,
+    1.646
+   ],
+   [
+    3.66,
+    1.643
+   ],
+   [
+    3.71,
+    1.64
+   ],
+   [
+    3.76,
+    1.636
+   ],
+   [
+    3.81,
+    1.631
+   ],
+   [
+    3.86,
+    1.626
+   ],
+   [
+    3.91,
+    1.621
+   ],
+   [
+    3.96,
+    1.615
+   ],
+   [
+    4.01,
+    1.608
+   ],
+   [
+    4.06,
+    1.602
+   ],
+   [
+    4.11,
+    1.594
+   ],
+   [
+    4.16,
+    1.587
+   ],
+   [
+    4.21,
+    1.579
+   ],
+   [
+    4.26,
+    1.57
+   ],
+   [
+    4.31,
+    1.562
+   ],
+   [
+    4.36,
+    1.553
+   ],
+   [
+    4.41,
+    1.543
+   ],
+   [
+    4.46,
+    1.533
+   ],
+   [
+    4.51,
+    1.523
+   ],
+   [
+    4.56,
+    1.513
+   ],
+   [
+    4.61,
+    1.502
+   ],
+   [
+    4.66,
+    1.491
+   ],
+   [
+    4.71,
+    1.479
+   ],
+   [
+    4.76,
+    1.468
+   ],
+   [
+    4.81,
+    1.456
+   ],
+   [
+    4.86,
+    1.444
+   ],
+   [
+    4.91,
+    1.432
+   ],
+   [
+    4.96,
+    1.42
+   ],
+   [
+    5.01,
+    1.408
+   ],
+   [
+    5.06,
+    1.397
+   ],
+   [
+    5.11,
+    1.385
+   ],
+   [
+    5.16,
+    1.372
+   ],
+   [
+    5.21,
+    1.355
+   ]
+  ],
+  "bottom": [
+   [
+    -0.9,
+    1.746
+   ],
+   [
+    -0.85,
+    1.781
+   ],
+   [
+    -0.8,
+    1.805
+   ],
+   [
+    -0.75,
+    1.823
+   ],
+   [
+    -0.7,
+    1.837
+   ],
+   [
+    -0.65,
+    1.852
+   ],
+   [
+    -0.6,
+    1.866
+   ],
+   [
+    -0.55,
+    1.878
+   ],
+   [
+    -0.5,
+    1.888
+   ],
+   [
+    -0.45,
+    1.897
+   ],
+   [
+    -0.4,
+    1.904
+   ],
+   [
+    -0.35,
+    1.911
+   ],
+   [
+    -0.3,
+    1.916
+   ],
+   [
+    -0.25,
+    1.921
+   ],
+   [
+    -0.2,
+    1.925
+   ],
+   [
+    -0.15,
+    1.929
+   ],
+   [
+    -0.1,
+    1.933
+   ],
+   [
+    -0.05,
+    1.937
+   ],
+   [
+    0.0,
+    1.941
+   ],
+   [
+    0.05,
+    1.944
+   ],
+   [
+    0.1,
+    1.948
+   ],
+   [
+    0.15,
+    1.951
+   ],
+   [
+    0.2,
+    1.955
+   ],
+   [
+    0.25,
+    1.958
+   ],
+   [
+    0.3,
+    1.961
+   ],
+   [
+    0.35,
+    1.964
+   ],
+   [
+    0.4,
+    1.967
+   ],
+   [
+    0.45,
+    1.969
+   ],
+   [
+    0.5,
+    1.97
+   ],
+   [
+    0.55,
+    1.971
+   ],
+   [
+    0.6,
+    1.972
+   ],
+   [
+    0.65,
+    1.972
+   ],
+   [
+    0.7,
+    1.972
+   ],
+   [
+    0.75,
+    1.972
+   ],
+   [
+    0.8,
+    1.971
+   ],
+   [
+    0.85,
+    1.971
+   ],
+   [
+    0.9,
+    1.97
+   ],
+   [
+    0.95,
+    1.969
+   ],
+   [
+    1.0,
+    1.968
+   ],
+   [
+    1.05,
+    1.967
+   ],
+   [
+    1.1,
+    1.965
+   ],
+   [
+    1.15,
+    1.964
+   ],
+   [
+    1.2,
+    1.962
+   ],
+   [
+    1.25,
+    1.961
+   ],
+   [
+    1.3,
+    1.959
+   ],
+   [
+    1.35,
+    1.957
+   ],
+   [
+    1.4,
+    1.954
+   ],
+   [
+    1.45,
+    1.952
+   ],
+   [
+    1.5,
+    1.949
+   ],
+   [
+    1.55,
+    1.946
+   ],
+   [
+    1.6,
+    1.943
+   ],
+   [
+    1.65,
+    1.94
+   ],
+   [
+    1.7,
+    1.937
+   ],
+   [
+    1.75,
+    1.933
+   ],
+   [
+    1.8,
+    1.93
+   ],
+   [
+    1.85,
+    1.926
+   ],
+   [
+    1.9,
+    1.922
+   ],
+   [
+    1.95,
+    1.917
+   ],
+   [
+    2.0,
+    1.913
+   ],
+   [
+    2.05,
+    1.908
+   ],
+   [
+    2.1,
+    1.903
+   ],
+   [
+    2.15,
+    1.899
+   ],
+   [
+    2.2,
+    1.893
+   ],
+   [
+    2.25,
+    1.888
+   ],
+   [
+    2.3,
+    1.883
+   ],
+   [
+    2.35,
+    1.878
+   ],
+   [
+    2.4,
+    1.872
+   ],
+   [
+    2.45,
+    1.867
+   ],
+   [
+    2.5,
+    1.861
+   ],
+   [
+    2.55,
+    1.855
+   ],
+   [
+    2.6,
+    1.849
+   ],
+   [
+    2.65,
+    1.843
+   ],
+   [
+    2.7,
+    1.836
+   ],
+   [
+    2.75,
+    1.83
+   ],
+   [
+    2.8,
+    1.823
+   ],
+   [
+    2.85,
+    1.817
+   ],
+   [
+    2.9,
+    1.81
+   ],
+   [
+    2.95,
+    1.803
+   ],
+   [
+    3.0,
+    1.795
+   ],
+   [
+    3.05,
+    1.788
+   ],
+   [
+    3.1,
+    1.78
+   ],
+   [
+    3.15,
+    1.773
+   ],
+   [
+    3.2,
+    1.765
+   ],
+   [
+    3.25,
+    1.757
+   ],
+   [
+    3.3,
+    1.749
+   ],
+   [
+    3.35,
+    1.741
+   ],
+   [
+    3.4,
+    1.732
+   ],
+   [
+    3.45,
+    1.724
+   ],
+   [
+    3.5,
+    1.715
+   ],
+   [
+    3.55,
+    1.706
+   ],
+   [
+    3.6,
+    1.698
+   ],
+   [
+    3.65,
+    1.689
+   ],
+   [
+    3.7,
+    1.681
+   ],
+   [
+    3.75,
+    1.672
+   ],
+   [
+    3.8,
+    1.663
+   ],
+   [
+    3.85,
+    1.654
+   ],
+   [
+    3.9,
+    1.644
+   ],
+   [
+    3.95,
+    1.634
+   ],
+   [
+    4.0,
+    1.623
+   ],
+   [
+    4.05,
+    1.612
+   ],
+   [
+    4.1,
+    1.599
+   ],
+   [
+    4.15,
+    1.584
+   ],
+   [
+    4.2,
+    1.554
+   ],
+   [
+    4.25,
+    1.549
+   ],
+   [
+    4.3,
+    1.544
+   ],
+   [
+    4.35,
+    1.538
+   ],
+   [
+    4.4,
+    1.531
+   ],
+   [
+    4.45,
+    1.524
+   ],
+   [
+    4.5,
+    1.517
+   ],
+   [
+    4.55,
+    1.509
+   ],
+   [
+    4.6,
+    1.509
+   ],
+   [
+    4.65,
+    1.499
+   ],
+   [
+    4.7,
+    1.488
+   ],
+   [
+    4.75,
+    1.477
+   ],
+   [
+    4.8,
+    1.466
+   ],
+   [
+    4.85,
+    1.455
+   ],
+   [
+    4.9,
+    1.444
+   ],
+   [
+    4.95,
+    1.432
+   ]
+  ],
+  "inboard_outboard_estimate": {
+   "columns": [
+    "station",
+    "half_width",
+    "section_centre_offset_y"
+   ],
+   "rows": [
+    [
+     -0.9,
+     1.684,
+     -0.062
+    ],
+    [
+     -0.85,
+     1.708,
+     -0.073
+    ],
+    [
+     -0.8,
+     1.726,
+     -0.079
+    ],
+    [
+     -0.75,
+     1.741,
+     -0.082
+    ],
+    [
+     -0.7,
+     1.754,
+     -0.083
+    ],
+    [
+     -0.65,
+     1.767,
+     -0.085
+    ],
+    [
+     -0.6,
+     1.78,
+     -0.086
+    ],
+    [
+     -0.55,
+     1.791,
+     -0.087
+    ],
+    [
+     -0.5,
+     1.801,
+     -0.087
+    ],
+    [
+     -0.45,
+     1.81,
+     -0.087
+    ],
+    [
+     -0.4,
+     1.818,
+     -0.086
+    ],
+    [
+     -0.35,
+     1.826,
+     -0.085
+    ],
+    [
+     -0.3,
+     1.833,
+     -0.083
+    ],
+    [
+     -0.25,
+     1.84,
+     -0.081
+    ],
+    [
+     -0.2,
+     1.846,
+     -0.079
+    ],
+    [
+     -0.15,
+     1.852,
+     -0.077
+    ],
+    [
+     -0.1,
+     1.858,
+     -0.075
+    ],
+    [
+     -0.05,
+     1.864,
+     -0.073
+    ],
+    [
+     0.0,
+     1.869,
+     -0.072
+    ],
+    [
+     0.05,
+     1.874,
+     -0.071
+    ],
+    [
+     0.1,
+     1.877,
+     -0.07
+    ],
+    [
+     0.15,
+     1.881,
+     -0.07
+    ],
+    [
+     0.2,
+     1.884,
+     -0.071
+    ],
+    [
+     0.25,
+     1.887,
+     -0.072
+    ],
+    [
+     0.3,
+     1.889,
+     -0.072
+    ],
+    [
+     0.35,
+     1.891,
+     -0.074
+    ],
+    [
+     0.4,
+     1.892,
+     -0.075
+    ],
+    [
+     0.45,
+     1.893,
+     -0.076
+    ],
+    [
+     0.5,
+     1.894,
+     -0.077
+    ],
+    [
+     0.55,
+     1.894,
+     -0.077
+    ],
+    [
+     0.6,
+     1.894,
+     -0.078
+    ],
+    [
+     0.65,
+     1.894,
+     -0.078
+    ],
+    [
+     0.7,
+     1.894,
+     -0.078
+    ],
+    [
+     0.75,
+     1.893,
+     -0.078
+    ],
+    [
+     0.8,
+     1.893,
+     -0.078
+    ],
+    [
+     0.85,
+     1.893,
+     -0.077
+    ],
+    [
+     0.9,
+     1.893,
+     -0.077
+    ],
+    [
+     0.95,
+     1.893,
+     -0.076
+    ],
+    [
+     1.0,
+     1.892,
+     -0.075
+    ],
+    [
+     1.05,
+     1.892,
+     -0.075
+    ],
+    [
+     1.1,
+     1.892,
+     -0.074
+    ],
+    [
+     1.15,
+     1.891,
+     -0.073
+    ],
+    [
+     1.2,
+     1.891,
+     -0.072
+    ],
+    [
+     1.25,
+     1.89,
+     -0.071
+    ],
+    [
+     1.3,
+     1.889,
+     -0.07
+    ],
+    [
+     1.35,
+     1.888,
+     -0.068
+    ],
+    [
+     1.4,
+     1.887,
+     -0.067
+    ],
+    [
+     1.45,
+     1.886,
+     -0.066
+    ],
+    [
+     1.5,
+     1.884,
+     -0.065
+    ],
+    [
+     1.55,
+     1.883,
+     -0.063
+    ],
+    [
+     1.6,
+     1.881,
+     -0.062
+    ],
+    [
+     1.65,
+     1.88,
+     -0.06
+    ],
+    [
+     1.7,
+     1.878,
+     -0.059
+    ],
+    [
+     1.75,
+     1.876,
+     -0.057
+    ],
+    [
+     1.8,
+     1.874,
+     -0.056
+    ],
+    [
+     1.85,
+     1.872,
+     -0.054
+    ],
+    [
+     1.9,
+     1.87,
+     -0.052
+    ],
+    [
+     1.95,
+     1.867,
+     -0.05
+    ],
+    [
+     2.0,
+     1.865,
+     -0.048
+    ],
+    [
+     2.05,
+     1.862,
+     -0.046
+    ],
+    [
+     2.1,
+     1.859,
+     -0.044
+    ],
+    [
+     2.15,
+     1.856,
+     -0.042
+    ],
+    [
+     2.2,
+     1.853,
+     -0.04
+    ],
+    [
+     2.25,
+     1.849,
+     -0.039
+    ],
+    [
+     2.3,
+     1.845,
+     -0.038
+    ],
+    [
+     2.35,
+     1.841,
+     -0.037
+    ],
+    [
+     2.4,
+     1.835,
+     -0.037
+    ],
+    [
+     2.45,
+     1.818,
+     -0.048
+    ],
+    [
+     2.5,
+     1.811,
+     -0.05
+    ],
+    [
+     2.55,
+     1.806,
+     -0.049
+    ],
+    [
+     2.6,
+     1.801,
+     -0.048
+    ],
+    [
+     2.65,
+     1.795,
+     -0.047
+    ],
+    [
+     2.7,
+     1.79,
+     -0.047
+    ],
+    [
+     2.75,
+     1.784,
+     -0.046
+    ],
+    [
+     2.8,
+     1.778,
+     -0.045
+    ],
+    [
+     2.85,
+     1.772,
+     -0.044
+    ],
+    [
+     2.9,
+     1.767,
+     -0.043
+    ],
+    [
+     2.95,
+     1.761,
+     -0.042
+    ],
+    [
+     3.0,
+     1.755,
+     -0.041
+    ],
+    [
+     3.05,
+     1.748,
+     -0.04
+    ],
+    [
+     3.1,
+     1.742,
+     -0.038
+    ],
+    [
+     3.15,
+     1.735,
+     -0.037
+    ],
+    [
+     3.2,
+     1.729,
+     -0.036
+    ],
+    [
+     3.25,
+     1.722,
+     -0.035
+    ],
+    [
+     3.3,
+     1.715,
+     -0.034
+    ],
+    [
+     3.35,
+     1.707,
+     -0.033
+    ],
+    [
+     3.4,
+     1.699,
+     -0.033
+    ],
+    [
+     3.45,
+     1.691,
+     -0.033
+    ],
+    [
+     3.5,
+     1.684,
+     -0.031
+    ],
+    [
+     3.55,
+     1.678,
+     -0.028
+    ],
+    [
+     3.6,
+     1.672,
+     -0.026
+    ],
+    [
+     3.65,
+     1.667,
+     -0.023
+    ],
+    [
+     3.7,
+     1.661,
+     -0.02
+    ],
+    [
+     3.75,
+     1.654,
+     -0.018
+    ],
+    [
+     3.8,
+     1.647,
+     -0.016
+    ],
+    [
+     3.85,
+     1.64,
+     -0.013
+    ],
+    [
+     3.9,
+     1.633,
+     -0.011
+    ],
+    [
+     3.95,
+     1.625,
+     -0.009
+    ],
+    [
+     4.0,
+     1.616,
+     -0.007
+    ],
+    [
+     4.05,
+     1.607,
+     -0.004
+    ],
+    [
+     4.1,
+     1.597,
+     -0.002
+    ],
+    [
+     4.15,
+     1.586,
+     0.002
+    ],
+    [
+     4.2,
+     1.567,
+     0.013
+    ],
+    [
+     4.25,
+     1.561,
+     0.011
+    ],
+    [
+     4.3,
+     1.554,
+     0.01
+    ],
+    [
+     4.35,
+     1.546,
+     0.008
+    ],
+    [
+     4.4,
+     1.538,
+     0.007
+    ],
+    [
+     4.45,
+     1.53,
+     0.006
+    ],
+    [
+     4.5,
+     1.521,
+     0.004
+    ],
+    [
+     4.55,
+     1.512,
+     0.003
+    ],
+    [
+     4.6,
+     1.507,
+     -0.003
+    ],
+    [
+     4.65,
+     1.496,
+     -0.003
+    ],
+    [
+     4.7,
+     1.485,
+     -0.003
+    ],
+    [
+     4.75,
+     1.474,
+     -0.004
+    ],
+    [
+     4.8,
+     1.462,
+     -0.004
+    ],
+    [
+     4.85,
+     1.451,
+     -0.004
+    ],
+    [
+     4.9,
+     1.439,
+     -0.004
+    ],
+    [
+     4.95,
+     1.428,
+     -0.005
+    ]
+   ],
+   "source": "estimate: no plan-view drawing; front views on p.107/p.108 are circular (3.8 m), so each section is taken as a circle through the measured crown and keel"
+  },
+  "max_section": {
+   "crown_r": 1.82,
+   "crown_s": 1.41,
+   "keel_r": 1.972,
+   "keel_s": 0.65,
+   "width": 3.8,
+   "height_dim": 3.9,
+   "source": "Airbus A380 AC (ac_a380_1223.pdf) PDF p.107, FIGURE-2-12-0-991-004-A01 Nacelle Dimensions - GP 7200 Engine: radius = (axis y 249.13 pt - y) / 33.37 pt/m; radial scale set so the side-view height (126.8 pt) equals the 3.8 m front-view width (front view on p.108 is a circle 121 x 121 pt; the 3.9 m height on p.107 includes the small pylon-junction bump); axis = plug tip and core-nozzle centres (y 249.12-249.17 pt); width 3.8 m and height 3.9 m are the printed p.107 front-view dims"
+  },
+  "chines_strakes": "none on any of the four nacelles (photos ILA_2010_-_gravitat-OFF_-_Airbus_380_079.jpg, Airbus_A380_03_(4825832887).jpg, A380_ENGINE.jpg, F-WWDD 248-27/28); none on the p.107 drawing",
+  "upper_aft_fairing": {
+   "points": [
+    [
+     5.151,
+     1.375
+    ],
+    [
+     5.168,
+     1.37
+    ],
+    [
+     5.184,
+     1.366
+    ],
+    [
+     5.198,
+     1.361
+    ],
+    [
+     5.206,
+     1.358
+    ],
+    [
+     5.213,
+     1.353
+    ],
+    [
+     5.218,
+     1.347
+    ],
+    [
+     5.203,
+     1.344
+    ],
+    [
+     5.187,
+     1.343
+    ],
+    [
+     5.174,
+     1.344
+    ],
+    [
+     5.175,
+     1.305
+    ],
+    [
+     5.176,
+     1.267
+    ],
+    [
+     5.176,
+     1.234
+    ],
+    [
+     5.22,
+     1.193
+    ],
+    [
+     5.263,
+     1.152
+    ]
+   ],
+   "note": "the top of the nozzle overhangs aft to s 5.22 (pylon/hinge-beam fairing, p.107 outline; visible in the ILA 079 photo)"
+  }
+ },
+ "inlet": {
+  "highlight": {
+   "top_r": 1.417,
+   "bottom_r": 1.705,
+   "mean_r": 1.561,
+   "centre_below_axis": 0.144,
+   "top_s": -1.24,
+   "bottom_s": -0.905,
+   "source": "Airbus A380 AC (ac_a380_1223.pdf) PDF p.107, FIGURE-2-12-0-991-004-A01 Nacelle Dimensions - GP 7200 Engine, lip front line of the outline"
+  },
+  "throat_r": 1.4,
+  "throat_source": "estimate from photo Air_France_Airbus_A380-861_F-HPJA_@_Paris_CDG.jpg: dark throat circle 412 px / nacelle width 547 px x 3.8 m, corrected ~3% for depth -> 1.39-1.43",
+  "lip_thickness": 0.17,
+  "lip_thickness_source": "estimate: mean highlight radius 1.574 - throat 1.40",
+  "lip_outer_metal_band": "polished lip skin from the highlight to the joint line 0.20 m (top) / 0.23 m (bottom) aft (p.107 line parallel to the lip; rivet rows visible in A380_ENGINE.jpg)",
+  "acoustic_liner": "perforated liner from just inside the lip to the fan case (A380_ENGINE.jpg, F-WWDD 248-27)",
+  "abradable_rub_ring": "pale olive ring ahead of and around the fan tips (A380_ENGINE.jpg, F-WWDD 248-27)"
+ },
+ "panels": {
+  "nose_cowl_fan_cowl_split": {
+   "s": 0.26,
+   "source": "Airbus A380 AC (ac_a380_1223.pdf) PDF p.107, FIGURE-2-12-0-991-004-A01 Nacelle Dimensions - GP 7200 Engine (1.5/1.17 m)"
+  },
+  "fan_cowl_tr_or_fan_exhaust_cowl_split": {
+   "s": 2.44,
+   "source": "Airbus A380 AC (ac_a380_1223.pdf) PDF p.107, FIGURE-2-12-0-991-004-A01 Nacelle Dimensions - GP 7200 Engine (2.18 m); photo ILA 079 measures 2.18:2.52 on both E1 and E2"
+  },
+  "fan_cowl_hinges": {
+   "position": "on the pylon, about +-8.5 deg either side of top dead centre at r ~1.19 x nacelle radius (~2.25 m)",
+   "source": "solved from the 45 deg open-door geometry on p.108 FIGURE-2-12-0-991-005-A01 (drawing is schematic: estimate)"
+  },
+  "fan_cowl_latches": {
+   "position": "bottom centreline, s 0.26-2.6",
+   "source": "p.107 line along the keel; AC text 2-12-0 (fan exhaust cowls latched at the bottom centreline)"
+  },
+  "tr_hinges_and_latches": "hinged to the pylon at the top, latched at the bottom centreline (AC 2-12-0 text and p.109/p.110 opening figures: 35/45 deg, identical for TR and fan exhaust cowl)",
+  "upper_longitudinal_line": "line ~0.08-0.10 m below the crown along fan cowl and TR (p.107), the pylon/hinge interface edge",
+  "oil_tank_access_door": {
+   "s": [
+    1.77,
+    2.16
+   ],
+   "size": [
+    0.39,
+    0.38
+   ],
+   "z_centre": -0.06,
+   "side": "engine left side (seen on the outboard faces of E1/E2)",
+   "source": "p.107 square + photo ILA 079 (labelled OIL TANK ACCESS DOOR)"
+  },
+  "tr_actuator_fittings": {
+   "s": [
+    3.39,
+    3.63
+   ],
+   "angles_deg_from_horizontal": [
+    42,
+    0,
+    -50
+   ],
+   "engines": [
+    2,
+    3
+   ],
+   "source": "p.107 three rounded rectangles; photo ILA 079 E2 at 1.06 m aft of the TR front (drawing 1.07)"
+  },
+  "tr_panel_line": {
+   "s": 4.179,
+   "source": "p.107 vertical line; not visible in the photos (estimate: translating-sleeve skin joint)"
+  },
+  "lower_inlet_grey_panel_and_louvre": {
+   "s": [
+    -0.85,
+    0.2
+   ],
+   "position": "lower outboard side, ~7 o'clock on E1/E2, ~0.3 m tall, anti-ice exhaust louvre at its front",
+   "source": "photos ILA 079 and F-WWDD 248-27 (position estimate)"
+  },
+  "drain_mast": {
+   "s": 2.4,
+   "position": "bottom centreline",
+   "source": "estimate from photo Airbus_A380_03_(4825832887).jpg rear view"
+  },
+  "red_fan_plane_line": {
+   "s": [
+    0.38,
+    0.47
+   ],
+   "colour": "#B01E28",
+   "source": "photos ILA 079, F-WWDD 248-27/28"
+  }
+ },
+ "fan_nozzle": {
+  "exit_s": 4.967,
+  "exit_outer_r_top": 1.344,
+  "exit_outer_r_bottom": 1.429,
+  "exit_outer_r_mean": 1.386,
+  "exit_centre_below_axis": 0.043,
+  "trailing_edge_thickness": "~0.02 (estimate)",
+  "source": "Airbus A380 AC (ac_a380_1223.pdf) PDF p.107, FIGURE-2-12-0-991-004-A01 Nacelle Dimensions - GP 7200 Engine; TE line at x 379.12 pt (top end y 204.28, bottom outline y 296.8); the silhouette above the top end is the pylon/hinge-beam fairing",
+  "exit_plane": "normal to the axis except the top ~+-15 deg, where the pylon/hinge-beam fairing runs on to s 5.22"
+ },
+ "core_cowl": {
+  "visible_part": {
+   "bottom": [
+    [
+     5.364,
+     0.816
+    ],
+    [
+     5.348,
+     0.816
+    ],
+    [
+     5.331,
+     0.816
+    ],
+    [
+     5.315,
+     0.816
+    ],
+    [
+     5.301,
+     0.816
+    ],
+    [
+     5.302,
+     0.825
+    ],
+    [
+     5.302,
+     0.833
+    ],
+    [
+     5.303,
+     0.842
+    ],
+    [
+     5.303,
+     0.849
+    ],
+    [
+     5.215,
+     0.871
+    ],
+    [
+     5.127,
+     0.893
+    ],
+    [
+     5.04,
+     0.916
+    ]
+   ],
+   "source": "Airbus A380 AC (ac_a380_1223.pdf) PDF p.107, FIGURE-2-12-0-991-004-A01 Nacelle Dimensions - GP 7200 Engine"
+  },
+  "step_at_end": {
+   "s": 5.303,
+   "from_r": 0.846,
+   "to_r": 0.816
+  },
+  "inside_bypass_duct_estimate": [
+   [
+    1.9,
+    0.85
+   ],
+   [
+    2.4,
+    0.95
+   ],
+   [
+    3.2,
+    1.02
+   ],
+   [
+    4.0,
+    1.0
+   ],
+   [
+    4.6,
+    0.96
+   ],
+   [
+    4.967,
+    0.932
+   ]
+  ],
+  "inside_source": "estimate: must clear the measured casing envelope (p.106, max r 0.89 at the TEC) and the core-mounted gearbox; joins the OGV hub ~0.85 and the measured 0.932 at the fan nozzle exit"
+ },
+ "core_nozzle": {
+  "top": [
+   [
+    5.304,
+    0.848
+   ],
+   [
+    5.411,
+    0.82
+   ],
+   [
+    5.517,
+    0.791
+   ],
+   [
+    5.624,
+    0.763
+   ],
+   [
+    5.73,
+    0.734
+   ],
+   [
+    5.837,
+    0.706
+   ]
+  ],
+  "bottom": [
+   [
+    5.917,
+    0.688
+   ],
+   [
+    5.821,
+    0.71
+   ],
+   [
+    5.725,
+    0.732
+   ],
+   [
+    5.628,
+    0.755
+   ],
+   [
+    5.532,
+    0.777
+   ],
+   [
+    5.436,
+    0.799
+   ]
+  ],
+  "exit_s": 5.917,
+  "exit_outer_r": 0.686,
+  "source": "Airbus A380 AC (ac_a380_1223.pdf) PDF p.107, FIGURE-2-12-0-991-004-A01 Nacelle Dimensions - GP 7200 Engine"
+ },
+ "plug": {
+  "profile": [
+   [
+    5.917,
+    0.433
+   ],
+   [
+    6.04,
+    0.391
+   ],
+   [
+    6.163,
+    0.348
+   ],
+   [
+    6.286,
+    0.306
+   ],
+   [
+    6.409,
+    0.264
+   ],
+   [
+    6.531,
+    0.221
+   ],
+   [
+    6.624,
+    0.19
+   ],
+   [
+    6.701,
+    0.163
+   ],
+   [
+    6.779,
+    0.136
+   ],
+   [
+    6.857,
+    0.109
+   ],
+   [
+    6.934,
+    0.083
+   ],
+   [
+    7.012,
+    0.056
+   ]
+  ],
+  "radius_at_core_exit": 0.434,
+  "tip_s": 7.07,
+  "tip_r": 0.036,
+  "shape": "straight cone, half-angle ~19-21 deg, blunt tip; a ring of small vent holes/slots just aft of the nozzle exit (p.107, Lagardere MSN108 photos)",
+  "photo_check": "ILA 079 E1: plug 1.04 m long, base dia 0.77 m at 163 px/m (drawing 1.15 / 0.87; photo foreshortened)",
+  "source": "Airbus A380 AC (ac_a380_1223.pdf) PDF p.107, FIGURE-2-12-0-991-004-A01 Nacelle Dimensions - GP 7200 Engine"
+ },
+ "spinner": {
+  "drawing_points": [
+   [
+    0.0,
+    0.0
+   ],
+   [
+    0.001,
+    0.023
+   ],
+   [
+    0.006,
+    0.063
+   ],
+   [
+    0.018,
+    0.101
+   ],
+   [
+    0.035,
+    0.139
+   ],
+   [
+    0.057,
+    0.176
+   ],
+   [
+    0.059,
+    0.178
+   ],
+   [
+    0.06,
+    0.179
+   ],
+   [
+    0.06,
+    0.179
+   ],
+   [
+    0.061,
+    0.181
+   ],
+   [
+    0.062,
+    0.183
+   ],
+   [
+    0.064,
+    0.186
+   ],
+   [
+    0.079,
+    0.203
+   ],
+   [
+    0.081,
+    0.205
+   ],
+   [
+    0.082,
+    0.206
+   ],
+   [
+    0.083,
+    0.208
+   ],
+   [
+    0.083,
+    0.207
+   ],
+   [
+    0.087,
+    0.211
+   ],
+   [
+    0.089,
+    0.215
+   ],
+   [
+    0.107,
+    0.235
+   ],
+   [
+    0.125,
+    0.255
+   ],
+   [
+    0.146,
+    0.274
+   ],
+   [
+    0.168,
+    0.292
+   ],
+   [
+    0.213,
+    0.326
+   ]
+  ],
+  "fit": "r = 0.675 * s^0.47 (rms 0.8 mm on the drawn part s 0-0.213); extrapolated: s 0.3: r 0.383, s 0.4: r 0.439, s 0.45: r 0.464",
+  "nose_cap_joint_s": 0.083,
+  "nose_cap_r": 0.21,
+  "source": "p.106 FIGURE-2-12-0-991-003-A01 silhouette (spinner visible ahead of the fan case, 62.96 pt/m); beyond s 0.213 estimate",
+  "colour": "#1C1D1C matte black/charcoal with one white radial dash near the nose (A380_ENGINE.jpg, F-WWDD 248-27, Lagardere MSN111)"
+ },
+ "fan": {
+  "blade_count": 24,
+  "blade_count_source": "EASA TCDS IM.E.026",
+  "tip_radius": 1.473,
+  "tip_radius_source": "TCDS fan 116 in (2.946 m)",
+  "hub_radius_at_le": 0.47,
+  "hub_source": "estimate (spinner extrapolation, photo proportion)",
+  "tip_le_s": 0.41,
+  "root_le_s": 0.45,
+  "le_source": "estimate: red fan-plane line on the cowl (s 0.38-0.47) and fan case front flange at 0.213",
+  "chord_root": 0.35,
+  "chord_tip": 0.55,
+  "chord_source": "estimate: wide-chord blades overlap strongly in A380_ENGINE.jpg; tip pitch 0.386 m x solidity 1.3-1.5; root pitch 0.123 m x solidity ~2.8",
+  "sweep": "swept tip, LE leaning aft ~10-20 deg over the outer third (estimate from Lagardere MSN111 photo)",
+  "twist": "stagger ~20 deg (root) to ~60 deg (tip) from the axis, ~40 deg twist (estimate)",
+  "colour": "#7E8082 bare titanium, darker in shade (#3C3427 measured inside the inlet in A380_ENGINE.jpg)",
+  "ogv": {
+   "count_estimate": 48,
+   "count_range": [
+    44,
+    52
+   ],
+   "structural_struts": "thicker vanes at 12 and 6 o'clock",
+   "station": [
+    1.5,
+    1.86
+   ],
+   "tip_r": 1.5,
+   "hub_r": 0.85,
+   "source": "photo GP7000_MTU-Museum_20231112_03w.jpg: vane pitch at 9 o'clock gives 7.1-8.1 deg (44-51 vanes); station between the p.106 flanges at 1.50 and 1.86 (estimate)"
+  },
+  "splitter_lip": {
+   "s": 0.95,
+   "r": 0.76,
+   "source": "estimate (see core.fan_hub_and_splitter)"
+  }
+ },
+ "thrust_reversers": {
+  "fitted": {
+   "1": false,
+   "2": true,
+   "3": true,
+   "4": false
+  },
+  "source": "AC 2-12-0 text p.104: reversers only on the inboard engines; outboard engines have fan exhaust cowls",
+  "type": "fixed cascade, translating cowl, blocker doors; two C-duct halves hinged on the pylon",
+  "outboard_difference": "same outer lines and the same 2.52 m length (photo ILA 079 E1 vs E2 and identical p.109/p.110 opening data), but no translating sleeve, no actuator fittings at s 3.4-3.6, no sleeve joint at 4.18; plain fan exhaust cowl halves latched at the bottom",
+  "translating_stroke": "not in the refs (estimate 0.6-0.7 m)"
+ },
+ "engine_positions": {
+  "obj_frame": "X-Plane OBJ: x lateral (+right), y up, z aft (m); fuselage nose tip at z -35.19 (a380_exterior_009)",
+  "trust": "lateral: mesh (x +-14.875 / +-25.757) agrees with AC p.32 span dims 29.6 / 51.4 m within 0.08 m. Vertical: AC front views give GP keel clearance +0.13 m (inboard) / -0.05 m (outboard) relative to the Trent; applied to the Trent mesh with the axis-to-keel difference. Longitudinal: AC plan view (p.33) puts the nacelle fronts at 22.23 / 29.94 m from the nose = z -12.96 / -5.25; the Trent mesh has -12.85 / -4.82, so the outboard mesh engine is 0.43 m further aft than the drawing (open question); recommendation keeps the mesh pylons (fan-cowl split at the Trent's).",
+  "per_engine": {
+   "1": {
+    "recommended": {
+     "axis_point_at_spinner_tip": [
+      -25.751,
+      -0.653,
+      -3.447
+     ],
+     "axis_point_at_fan_disc_z": [
+      -25.755,
+      -0.668,
+      -3.045
+     ],
+     "axis_direction_unit": [
+      -0.00995,
+      -0.03821,
+      0.99922
+     ],
+     "spinner_tip_z": -3.447,
+     "nose_cowl_fan_cowl_split_z": -3.187,
+     "plug_tip_z": 3.623,
+     "toe_deg": -0.57,
+     "pitch_deg": -2.19,
+     "how": "x from the installed mesh fan disc (AC p.32 gives +-25.7 m, mesh within 0.08 m); y = Trent mesh axis -0.515 + AC keel-clearance change -0.05 m (p.107 GP vs p.112 Trent) + (GP drawing axis-to-keel 1.972 - Trent mesh axis-to-keel 2.075); z puts the GP nose-cowl/fan-cowl split where the Trent's is (Trent mesh top lip -4.817 + 1.63 m, p.112), both fan cowls being 2.18 m long; toe/pitch kept from the mesh (no Airbus figure for installation angles)"
+    },
+    "trent_mesh": {
+     "fan_disc_centre": [
+      -25.755,
+      -0.515,
+      -3.045
+     ],
+     "spinner_tip_z": -4.222,
+     "plug_tip_z": 3.539,
+     "top_lip_z": -4.817,
+     "axis_to_keel": 2.075,
+     "toe_deg": -0.57,
+     "pitch_deg": -2.19
+    },
+    "current_gp_morph": {
+     "fan_disc_centre": [
+      -25.755,
+      -0.564,
+      -3.045
+     ],
+     "spinner_tip_z": -3.764,
+     "plug_tip_z": 3.459,
+     "toe_deg": -0.57,
+     "pitch_deg": -2.17
+    }
+   },
+   "2": {
+    "recommended": {
+     "axis_point_at_spinner_tip": [
+      -14.874,
+      -1.001,
+      -11.48
+     ],
+     "axis_point_at_fan_disc_z": [
+      -14.874,
+      -1.004,
+      -11.018
+     ],
+     "axis_direction_unit": [
+      0.00017,
+      -0.0075,
+      0.99997
+     ],
+     "spinner_tip_z": -11.48,
+     "nose_cowl_fan_cowl_split_z": -11.22,
+     "plug_tip_z": -4.41,
+     "toe_deg": 0.01,
+     "pitch_deg": -0.43,
+     "how": "x from the installed mesh fan disc (AC p.32 gives +-14.8 m, mesh within 0.08 m); y = Trent mesh axis -1.05 + AC keel-clearance change +0.13 m (p.107 GP vs p.112 Trent) + (GP drawing axis-to-keel 1.972 - Trent mesh axis-to-keel 2.056); z puts the GP nose-cowl/fan-cowl split where the Trent's is (Trent mesh top lip -12.85 + 1.63 m, p.112), both fan cowls being 2.18 m long; toe/pitch kept from the mesh (no Airbus figure for installation angles)"
+    },
+    "trent_mesh": {
+     "fan_disc_centre": [
+      -14.874,
+      -1.05,
+      -11.018
+     ],
+     "spinner_tip_z": -12.195,
+     "plug_tip_z": -4.438,
+     "top_lip_z": -12.85,
+     "axis_to_keel": 2.056,
+     "toe_deg": 0.01,
+     "pitch_deg": -0.43
+    },
+    "current_gp_morph": {
+     "fan_disc_centre": [
+      -14.874,
+      -0.92,
+      -11.018
+     ],
+     "spinner_tip_z": -11.715,
+     "plug_tip_z": -4.518,
+     "toe_deg": 0.01,
+     "pitch_deg": -0.35
+    }
+   },
+   "3": {
+    "recommended": {
+     "axis_point_at_spinner_tip": [
+      14.876,
+      -1.001,
+      -11.48
+     ],
+     "axis_point_at_fan_disc_z": [
+      14.876,
+      -1.004,
+      -11.018
+     ],
+     "axis_direction_unit": [
+      -0.00035,
+      -0.0075,
+      0.99997
+     ],
+     "spinner_tip_z": -11.48,
+     "nose_cowl_fan_cowl_split_z": -11.22,
+     "plug_tip_z": -4.41,
+     "toe_deg": -0.02,
+     "pitch_deg": -0.43,
+     "how": "x from the installed mesh fan disc (AC p.32 gives +-14.8 m, mesh within 0.08 m); y = Trent mesh axis -1.05 + AC keel-clearance change +0.13 m (p.107 GP vs p.112 Trent) + (GP drawing axis-to-keel 1.972 - Trent mesh axis-to-keel 2.056); z puts the GP nose-cowl/fan-cowl split where the Trent's is (Trent mesh top lip -12.85 + 1.63 m, p.112), both fan cowls being 2.18 m long; toe/pitch kept from the mesh (no Airbus figure for installation angles)"
+    },
+    "trent_mesh": {
+     "fan_disc_centre": [
+      14.876,
+      -1.05,
+      -11.018
+     ],
+     "spinner_tip_z": -12.195,
+     "plug_tip_z": -4.438,
+     "top_lip_z": -12.85,
+     "axis_to_keel": 2.056,
+     "toe_deg": -0.02,
+     "pitch_deg": -0.43
+    },
+    "current_gp_morph": {
+     "fan_disc_centre": [
+      14.876,
+      -0.92,
+      -11.018
+     ],
+     "spinner_tip_z": -11.715,
+     "plug_tip_z": -4.518,
+     "toe_deg": -0.01,
+     "pitch_deg": -0.35
+    }
+   },
+   "4": {
+    "recommended": {
+     "axis_point_at_spinner_tip": [
+      25.754,
+      -0.661,
+      -3.464
+     ],
+     "axis_point_at_fan_disc_z": [
+      25.758,
+      -0.676,
+      -3.039
+     ],
+     "axis_direction_unit": [
+      0.00908,
+      -0.0342,
+      0.99937
+     ],
+     "spinner_tip_z": -3.464,
+     "nose_cowl_fan_cowl_split_z": -3.204,
+     "plug_tip_z": 3.606,
+     "toe_deg": 0.52,
+     "pitch_deg": -1.96,
+     "how": "x from the installed mesh fan disc (AC p.32 gives +-25.7 m, mesh within 0.08 m); y = Trent mesh axis -0.515 + AC keel-clearance change -0.05 m (p.107 GP vs p.112 Trent) + (GP drawing axis-to-keel 1.972 - Trent mesh axis-to-keel 2.083); z puts the GP nose-cowl/fan-cowl split where the Trent's is (Trent mesh top lip -4.834 + 1.63 m, p.112), both fan cowls being 2.18 m long; toe/pitch kept from the mesh (no Airbus figure for installation angles)"
+    },
+    "trent_mesh": {
+     "fan_disc_centre": [
+      25.758,
+      -0.515,
+      -3.039
+     ],
+     "spinner_tip_z": -4.216,
+     "plug_tip_z": 3.532,
+     "top_lip_z": -4.834,
+     "axis_to_keel": 2.083,
+     "toe_deg": 0.52,
+     "pitch_deg": -1.96
+    },
+    "current_gp_morph": {
+     "fan_disc_centre": [
+      25.758,
+      -0.565,
+      -3.039
+     ],
+     "spinner_tip_z": -3.757,
+     "plug_tip_z": 3.452,
+     "toe_deg": 0.49,
+     "pitch_deg": -1.92
+    }
+   }
+  }
+ },
+ "surface_finish": {
+  "nacelle_cowls": {
+   "hex": "#EDEDE6",
+   "note": "operator paint; Airbus white measured in F-WWDD 248-27",
+   "source": "photo"
+  },
+  "inlet_lip": {
+   "hex": "#BFC1C2",
+   "metallic": true,
+   "roughness": 0.25,
+   "note": "polished aluminium; photos read #7C807F-#8C847A with sky/ground reflections",
+   "source": "photo A380_ENGINE.jpg, F-WWDD 248-27"
+  },
+  "lower_inlet_panel": {
+   "hex": "#8A887C",
+   "note": "grey heat-resistant panel aft of the anti-ice louvre (shaded photo #47463B x1.5 white balance)",
+   "source": "photo ILA 079 (estimate)"
+  },
+  "inlet_liner": {
+   "hex": "#504836",
+   "note": "perforated, dark grey-brown",
+   "source": "photo A380_ENGINE.jpg"
+  },
+  "abradable_ring": {
+   "hex": "#6C623F",
+   "source": "photo A380_ENGINE.jpg"
+  },
+  "fan_blades": {
+   "hex": "#7E8082",
+   "metallic": true,
+   "source": "photo (estimate, shaded)"
+  },
+  "spinner": {
+   "hex": "#1C1D1C",
+   "marking": "one white dash",
+   "source": "photos A380_ENGINE.jpg, F-WWDD 248-27"
+  },
+  "fan_duct_and_core_cowl_aft": {
+   "hex": "#121212",
+   "note": "dark/black inside the fan nozzle and on the first part of the core cowl",
+   "source": "photos F-WWDD 248-28, Airbus_A380_03"
+  },
+  "core_cowl_visible": {
+   "hex": "#9A9A96",
+   "metallic": true,
+   "note": "light grey metallic band behind the fan nozzle",
+   "source": "photo Airbus_A380_03 rear view (estimate)"
+  },
+  "primary_nozzle": {
+   "hex": "#A8A49A",
+   "metallic": true,
+   "note": "brushed steel ring with heat tint; shaded side reads #3C3A34",
+   "source": "photos F-WWDD 248-28, Lagardere MSN108 (#8C7D5F bare)"
+  },
+  "plug": {
+   "hex": "#6E6A60",
+   "metallic": true,
+   "note": "grey metallic with bronze heat tint and a darker blunt tip; bare engines read #3B2F25 (bronze-brown)",
+   "source": "photos F-WWDD 248-28, ILA 079, Lagardere MSN108"
+  },
+  "red_fan_plane_line": {
+   "hex": "#B01E28",
+   "source": "photo F-WWDD 248-27"
+  }
+ },
+ "current_morph_engine2": {
+  "measured": {
+   "highlight_top_s": -1.135,
+   "highlight_bottom_s": -0.967,
+   "top_lip_z": -12.85,
+   "max_r_top": 1.975,
+   "max_r_bottom_excluding_drain_mast": 2.112,
+   "max_r_outboard": 1.905,
+   "max_r_inboard": 1.906,
+   "fan_nozzle_exit_s_bottom": 5.063,
+   "plug_tip_s": 7.197,
+   "blade_root_s": 0.45,
+   "blade_tip_radius": 1.539
+  },
+  "frame": "station from the morph's own spinner tip",
+  "source": "installed a380_exterior_022_gp.obj / 030_gp sections through the engine axis"
+ },
+ "trent_mesh_engine2": {
+  "measured": {
+   "highlight_top_s": -0.655,
+   "highlight_bottom_s": -0.487,
+   "top_lip_z": -12.85,
+   "max_r_top": 1.975,
+   "max_r_bottom_excluding_drain_mast": 2.056,
+   "max_r_outboard": 1.973,
+   "max_r_inboard": 1.974,
+   "fan_nozzle_exit_s_bottom": 5.538,
+   "plug_tip_s": 7.757,
+   "blade_root_s": 0.93,
+   "blade_tip_radius": 1.539
+  },
+  "source": "installed a380_exterior_022.obj / 030.obj"
+ },
+ "core": {
+  "frame": "same axis and station as the nacelle (station 0 = spinner tip, +aft, metres)",
+  "module_stations": {
+   "source": "Airbus A380 AC PDF p.106, FIGURE-2-12-0-991-003-A01 Engine Dimensions - GP7200 (vector paths, 62.96 pt/m from the 4.93 m and 4.72 m dims, 0.1% apart); arrowed dimension lines and their extension lines",
+   "lp_compressor_module_fan_plus_booster": [
+    0.0,
+    2.328
+   ],
+   "fan_case_front_flange": 0.213,
+   "fan_case_dim_1_93m": [
+    0.213,
+    2.143
+   ],
+   "hp_compressor": [
+    2.328,
+    2.978
+   ],
+   "combustor_section": [
+    2.978,
+    3.456
+   ],
+   "hp_turbine": [
+    3.47,
+    3.678
+   ],
+   "turbine_center_frame": [
+    3.678,
+    3.848
+   ],
+   "lp_turbine": [
+    3.848,
+    4.542
+   ],
+   "turbine_exhaust_case": [
+    4.542,
+    4.931
+   ],
+   "aft_flange_tcds": 4.92,
+   "accessory_drive_section": [
+    1.935,
+    2.778
+   ],
+   "radial_drive_shaft": 2.651,
+   "unlabelled_2_77m_dim": [
+    1.951,
+    4.751
+   ]
+  },
+  "casing_outer_envelope": {
+   "source": "Airbus A380 AC PDF p.106, FIGURE-2-12-0-991-003-A01 Engine Dimensions - GP7200 (vector paths, 62.96 pt/m from the 4.93 m and 4.72 m dims, 0.1% apart); silhouette (filled path 194) sampled every 1.5 pt (0.024 m); includes flanges and externals drawn in the silhouette",
+   "columns": [
+    "station",
+    "r_top",
+    "r_bottom"
+   ],
+   "rows": [
+    [
+     0.012,
+     0.101,
+     0.101
+    ],
+    [
+     0.036,
+     0.139,
+     0.139
+    ],
+    [
+     0.06,
+     0.186,
+     0.176
+    ],
+    [
+     0.083,
+     0.215,
+     0.212
+    ],
+    [
+     0.107,
+     0.235,
+     0.236
+    ],
+    [
+     0.131,
+     0.255,
+     0.255
+    ],
+    [
+     0.155,
+     0.274,
+     0.274
+    ],
+    [
+     0.179,
+     0.292,
+     0.293
+    ],
+    [
+     0.202,
+     1.546,
+     1.546
+    ],
+    [
+     0.226,
+     1.541,
+     1.542
+    ],
+    [
+     0.25,
+     1.535,
+     1.536
+    ],
+    [
+     0.298,
+     1.558,
+     1.558
+    ],
+    [
+     0.322,
+     1.558,
+     1.559
+    ],
+    [
+     0.369,
+     1.588,
+     1.589
+    ],
+    [
+     0.393,
+     1.589,
+     1.589
+    ],
+    [
+     1.25,
+     1.589,
+     1.589
+    ],
+    [
+     1.298,
+     1.567,
+     1.568
+    ],
+    [
+     1.322,
+     1.534,
+     1.534
+    ],
+    [
+     1.346,
+     1.534,
+     1.534
+    ],
+    [
+     1.465,
+     1.534,
+     1.534
+    ],
+    [
+     1.489,
+     1.569,
+     1.568
+    ],
+    [
+     1.512,
+     1.569,
+     1.568
+    ],
+    [
+     1.56,
+     1.536,
+     1.536
+    ],
+    [
+     1.87,
+     1.556,
+     1.556
+    ],
+    [
+     1.893,
+     1.551,
+     1.552
+    ],
+    [
+     1.917,
+     1.548,
+     1.549
+    ],
+    [
+     1.989,
+     1.548,
+     1.549
+    ],
+    [
+     2.012,
+     1.551,
+     1.551
+    ],
+    [
+     2.036,
+     1.556,
+     1.555
+    ],
+    [
+     2.06,
+     1.55,
+     1.551
+    ],
+    [
+     2.084,
+     1.496,
+     1.55
+    ],
+    [
+     2.108,
+     1.549,
+     1.549
+    ],
+    [
+     2.155,
+     0.9,
+     0.908
+    ],
+    [
+     2.179,
+     0.906,
+     0.915
+    ],
+    [
+     2.203,
+     0.908,
+     0.917
+    ],
+    [
+     2.274,
+     0.909,
+     0.918
+    ],
+    [
+     2.322,
+     0.869,
+     0.883
+    ],
+    [
+     2.346,
+     0.424,
+     0.424
+    ],
+    [
+     2.394,
+     0.424,
+     0.424
+    ],
+    [
+     2.441,
+     0.411,
+     0.412
+    ],
+    [
+     2.465,
+     0.414,
+     0.412
+    ],
+    [
+     2.489,
+     0.414,
+     0.412
+    ],
+    [
+     2.584,
+     0.414,
+     0.412
+    ],
+    [
+     2.608,
+     0.414,
+     0.412
+    ],
+    [
+     2.679,
+     0.407,
+     0.392
+    ],
+    [
+     2.703,
+     0.421,
+     0.422
+    ],
+    [
+     2.727,
+     0.421,
+     0.422
+    ],
+    [
+     2.751,
+     0.403,
+     0.405
+    ],
+    [
+     2.822,
+     0.403,
+     0.402
+    ],
+    [
+     2.846,
+     0.409,
+     0.412
+    ],
+    [
+     2.894,
+     0.422,
+     0.418
+    ],
+    [
+     2.918,
+     0.422,
+     0.418
+    ],
+    [
+     2.965,
+     0.416,
+     0.412
+    ],
+    [
+     2.989,
+     0.438,
+     0.438
+    ],
+    [
+     3.084,
+     0.424,
+     0.424
+    ],
+    [
+     3.108,
+     0.429,
+     0.429
+    ],
+    [
+     3.156,
+     0.433,
+     0.432
+    ],
+    [
+     3.179,
+     0.431,
+     0.431
+    ],
+    [
+     3.203,
+     0.433,
+     0.433
+    ],
+    [
+     3.275,
+     0.439,
+     0.441
+    ],
+    [
+     3.441,
+     0.482,
+     0.478
+    ],
+    [
+     3.465,
+     0.482,
+     0.478
+    ],
+    [
+     3.489,
+     0.479,
+     0.474
+    ],
+    [
+     3.513,
+     0.479,
+     0.474
+    ],
+    [
+     3.608,
+     0.494,
+     0.488
+    ],
+    [
+     3.632,
+     0.467,
+     0.472
+    ],
+    [
+     3.656,
+     0.474,
+     0.478
+    ],
+    [
+     3.68,
+     0.501,
+     0.506
+    ],
+    [
+     3.703,
+     0.63,
+     0.627
+    ],
+    [
+     3.727,
+     0.698,
+     0.704
+    ],
+    [
+     3.751,
+     0.679,
+     0.685
+    ],
+    [
+     3.775,
+     0.635,
+     0.635
+    ],
+    [
+     3.799,
+     0.623,
+     0.621
+    ],
+    [
+     3.846,
+     0.661,
+     0.627
+    ],
+    [
+     3.87,
+     0.662,
+     0.612
+    ],
+    [
+     3.894,
+     0.687,
+     0.681
+    ],
+    [
+     3.918,
+     0.691,
+     0.686
+    ],
+    [
+     3.942,
+     0.659,
+     0.654
+    ],
+    [
+     4.061,
+     0.729,
+     0.727
+    ],
+    [
+     4.132,
+     0.784,
+     0.779
+    ],
+    [
+     4.227,
+     0.821,
+     0.815
+    ],
+    [
+     4.251,
+     0.835,
+     0.83
+    ],
+    [
+     4.275,
+     0.84,
+     0.834
+    ],
+    [
+     4.346,
+     0.852,
+     0.847
+    ],
+    [
+     4.37,
+     0.854,
+     0.848
+    ],
+    [
+     4.537,
+     0.888,
+     0.883
+    ],
+    [
+     4.585,
+     0.835,
+     0.83
+    ],
+    [
+     4.656,
+     0.82,
+     0.823
+    ],
+    [
+     4.68,
+     0.891,
+     0.819
+    ],
+    [
+     4.704,
+     0.891,
+     0.83
+    ],
+    [
+     4.751,
+     0.89,
+     0.814
+    ],
+    [
+     4.775,
+     0.89,
+     0.807
+    ],
+    [
+     4.799,
+     0.785,
+     0.808
+    ],
+    [
+     4.823,
+     0.781,
+     0.808
+    ],
+    [
+     4.87,
+     0.776,
+     0.777
+    ],
+    [
+     4.894,
+     0.779,
+     0.775
+    ],
+    [
+     4.918,
+     0.784,
+     0.779
+    ],
+    [
+     4.942,
+     0.786,
+     0.781
+    ]
+   ]
+  },
+  "flanges_and_case_joints": {
+   "source": "Airbus A380 AC PDF p.106, FIGURE-2-12-0-991-003-A01 Engine Dimensions - GP7200 (vector paths, 62.96 pt/m from the 4.93 m and 4.72 m dims, 0.1% apart); vertical lines spanning the casing; radius = line ends (top, bottom)",
+   "columns": [
+    "station",
+    "r_top",
+    "r_bottom"
+   ],
+   "rows": [
+    [
+     0.213,
+     1.574,
+     1.577
+    ],
+    [
+     0.325,
+     1.558,
+     1.559
+    ],
+    [
+     1.489,
+     1.569,
+     1.568
+    ],
+    [
+     1.503,
+     1.569,
+     1.568
+    ],
+    [
+     1.861,
+     1.588,
+     1.586
+    ],
+    [
+     2.044,
+     1.585,
+     1.585
+    ],
+    [
+     2.719,
+     0.198,
+     0.248
+    ],
+    [
+     2.757,
+     0.42,
+     0.42
+    ],
+    [
+     2.837,
+     0.42,
+     0.42
+    ],
+    [
+     2.996,
+     0.438,
+     0.438
+    ],
+    [
+     3.498,
+     0.305,
+     0.3
+    ],
+    [
+     3.518,
+     0.47,
+     0.474
+    ],
+    [
+     3.678,
+     0.501,
+     0.506
+    ],
+    [
+     4.056,
+     0.729,
+     0.724
+    ],
+    [
+     4.59,
+     0.834,
+     0.829
+    ],
+    [
+     4.931,
+     0.786,
+     0.781
+    ],
+    [
+     4.931,
+     0.807,
+     0.802
+    ]
+   ],
+   "named": {
+    "fan_case_front_flange_A1": [
+     0.213,
+     1.575
+    ],
+    "containment_case_aft": [
+     1.288,
+     1.568
+    ],
+    "fan_case_flange_pair": [
+     1.496,
+     1.569
+    ],
+    "ogv_casing_aft_flange": [
+     1.861,
+     1.587
+    ],
+    "fan_frame_aft_ring_tr_attach": [
+     2.044,
+     1.585
+    ],
+    "fan_hub_frame_aft": [
+     2.29,
+     0.89
+    ],
+    "hpc_front_flange": [
+     2.328,
+     0.87
+    ],
+    "hpc_case_flanges": [
+     [
+      2.757,
+      0.42
+     ],
+     [
+      2.837,
+      0.42
+     ]
+    ],
+    "hpc_aft_combustor_case_front": [
+     2.996,
+     0.438
+    ],
+    "combustor_case_flange": [
+     3.093,
+     0.42
+    ],
+    "combustor_hpt_flange": [
+     3.518,
+     0.472
+    ],
+    "hpt_tcf_flange": [
+     3.678,
+     0.503
+    ],
+    "tcf_lpt_flange": [
+     3.848,
+     0.59
+    ],
+    "lpt_case_flange": [
+     4.056,
+     0.727
+    ],
+    "lpt_tec_flange": [
+     4.541,
+     0.85
+    ],
+    "tec_aft_flange": [
+     4.931,
+     0.79
+    ]
+   }
+  },
+  "flowpath": {
+   "source": "estimate: no GP7200 cross-section in the local refs; radii placed inside the measured casing envelope with typical hub/tip ratios; exit tied to the measured core nozzle (p.107)",
+   "columns": [
+    "name",
+    "station",
+    "r_inner",
+    "r_outer",
+    "source"
+   ],
+   "rows": [
+    [
+     "fan_le_hub",
+     0.45,
+     0.47,
+     null,
+     "estimate: spinner power law extrapolated to the fan root (see spinner)"
+    ],
+    [
+     "splitter_lip",
+     0.95,
+     0.56,
+     0.76,
+     "estimate: between fan hub 0.47 and OGV hub ~0.85"
+    ],
+    [
+     "lpc_inlet",
+     1.0,
+     0.56,
+     0.74,
+     "estimate"
+    ],
+    [
+     "lpc_exit",
+     1.55,
+     0.58,
+     0.66,
+     "estimate: booster inside the OGV / fan-frame region (OGV row s 1.50-1.86)"
+    ],
+    [
+     "gooseneck_mid",
+     1.95,
+     0.42,
+     0.55,
+     "estimate: transition duct through the fan hub frame struts"
+    ],
+    [
+     "hpc_inlet",
+     2.38,
+     0.24,
+     0.37,
+     "estimate: casing r 0.414-0.424 at s 2.38 (p.106) minus ~0.045 case and tip allowance; hub/tip 0.65"
+    ],
+    [
+     "hpc_exit",
+     2.97,
+     0.32,
+     0.36,
+     "estimate: casing r 0.42-0.44 (p.106); hub/tip ~0.9 at exit"
+    ],
+    [
+     "diffuser_exit",
+     3.08,
+     0.29,
+     0.42,
+     "estimate: combustor case r 0.43-0.45 (p.106)"
+    ],
+    [
+     "combustor_exit",
+     3.43,
+     0.33,
+     0.4,
+     "estimate: combustor case r 0.45-0.48 (p.106)"
+    ],
+    [
+     "hpt_inlet",
+     3.47,
+     0.33,
+     0.4,
+     "estimate: HPT case r 0.47-0.50 (p.106)"
+    ],
+    [
+     "hpt_exit",
+     3.68,
+     0.34,
+     0.43,
+     "estimate"
+    ],
+    [
+     "tcf_exit_lpt_inlet",
+     3.85,
+     0.44,
+     0.58,
+     "estimate: TCF flange r 0.59 (p.106); flowpath ramps outward through the TCF"
+    ],
+    [
+     "lpt_mid",
+     4.2,
+     0.48,
+     0.7,
+     "estimate: LPT case r 0.73-0.83 (p.106)"
+    ],
+    [
+     "lpt_exit",
+     4.54,
+     0.52,
+     0.8,
+     "estimate: LPT/TEC flange r 0.85 (p.106)"
+    ],
+    [
+     "tec_aft_flange",
+     4.93,
+     0.55,
+     0.77,
+     "estimate: TEC aft flange r 0.78-0.80 (p.106); plug base"
+    ],
+    [
+     "core_nozzle_exit",
+     5.917,
+     0.434,
+     0.67,
+     "drawing p.107: nozzle outer 0.687 minus ~0.02 lip; plug radius at the exit plane 0.434"
+    ]
+   ]
+  },
+  "fan_hub_and_splitter": {
+   "fan_hub_radius_at_le": 0.47,
+   "fan_hub_source": "estimate: spinner fit r = 0.675 s^0.47 (p.106) extrapolated to s ~0.45; photo A380_ENGINE.jpg spinner/fan proportion ~0.5 m",
+   "splitter_lip": {
+    "station": 0.95,
+    "radius": 0.76,
+    "source": "estimate"
+   },
+   "ogv_hub_radius": 0.85,
+   "ogv_hub_source": "estimate: MTU photo GP7000_MTU-Museum_20231112_03w.jpg inner/outer OGV ring ratio 0.53 x OGV tip ~1.50 = 0.79; drawing p.106 fan hub frame ring r 0.87-0.91 at s 2.27-2.33; take 0.85"
+  },
+  "lpc_booster": {
+   "stages": 5,
+   "stages_source": "EASA TCDS IM.E.026 (1-5-9-2-6)",
+   "station_range": [
+    1.0,
+    1.55
+   ],
+   "station_source": "estimate: p.106 gives only the whole LP compressor module (fan + booster) s 0 to 2.33; booster placed under the OGV region",
+   "rotor_blade_counts": null,
+   "stator_vane_counts": null,
+   "counts_note": "not found in the local refs; modelling estimate only (typical PW4000-112 / GE90-class boosters): rotors ~70-90 blades, stators ~90-120 vanes per row, plus an inlet guide vane row"
+  },
+  "intermediate_case_fan_hub_frame": {
+   "station_range": [
+    1.86,
+    2.33
+   ],
+   "station_source": "drawing p.106: OGV casing aft flange 1.861 to HPC front flange 2.328",
+   "struts": null,
+   "struts_note": "not visible in any ref; estimate 8 struts, the 6 o'clock one carrying the radial drive shaft (p.106 dash-dot line at s 2.65). The OGV row has 2 thick structural struts at 12 and 6 o'clock (MTU photo 03w)"
+  },
+  "hpc": {
+   "stages": 9,
+   "stages_source": "EASA TCDS IM.E.026",
+   "station_range": [
+    2.328,
+    2.978
+   ],
+   "station_source": "Airbus A380 AC PDF p.106, FIGURE-2-12-0-991-003-A01 Engine Dimensions - GP7200 (vector paths, 62.96 pt/m from the 4.93 m and 4.72 m dims, 0.1% apart), HP COMPRESSOR dimension",
+   "variable_stators": "estimate: IGV + first 4-5 stator rows variable; p.106 shows ~5 ring/lever features on the forward HPC case s 2.38-2.62 (VSV unison rings) and the core is GE90-derived",
+   "casing_outer_radius": [
+    0.41,
+    0.44
+   ],
+   "casing_source": "drawing p.106 envelope",
+   "blade_counts": null,
+   "counts_note": "not found; modelling estimate 50-80 blades per rotor"
+  },
+  "diffuser_combustor": {
+   "type": "single annular combustor (estimate, GE90-derived core; drawing only says COMBUSTOR SECTION)",
+   "station_range": [
+    2.978,
+    3.456
+   ],
+   "station_source": "Airbus A380 AC PDF p.106, FIGURE-2-12-0-991-003-A01 Engine Dimensions - GP7200 (vector paths, 62.96 pt/m from the 4.93 m and 4.72 m dims, 0.1% apart), COMBUSTOR SECTION dimension",
+   "case_outer_radius": [
+    0.42,
+    0.5
+   ],
+   "case_source": "drawing p.106",
+   "liner_outer_r": 0.4,
+   "liner_inner_r": 0.3,
+   "liner_length": 0.35,
+   "dome_station": 3.08,
+   "liner_source": "estimate: liner annulus inside the measured case, dome just aft of the diffuser flange at s 3.093",
+   "fuel_nozzles": null,
+   "fuel_nozzles_note": "not countable in the refs; estimate 24 (GE90 has 30 at a larger diameter, scaled by core size)"
+  },
+  "hpt": {
+   "stages": 2,
+   "stages_source": "EASA TCDS IM.E.026",
+   "station_range": [
+    3.47,
+    3.678
+   ],
+   "station_source": "Airbus A380 AC PDF p.106, FIGURE-2-12-0-991-003-A01 Engine Dimensions - GP7200 (vector paths, 62.96 pt/m from the 4.93 m and 4.72 m dims, 0.1% apart), HP TURBINE dimension",
+   "case_outer_radius": [
+    0.47,
+    0.5
+   ],
+   "case_source": "drawing p.106",
+   "ngv_and_blade_counts": null,
+   "counts_note": "not found; modelling estimate NGV ~40-50, blades ~70-80 per stage",
+   "externals": "ring of cooling-air / clearance-control manifolds and fittings around s 3.62-3.78 (p.106)"
+  },
+  "turbine_center_frame": {
+   "station_range": [
+    3.678,
+    3.848
+   ],
+   "station_source": "Airbus A380 AC PDF p.106, FIGURE-2-12-0-991-003-A01 Engine Dimensions - GP7200 (vector paths, 62.96 pt/m from the 4.93 m and 4.72 m dims, 0.1% apart), TURBINE CENTER FRAME dimension",
+   "struts": null,
+   "struts_note": "not visible; estimate 8-12 faired struts"
+  },
+  "lpt": {
+   "stages": 6,
+   "stages_source": "EASA TCDS IM.E.026",
+   "station_range": [
+    3.848,
+    4.542
+   ],
+   "station_source": "Airbus A380 AC PDF p.106, FIGURE-2-12-0-991-003-A01 Engine Dimensions - GP7200 (vector paths, 62.96 pt/m from the 4.93 m and 4.72 m dims, 0.1% apart), LP TURBINE dimension",
+   "case_outer_radius": [
+    0.66,
+    0.86
+   ],
+   "case_source": "drawing p.106 envelope (cone growing aft)",
+   "exit_flowpath": [
+    0.52,
+    0.8
+   ],
+   "exit_source": "estimate tied to the TEC aft flange r 0.78-0.80 and the core nozzle (p.107)",
+   "blade_counts": null,
+   "counts_note": "not found; modelling estimate ~100-130 blades per row; the last stage is visible from behind through the core nozzle",
+   "externals": "LPT clearance-control manifold: many circumferential tubes with axial headers over the whole LPT case (MTU photo 05w)"
+  },
+  "turbine_exhaust_case": {
+   "station_range": [
+    4.542,
+    4.931
+   ],
+   "station_source": "Airbus A380 AC PDF p.106, FIGURE-2-12-0-991-003-A01 Engine Dimensions - GP7200 (vector paths, 62.96 pt/m from the 4.93 m and 4.72 m dims, 0.1% apart), TURBINE EXHAUST CASE dimension and 4.93 m overall",
+   "case_outer_radius": [
+    0.78,
+    0.89
+   ],
+   "struts": null,
+   "struts_note": "not visible; estimate 12-14 struts (typical turbine rear frame)",
+   "aft_mount": "aft mount at the top of the TEC (MTU photo 05w shows a display bracket clamped to the TEC near s 4.6-4.9)"
+  },
+  "shafts_and_bearings": {
+   "source": "estimate: generic two-spool layout with a turbine center frame (named on p.106); no GP7200 bearing drawing in the refs",
+   "lp_shaft_outer_radius": 0.06,
+   "hp_spool_bore_radius": 0.15,
+   "bearings": [
+    {
+     "name": "No.1 LP ball (thrust)",
+     "station": 1.05,
+     "support": "fan hub frame forward sump"
+    },
+    {
+     "name": "No.2 LP roller",
+     "station": 1.25,
+     "support": "fan hub frame forward sump"
+    },
+    {
+     "name": "No.3 HP ball (thrust)",
+     "station": 2.25,
+     "support": "fan hub frame / intermediate case"
+    },
+    {
+     "name": "No.4 HP roller",
+     "station": 3.76,
+     "support": "turbine center frame"
+    },
+    {
+     "name": "No.5 LP roller",
+     "station": 4.75,
+     "support": "turbine exhaust case"
+    }
+   ]
+  },
+  "gearbox_and_externals": {
+   "accessory_gearbox": {
+    "mounting": "core-mounted at 6 o'clock under the HPC (p.106 view A from below; thumbnail arrow A points at the bottom of the core behind the fan frame)",
+    "station_range": [
+     1.935,
+     2.778
+    ],
+    "parts": "angle gearbox forward, main gearbox aft, radial drive shaft at s 2.65 (p.106)",
+    "radial_position": "estimate r 0.55-1.0 below the axis (must fit inside the core cowl)"
+   },
+   "oil_tank": {
+    "location": "left side of the fan case (~9 o'clock looking forward) near the fan case aft end",
+    "station": [
+     1.6,
+     2.1
+    ],
+    "source": "MTU photo 03w (large cylindrical tank on the fan case) and the OIL TANK ACCESS DOOR on the fan cowl at s 1.77-2.16 (p.107 square; photo ILA_2010_-_gravitat-OFF_-_Airbus_380_079.jpg)"
+   },
+   "core_externals_from_photos": [
+    "large bare-metal HP bleed / start-air duct (~0.2 m dia) arching from the upper HPC down past the combustor (MTU 05w)",
+    "orange-red silicone-sheathed air hoses on the forward core (MTU 03w/05w)",
+    "FADEC/EEC box with a red rubber rectangular cooling-air frame on the left forward core near the fan hub frame (MTU 03w/05w)",
+    "dense wiring harness bundles: grey braided with red-orange leads (MTU 05w)",
+    "blue braided harness/leads down the lower left core (MTU 05w)",
+    "white/silver canister on the lower forward core (ignition exciter or fuel filter, estimate) (MTU 05w)",
+    "LPT clearance-control tube cage over the LPT case; small flanged bosses on the TEC (MTU 05w)",
+    "dark heat-tinted bronze-grey exhaust nozzle and plug (Lagardere MSN108 photos)"
+   ],
+   "colours_estimate": {
+    "core_cases": "#8E8A80",
+    "silicone_hoses": "#C8482E",
+    "harness_blue": "#3A6EA8",
+    "eec_frame": "#B03A2E",
+    "source": "estimate from MTU 03w/05w photos (outdoor, overcast)"
+   }
+  }
+ }
+}

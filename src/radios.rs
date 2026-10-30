@@ -1323,10 +1323,15 @@ impl Radios {
                 };
                 vars.write_from_xplane(&ids.radial_error[k], error);
                 vars.write_from_xplane(&ids.magvar[k], magvar);
-                let has_gs = glide_slope_present(localizer, vertical[i] != 0, glideslope_flag[i] != 0);
+                let mut has_gs = glide_slope_present(localizer, vertical[i] != 0, glideslope_flag[i] != 0);
+                let mut gs_error = vdef[i] as f64 * GS_DEG_PER_DOT;
+                if let (true, Some(shown)) = (localizer && vertical[i] != 0, crate::false_glideslope::for_frequency((nav.active_hz / 10_000.).round() as i32)) {
+                    has_gs = shown.is_some();
+                    gs_error = shown.unwrap_or(0.);
+                }
                 vars.write_from_xplane(&ids.has_localizer[k], localizer as i32 as f64);
                 vars.write_from_xplane(&ids.has_glide_slope[k], has_gs as i32 as f64);
-                vars.write_from_xplane(&ids.glide_slope_error[k], if has_gs { vdef[i] as f64 * GS_DEG_PER_DOT } else { 0. });
+                vars.write_from_xplane(&ids.glide_slope_error[k], if has_gs { gs_error } else { 0. });
                 // X-Plane exposes a raw glide slope angle dataref only for
                 // nav1/nav2 (array index 0/1); nav4 (index 3) has none, so
                 // it stays 0 -- a documented gap, not a regression (it read

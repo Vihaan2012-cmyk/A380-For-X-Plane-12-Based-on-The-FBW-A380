@@ -427,7 +427,7 @@ mod tests {
     fn light_sync_waits_for_the_automatic_brightness_and_the_sun_must_be_known_first() {
         let text = "x.then(([keyEventManager]) => {\n        this.keyInterceptManager = keyEventManager;\n        this.initLighting();\n".to_string();
         let out = crate::source_patch::apply(&source_patches(), "/Pages/VCockpit/Instruments/A380X/ExtrasHost/index.js", text, |_, _| {});
-        assert!(out.contains("GLASSCOCKPIT AUTOMATIC BRIGHTNESS") && out.contains("lightSyncInit();") && out.contains("this.initLighting()"));
+        assert!(out.contains("fbw/GLASSCOCKPIT_AUTOMATIC_BRIGHTNESS") && out.contains("lightSyncInit();") && out.contains("this.initLighting()"));
         assert!(!out.contains("> 10000) ? this.initLighting()"), "a missing brightness must not initialise the knobs");
         assert!(out.contains("lightSyncSteady > 5000"), "the brightness must hold before the knobs are set");
         let text = "this.setPotentiometer(84, autoBrightness < 50 ? 1.5 * autoBrightness : 0);\n    this.setPotentiometer(85, autoBrightness);".to_string();

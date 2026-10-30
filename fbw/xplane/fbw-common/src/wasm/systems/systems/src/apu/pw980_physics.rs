@@ -521,6 +521,37 @@ impl Pw980Core {
         }
     }
 
+    /// Runs up to `seconds` of the same physics in bounded steps within one
+    /// tick, stopping early once `done` holds: an aircraft preset's quick
+    /// mode, which wants a real start or coast-down without the wait.
+    #[allow(clippy::too_many_arguments)]
+    pub(super) fn fast_forward(
+        &mut self,
+        context: &UpdateContext,
+        running: bool,
+        starter_powered: bool,
+        elec_shaft_power: Power,
+        bleed_extraction: MassRate,
+        bleed_pressure: Pressure,
+        seconds: f64,
+        done: impl Fn(&Self) -> bool,
+    ) {
+        let mut left = seconds;
+        while left > 0. && !done(self) {
+            let dt = left.min(Self::MAX_PHYSICS_SUBSTEP_S);
+            self.update_step(
+                context,
+                running,
+                starter_powered,
+                elec_shaft_power,
+                bleed_extraction,
+                bleed_pressure,
+                dt,
+            );
+            left -= dt;
+        }
+    }
+
     /// One bounded-`dt` Euler step of the core physics; see `update`'s
     /// substep loop, which is the only caller.
     #[allow(clippy::too_many_arguments)]

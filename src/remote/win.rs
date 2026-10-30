@@ -10,6 +10,7 @@ const PAGE_READWRITE: u32 = 0x04;
 const FILE_MAP_ALL_ACCESS: u32 = 0x000F_001F;
 const EVENT_MODIFY_STATE: u32 = 0x0002;
 const SYNCHRONIZE: u32 = 0x0010_0000;
+const PROCESS_QUERY_LIMITED_INFORMATION: u32 = 0x1000;
 pub const WAIT_OBJECT_0: u32 = 0;
 pub const WAIT_TIMEOUT: u32 = 0x102;
 pub const INFINITE: u32 = 0xFFFF_FFFF;
@@ -27,6 +28,7 @@ extern "system" {
     fn WaitForSingleObject(object: Handle, milliseconds: u32) -> u32;
     fn WaitForMultipleObjects(count: u32, objects: *const Handle, wait_all: i32, milliseconds: u32) -> u32;
     fn OpenProcess(access: u32, inherit: i32, pid: u32) -> Handle;
+    fn GetExitCodeProcess(process: Handle, code: *mut u32) -> i32;
     fn CloseHandle(object: Handle) -> i32;
 }
 
@@ -51,6 +53,7 @@ mod stand_ins {
     pub unsafe fn WaitForSingleObject(_: Handle, _: u32) -> u32 { super::WAIT_TIMEOUT }
     pub unsafe fn WaitForMultipleObjects(_: u32, _: *const Handle, _: i32, _: u32) -> u32 { WAIT_FAILED }
     pub unsafe fn OpenProcess(_: u32, _: i32, _: u32) -> Handle { std::ptr::null_mut() }
+    pub unsafe fn GetExitCodeProcess(_: Handle, _: *mut u32) -> i32 { 0 }
     pub unsafe fn CloseHandle(_: Handle) -> i32 { 0 }
 }
 #[cfg(not(windows))]
@@ -155,12 +158,17 @@ unsafe impl Send for Process {}
 
 impl Process {
     pub fn open(pid: u32) -> Option<Self> {
-        let h = unsafe { OpenProcess(SYNCHRONIZE, 0, pid) };
+        let h = unsafe { OpenProcess(SYNCHRONIZE | PROCESS_QUERY_LIMITED_INFORMATION, 0, pid) };
         (!h.is_null()).then_some(Self(h))
     }
 
     pub fn handle(&self) -> Handle {
         self.0
+    }
+
+    pub fn exit_code(&self) -> Option<u32> {
+        let mut code = 0;
+        (unsafe { GetExitCodeProcess(self.0, &mut code) } != 0).then_some(code)
     }
 }
 

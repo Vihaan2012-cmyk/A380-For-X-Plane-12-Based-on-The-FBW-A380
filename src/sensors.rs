@@ -328,8 +328,18 @@ struct Ils {
     ids: [VariableIdentifier; 8],
     find_navaid: Option<FindNavAidFn>,
     navaid_info: Option<GetNavAidInfoFn>,
-    /// The frequency last looked up, when, and the angle found.
-    looked_up: Option<(c_int, f64, Option<f64>)>,
+    elevation: Option<DataRef>,
+    /// The frequency last looked up, when, and the glide slope found.
+    looked_up: Option<(c_int, f64, Option<GsSite>)>,
+}
+
+/// A glide slope antenna from X-Plane's nav database.
+#[derive(Clone, Copy)]
+struct GsSite {
+    angle: Option<f64>,
+    lat: f64,
+    lon: f64,
+    elevation_m: f64,
 }
 
 /// How often the nav database is searched again for the same frequency, as
@@ -365,6 +375,7 @@ impl Ils {
                 xplm.find("sim/cockpit/radios/nav2_slope_degt"),
             ],
             latitude: xplm.find("sim/flightmodel/position/latitude"),
+            elevation: xplm.find("sim/flightmodel/position/elevation"),
             ids: names.map(|n| vars.get(n.to_owned())),
             find_navaid: xplm_function("XPLMFindNavAid")
                 .map(|p| unsafe { std::mem::transmute::<*mut c_void, FindNavAidFn>(p) }),
@@ -416,16 +427,31 @@ impl Ils {
                 floats(self.vdef)[ILS_RECEIVER],
             ));
         }
-        let gs_deg = if localizer {
+        let (gs_deg, site) = if localizer {
             self.glide_slope_angle(xplm, &frequency[..n], freq, longitude, time)
         } else {
-            None
+            (None, None)
         };
+        let mut gs_error = floats(self.vdef)[ILS_RECEIVER] as f64 * GS_DEG_PER_DOT;
+        let mut gs_valid = gs_valid;
+        let mut published = None;
+        let lat = self.latitude.map_or(0., |d| xplm.get_d(d));
+        let near = |site: &GsSite| (lat - site.lat).abs() < 0.4 && (longitude - site.lon).abs() < 0.6;
+        if let (true, Some(path), Some(site)) = (loc_valid && vertical != 0, gs_deg, site.filter(near)) {
+            let height = self.elevation.map_or(0., |d| xplm.get_d(d)) - site.elevation_m;
+            let elevation = crate::false_glideslope::elevation_deg(lat, longitude, site.lat, site.lon, height);
+            if let Ok(shown) = crate::false_glideslope::indicated(elevation, path) {
+                gs_valid = shown.is_some();
+                gs_error = shown.unwrap_or(0.);
+                published = Some(shown);
+            }
+        }
+        crate::false_glideslope::publish(freq, published);
         let values = [
             loc_valid as i32 as f64,
             floats(self.hdef)[ILS_RECEIVER] as f64 * LOC_DEG_PER_DOT,
             gs_valid as i32 as f64,
-            floats(self.vdef)[ILS_RECEIVER] as f64 * GS_DEG_PER_DOT,
+            gs_error,
             (ints(self.has_dme)[ILS_RECEIVER] != 0) as i32 as f64,
             floats(self.dme)[ILS_RECEIVER] as f64,
             magnetic_minus_true(psi, mag_psi),
@@ -443,31 +469,31 @@ impl Ils {
         freq: c_int,
         longitude: f64,
         time: f64,
-    ) -> Option<f64> {
-        for (i, slope) in self.slope.iter().enumerate() {
-            if let Some(d) = slope {
-                if frequencies[i] == freq {
-                    let v = xplm.get_f(*d) as f64;
-                    if v > 0. {
-                        return Some(v);
-                    }
-                }
-            }
-        }
-        if let Some((f, when, angle)) = self.looked_up {
-            if f == freq && time - when < GS_LOOKUP_SECONDS {
-                return angle;
-            }
-        }
+    ) -> (Option<f64>, Option<GsSite>) {
+        let tuned = self.slope.iter().enumerate().find_map(|(i, slope)| {
+            slope.filter(|_| frequencies[i] == freq).map(|d| xplm.get_f(d) as f64).filter(|v| *v > 0.)
+        });
         #[cfg(feature = "test-support")]
         if let Some(angle) = offline_glide_slope_angle() {
-            return Some(angle);
+            return (tuned.or(Some(angle)), None);
         }
+        let site = match self.looked_up {
+            Some((f, when, site)) if f == freq && time - when < GS_LOOKUP_SECONDS => site,
+            _ => {
+                let site = self.look_up_site(xplm, freq, longitude);
+                self.looked_up = Some((freq, time, site));
+                site
+            }
+        };
+        (tuned.or(site.and_then(|s| s.angle)), site)
+    }
+
+    fn look_up_site(&self, xplm: &Xplm, freq: c_int, longitude: f64) -> Option<GsSite> {
         let (find, info) = (self.find_navaid?, self.navaid_info?);
         let mut lat = self.latitude.map_or(0., |d| xplm.get_d(d)) as f32;
         let mut lon = longitude as f32;
         let mut frequency = freq;
-        let angle = unsafe {
+        unsafe {
             let navaid = find(
                 std::ptr::null(),
                 std::ptr::null(),
@@ -479,24 +505,22 @@ impl Ils {
             if navaid < 0 {
                 None
             } else {
-                let mut field = 0f32;
+                let (mut field, mut site_lat, mut site_lon, mut height) = (0f32, 0f32, 0f32, 0f32);
                 info(
                     navaid,
                     std::ptr::null_mut(),
-                    std::ptr::null_mut(),
-                    std::ptr::null_mut(),
-                    std::ptr::null_mut(),
+                    &mut site_lat,
+                    &mut site_lon,
+                    &mut height,
                     std::ptr::null_mut(),
                     &mut field,
                     std::ptr::null_mut(),
                     std::ptr::null_mut(),
                     std::ptr::null_mut(),
                 );
-                glide_slope_angle_from_bearing_field(field)
+                Some(GsSite { angle: glide_slope_angle_from_bearing_field(field), lat: site_lat as f64, lon: site_lon as f64, elevation_m: height as f64 })
             }
-        };
-        self.looked_up = Some((freq, time, angle));
-        angle
+        }
     }
 }
 

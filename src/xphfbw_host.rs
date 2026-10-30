@@ -717,7 +717,8 @@ impl XphfbwHost {
                 cell.store(0, Ordering::Relaxed);
             }
             crate::display::mark_bridge_gone();
-            crate::log("js: xphfbw: the XPHFBW process is gone; the plugin's own instruments resume");
+            let code = process.exit_code().map_or("unknown".to_string(), |c| format!("{c:#x}"));
+            crate::log(&format!("js: xphfbw: the XPHFBW process is gone (exit code {code}); the plugin's own instruments resume"));
         }
         self.gone
     }
@@ -833,6 +834,10 @@ impl Drop for XphfbwHost {
 mod tests {
     use super::*;
     use systems::simulation::SimulatorReaderWriter;
+
+    fn wire(name: &str) -> String {
+        crate::xp_names::event_out(name, "").0
+    }
 
     #[test]
     fn a_cleared_memo_line_reads_zero_rather_than_keeping_its_last_code() {
@@ -1078,7 +1083,7 @@ htmlgauge00=A380X/SystemsHost/index.html, 0,0,1,1
         assert_eq!(sender.downlink(), vec![Downlink::Reply { id: 1, ok: true, text: "null".into() }]);
         let got = other.downlink();
         assert_eq!(got.len(), 1);
-        assert!(matches!(&got[0], Downlink::ProviderEvent { name, .. } if name == "EVENT_FROM_VIEW_LISTENER"));
+        assert!(matches!(&got[0], Downlink::ProviderEvent { name, .. } if *name == wire("EVENT_FROM_VIEW_LISTENER")));
     }
 
     #[test]
@@ -1132,7 +1137,7 @@ htmlgauge00=A380X/SystemsHost/index.html, 0,0,1,1
         assert!(systems_host.downlink().is_empty());
         let got = pfd.downlink();
         assert_eq!(got.len(), 2, "the reply and the targeted event");
-        assert!(got.iter().any(|d| matches!(d, Downlink::ProviderEvent { name, .. } if name == "OnInteractionEvent")));
+        assert!(got.iter().any(|d| matches!(d, Downlink::ProviderEvent { name, .. } if *name == wire("OnInteractionEvent"))));
     }
 
     /// A view's `INTERCEPT_KEY_EVENT(key, block=true)` keeps a later
@@ -1152,7 +1157,7 @@ htmlgauge00=A380X/SystemsHost/index.html, 0,0,1,1
         let got = mfd.downlink();
         assert!(got.contains(&Downlink::Reply { id: 1, ok: true, text: "null".into() }));
         assert!(got.contains(&Downlink::Reply { id: 2, ok: true, text: "null".into() }));
-        assert!(got.iter().any(|d| matches!(d, Downlink::ProviderEvent { name, .. } if name == "keyIntercepted")));
+        assert!(got.iter().any(|d| matches!(d, Downlink::ProviderEvent { name, .. } if *name == wire("keyIntercepted"))));
         // Blocked: nothing reached crate::key_events's queue for X-Plane.
         assert!(crate::key_events::KeyEvents::take_pushed().iter().all(|(n, _)| n != "A32NX.FCU_AP_1_PUSH"));
     }
@@ -1242,7 +1247,7 @@ htmlgauge00=A380X/PFD/pfd.html, 0,0,768,1024
         for view in [&a, &b] {
             let got = view.downlink();
             assert!(got.contains(&Downlink::HEvent { name: "A32NX_CHRONO_TOGGLE".into() }));
-            assert!(got.contains(&Downlink::ProviderEvent { name: "FACILITY_LOADED".into(), json: "{}".into() }));
+            assert!(got.contains(&Downlink::ProviderEvent { name: wire("FACILITY_LOADED"), json: "{}".into() }));
         }
     }
 
@@ -1254,7 +1259,7 @@ htmlgauge00=A380X/PFD/pfd.html, 0,0,768,1024
         let b = FakeView::open(&t, 1);
         let mut vars = vars();
         let airport = "x".repeat(DOWNLINK_BYTES / 2 + 1);
-        let sent = |name: &str, json: &str| Downlink::ProviderEvent { name: name.into(), json: json.into() };
+        let sent = |name: &str, json: &str| Downlink::ProviderEvent { name: wire(name), json: json.into() };
         host.pre_tick(&mut vars);
         host.post_tick(&mut vars, 0., &[], &[("SendAirport".into(), airport.clone(), Some(1)), ("SendAirport".into(), airport.clone(), Some(1)), ("SendVor".into(), "[]".into(), Some(1))]);
         assert!(!a.downlink().iter().any(|d| matches!(d, Downlink::ProviderEvent { .. })), "another view's facilities");

@@ -14,6 +14,7 @@
 
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+mod chromium_fix;
 mod crash;
 mod font_metrics;
 mod glass;
@@ -66,6 +67,7 @@ const SHOW_EVENT: &str = "Local\\XPHFBW_show_window";
 
 fn main() {
     let _ = api_hash(sys::CEF_API_VERSION_LAST, 0);
+    let old_windows_branch_skipped = chromium_fix::skip_old_windows_branch();
     let args = cef::args::Args::new();
     let Some(cmd_line) = args.as_cmd_line() else { return };
     let is_browser_process = cmd_line.has_switch(Some(&CefString::from("type"))) != 1;
@@ -76,6 +78,13 @@ fn main() {
         std::process::exit(code.max(0));
     }
     logging::init();
+    logging::log(&format!(
+        "app: pid {}, arguments {}, compatibility layer {:?}; {}, old Windows branch skipped: {old_windows_branch_skipped}",
+        std::process::id(),
+        std::env::args().count() - 1,
+        std::env::var("__COMPAT_LAYER").ok(),
+        chromium_fix::windows_versions()
+    ));
     let raw_args: Vec<String> = std::env::args().collect();
     if let Some(i) = raw_args.iter().position(|a| a == "--glass-patched") {
         let (Some(html_ui), Some(out)) = (raw_args.get(i + 1), raw_args.get(i + 2)) else { return };

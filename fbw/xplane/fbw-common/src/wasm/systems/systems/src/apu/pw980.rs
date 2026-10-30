@@ -45,6 +45,9 @@ impl ApuConstants for Pw980Constants {
 /// physical model's quasi-static output mapping reaches at the same N2
 /// this constant is set to; see `pw980_physics::Pw980Core::output_shaft_ratio`).
 const STARTING_TO_RUNNING_N2_PERCENT: f64 = 83.0;
+const QUICK_START_LIMIT_S: f64 = 120.;
+const QUICK_START_SETTLE_S: f64 = 10.;
+const QUICK_STOP_LIMIT_S: f64 = 300.;
 
 #[derive(Clone)]
 pub struct ShutdownPw980Turbine {
@@ -164,6 +167,16 @@ impl Turbine for Spooling {
             if apu_bleed_is_used { bleed_extraction } else { MassRate::default() },
             bleed_pressure,
         );
+        if context.aircraft_preset_quick_mode() && self.phase == SpoolPhase::Starting {
+            let elec = if apu_gen_is_used { elec_shaft_power } else { Power::default() };
+            let bleed = if apu_bleed_is_used { bleed_extraction } else { MassRate::default() };
+            self.core.fast_forward(context, true, starter_powered, elec, bleed, bleed_pressure, QUICK_START_LIMIT_S, |c| {
+                c.output_shaft_ratio().get::<percent>() >= 100. || c.protective_trip().is_some()
+            });
+            self.core.fast_forward(context, true, starter_powered, elec, bleed, bleed_pressure, QUICK_START_SETTLE_S, |c| {
+                c.protective_trip().is_some()
+            });
+        }
 
         if self.phase == SpoolPhase::Starting
             && self.core.n2().get::<percent>() >= STARTING_TO_RUNNING_N2_PERCENT
@@ -268,6 +281,11 @@ impl Turbine for Stopping {
             MassRate::default(),
             bleed_pressure,
         );
+        if context.aircraft_preset_quick_mode() {
+            self.core.fast_forward(context, false, false, Power::default(), MassRate::default(), bleed_pressure, QUICK_STOP_LIMIT_S, |c| {
+                c.n2().get::<percent>() < 0.5
+            });
+        }
 
         if self.core.n2().get::<percent>() < 0.5 {
             Box::new(ShutdownPw980Turbine::new_with_egt(self.core.egt()))

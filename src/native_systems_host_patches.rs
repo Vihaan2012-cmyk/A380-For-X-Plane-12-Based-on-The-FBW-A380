@@ -189,7 +189,7 @@ pub fn source_patches() -> Vec<SourcePatch> {
 mod tests {
     use super::*;
 
-    const TAWS_EXCERPT: &str = "      this.efisDataSyncCapt.onUpdate();\n      this.efisDataSyncFO.onUpdate();\n      if (deltaTime < 0) {\n        return;\n      }\n      const extremeLatitude = validIrMaintWord ? validIrMaintWord.bitValueOr(15, false) : false;\n      this.terr1Failed.set(\n        x\n      );\n      this.gpws2Failed.set(\n        this.failuresConsumer.isActive(A380Failure.Gpws2) || this.aesu2ResetPulled.get() || !this.ac4Powered.get()\n      );\n      this.terrFailed.set(\n        x\n      );\n      if (this.aircraftStatusShouldBeUpdated && this.simBridgeClient.isConnected()) {\n        y;\n      }\n";
+    const TAWS_EXCERPT: &str = "      this.efisDataSyncCapt.tick();\n      this.efisDataSyncFO.tick();\n      if (deltaTime < 0) {\n        return;\n      }\n      const extremeLatitude = validIrMaintWord ? validIrMaintWord.bitValueOr(15, false) : false;\n      this.terr1Failed.set(\n        x\n      );\n      this.gpws2Failed.set(\n        this.failuresConsumer.isActive(A380Failure.Gpws2) || this.aesu2ResetPulled.get() || !this.ac4Powered.get()\n      );\n      this.terrFailed.set(\n        x\n      );\n      if (this.aircraftStatusShouldBeUpdated && this.simBridgeClient.isConnected()) {\n        y;\n      }\n";
 
     fn excerpt(path: &str) -> String {
         let mut parts: Vec<String> =

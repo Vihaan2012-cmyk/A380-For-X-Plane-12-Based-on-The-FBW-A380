@@ -159,16 +159,23 @@ const CHOCK_OVERRUN_SPEED_MS: f64 = 0.5; // ~1 kt
 /// restores the saved map if it has anything in it (a missing key inside a
 /// non-empty map still defaults to installed -- a save from before an item
 /// existed), otherwise every item starts installed; any other start starts
-/// every item removed.
-pub fn initial_state(cold_and_dark: bool, saved: &BTreeMap<String, bool>) -> [bool; N] {
+/// every item removed. A cold and dark aircraft is parked, so its chocks are
+/// always in, whatever the save says and with the walkaround off too.
+pub fn initial_state(cold_and_dark: bool, walkaround: bool, saved: &BTreeMap<String, bool>) -> [bool; N] {
     if !cold_and_dark {
         return [false; N];
     }
-    if saved.is_empty() {
+    let mut state = if !walkaround {
+        [false; N]
+    } else if saved.is_empty() {
         [true; N]
     } else {
         std::array::from_fn(|i| *saved.get(ITEMS[i]).unwrap_or(&true))
+    };
+    for &i in &CHOCKS {
+        state[i] = true;
     }
+    state
 }
 
 /// Engine-inlet ingestion and exhaust-plug blow-out, as a pure function over
@@ -349,7 +356,7 @@ impl Walkaround {
     /// anything, this is how the aircraft was found.
     pub fn confirm_start(&mut self, cold_and_dark: bool, saved: &BTreeMap<String, bool>) {
         let enabled = crate::app_settings::current().walkaround;
-        self.installed = if enabled { initial_state(cold_and_dark, saved) } else { [false; N] };
+        self.installed = initial_state(cold_and_dark, enabled, saved);
         for i in 0..N {
             published::set(self.values[i], self.installed[i] as i32 as f64);
         }
@@ -401,7 +408,7 @@ impl Walkaround {
             }
         }
         if !crate::app_settings::current().walkaround {
-            for i in 0..N {
+            for i in (0..N).filter(|i| !CHOCKS.contains(i)) {
                 self.set(i, false);
             }
         }
@@ -444,7 +451,21 @@ mod tests {
     #[test]
     fn cold_and_dark_with_no_save_installs_everything() {
         let saved = BTreeMap::new();
-        assert_eq!(initial_state(true, &saved), [true; N]);
+        assert_eq!(initial_state(true, true, &saved), [true; N]);
+    }
+
+    #[test]
+    fn cold_and_dark_always_has_its_chocks_in() {
+        let mut saved = BTreeMap::new();
+        for name in ITEMS {
+            saved.insert(name.to_owned(), false);
+        }
+        for walkaround in [true, false] {
+            let state = initial_state(true, walkaround, &saved);
+            assert!(CHOCKS.iter().all(|&i| state[i]), "walkaround {walkaround}");
+            assert!(!state[GEAR_PIN_NOSE], "walkaround {walkaround}");
+        }
+        assert_eq!(initial_state(true, false, &BTreeMap::new()).iter().filter(|&&b| b).count(), CHOCKS.len());
     }
 
     #[test]
@@ -454,7 +475,7 @@ mod tests {
             saved.insert(name.to_owned(), false);
         }
         saved.insert("gear_pin_nose".to_owned(), true);
-        let state = initial_state(true, &saved);
+        let state = initial_state(true, true, &saved);
         assert!(state[GEAR_PIN_NOSE]);
         assert!(!state[0], "everything else in the save was removed");
     }
@@ -463,9 +484,9 @@ mod tests {
     fn a_save_missing_a_newer_item_defaults_that_one_to_installed() {
         // A save from before some item existed: present but incomplete.
         let mut saved = BTreeMap::new();
-        saved.insert("chocks_nose".to_owned(), false);
-        let state = initial_state(true, &saved);
-        assert!(!state[CHOCKS[0]]);
+        saved.insert("gear_pin_nose".to_owned(), false);
+        let state = initial_state(true, true, &saved);
+        assert!(!state[GEAR_PIN_NOSE]);
         assert!(state[0], "an item the save never mentions defaults to installed");
     }
 
@@ -475,7 +496,7 @@ mod tests {
         for name in ITEMS {
             saved.insert(name.to_owned(), true);
         }
-        assert_eq!(initial_state(false, &saved), [false; N]);
+        assert_eq!(initial_state(false, true, &saved), [false; N]);
     }
 
     #[test]

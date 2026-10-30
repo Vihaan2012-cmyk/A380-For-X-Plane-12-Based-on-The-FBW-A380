@@ -1,33 +1,53 @@
 A380 for X-Plane 12 - 3D paint kit
 
-1. Open "A380 3D Paint Kit.blend" in Blender 4.2 or newer.
-2. Switch to the Texture Paint workspace and paint on any object in:
-   - "Exterior - paintable": fuselage, fin, belly, engines, wing fences.
-     "Exterior - reference" is the rest of the outside, for context only.
+1. Open "A380 3D Paint Kit.blend" in Blender 4.2 or newer. If Blender shows
+   "Auto Run Disabled", click Allow Execution (the Kit panel is a script in
+   the file). Or open the "kit_panel.py" text in the Scripting workspace and
+   press Run Script.
+2. Press N in the 3D viewport and open the "A380 Kit" tab. Pick the engine
+   type (Trent 900 or GP7200). If the livery list is empty, set the Aircraft
+   folder to your installed "A380 for X-Plane 12" folder.
+3. Start the paint:
+   - Load livery: pick any installed livery (or one of your own exports) and
+     press Load livery. Sheets that livery does not override stay at the base
+     texture.
+   - Reset to white: plain white 4096 x 4096 body sheets, the rest at base.
+     Reset to base: the aircraft's own textures at their own size.
+   A loaded sheet keeps the size it has in the livery.
+4. Paint in the Texture Paint workspace, on the objects in:
+   - "Exterior - paintable": fuselage, fin, belly, wing fences, engines.
    - "Cabin": seats, carpets, sidewalls, galleys, ceilings, stairs, doors.
    - "Flight deck placards": the registration placard and the cockpit
      stickers.
-3. The IFE look: open textures/ife/ife_logo.png (transparent, shown on the
-   welcome screen) and textures/ife/ife_background.png in the Image Editor
-   and paint them, or replace the files with your own 512 x 256 images.
-4. Cabin lighting and IFE colours: edit the "cabin.json" text in the
+   Keep the paint slot on the sheet itself, not on a "_lines" or "_islands"
+   image.
+5. Helper overlays (Kit panel): panel lines, UV island outlines and the FWD /
+   UP arrows show where things sit. They are display only and are never
+   written to the livery.
+6. The IFE look: textures/ife/ife_logo.png (transparent, shown on the welcome
+   screen) and textures/ife/ife_background.png, 512 x 256. Paint them in the
+   Image Editor or replace the files.
+7. Cabin lighting and IFE colours: edit the "cabin.json" text in the
    Scripting workspace.
    - scenes: boarding, taxi, takeoff, climb, cruise, meal, night, sunrise,
      descent, landing, arrival. Each has a colour and a level from 0 to 1.
      A colour is a hex code like "#7b3fd0" or one of white, warm, amber,
-     pink, purple, blue, teal, night. The cabin light strips use the nearest
-     of those eight; the light falling on the cabin uses the exact colour.
+     pink, purple, blue, teal, night.
    - stars: true puts the starry ceiling in first class for the night scene.
    - ife: airline name, welcome text, and colours for the IFE screens.
-5. Image > Save All Images now and then.
-6. Open the "export_livery.py" text in the Scripting workspace, set
-   LIVERY_NAME at the top and press Run Script. It writes every exterior
-   sheet, only the cabin and flight deck sheets you changed, the IFE images
-   and cabin.json.
-7. Copy the new folder from liveries/ into
-   X-Plane 12/Aircraft/A380 for X-Plane 12/liveries/ and pick it in X-Plane.
+8. Export: fill in the Export section (livery name, registration, airline,
+   ICAO, IATA, engines, model, creator) and press Export livery. It writes two
+   folders into the kit's liveries folder:
+   - "<name>": every exterior sheet at 2048 pixels or less, for the 2K edition.
+   - "<name> 4K": every exterior sheet at 4096 pixels or less.
+   Each has DDS sheets with mip maps, only the cabin and flight deck sheets
+   you changed, the IFE images, cabin.json, operator.json (engines, model,
+   registration, airline), validation.json and a rendered A380_icon11.png.
+   Sheets are never enlarged, so paint at 4096 for a real 4K edition.
+9. Copy the folders you want from the kit's liveries folder into
+   X-Plane 12/Aircraft/A380 for X-Plane 12/liveries/ and pick the livery in
+   X-Plane.
 
 In flight the cabin scenes follow the flight on their own. To pick a scene or
-set the cabin brightness yourself, use Cabin lighting in the XPHFBW settings
-(X-Plane's aircraft menu). The seatback screens show the IFE in economy and
-in first class.
+set the cabin brightness yourself, use Cabin lighting in the aircraft's
+settings (X-Plane's aircraft menu).
