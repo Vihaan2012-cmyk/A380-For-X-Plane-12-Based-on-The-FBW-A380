@@ -354,6 +354,8 @@ fn lp_valve_open(master: f64, fire_button: f64) -> bool {
 /// instead would index `temp_c` out of bounds.
 const ENGINE_FEED_TANKS: [usize; 4] = [2, 5, 6, 9];
 const PUNCTURE_LEAK_KG_S: f64 = 1.5;
+/// A torn pylon line with its LP valve still open: about what an engine burns at take-off.
+const TORN_LINE_LEAK_KG_S: f64 = 3.0;
 /// A wing box torn open by a wing break (generic).
 const WING_BREAK_LEAK_KG_S: f64 = 20.0;
 
@@ -693,6 +695,9 @@ pub struct Fuel {
     previous_master: [Option<bool>; 4],
     starved: [bool; 4],
     starved_s: [f64; 4],
+    /// What is pouring out this tick, for `fuel_leak_fx.rs`.
+    tank_leak_kg_s: [f64; 11],
+    line_leak_kg_s: [f64; 4],
     since_save: f64,
     started: bool,
     /// FUEL-004: each network tank's temperature, Celsius, 1..11.
@@ -816,6 +821,8 @@ impl Fuel {
             previous_master: [None; 4],
             starved: [false; 4],
             starved_s: [0.; 4],
+            tank_leak_kg_s: [0.; 11],
+            line_leak_kg_s: [0.; 4],
             since_save: 0.,
             started: false,
             temp_c: [15.; 11],
@@ -967,6 +974,11 @@ impl Fuel {
         }
     }
 
+    /// Fuel pouring overboard now: per network tank (1..11 minus one) and per torn pylon line.
+    pub fn leaks_kg_s(&self) -> ([f64; 11], [f64; 4]) {
+        (self.tank_leak_kg_s, self.line_leak_kg_s)
+    }
+
     pub fn saved_state(&self) -> SavedFuel {
         let net = &self.net;
         SavedFuel {
@@ -1058,6 +1070,8 @@ impl Fuel {
             }
         }
 
+        self.tank_leak_kg_s = [0.; 11];
+        self.line_leak_kg_s = [0.; 4];
         // A broken wing takes its tanks with it and tears the next one open.
         for (side, station) in crate::separation::Separation::current().wing.iter().enumerate() {
             let Some(k) = *station else { continue };
@@ -1066,6 +1080,9 @@ impl Fuel {
             }
             if let Some(tank) = crate::physics::structure::tank_torn(side, k) {
                 let lost = WING_BREAK_LEAK_KG_S * delta / LB_TO_KG / JET_A_LBS_PER_GAL;
+                if self.net.tank_gallons(tank) > 0. {
+                    self.tank_leak_kg_s[tank - 1] += WING_BREAK_LEAK_KG_S;
+                }
                 self.net.set_tank_gallons(tank, (self.net.tank_gallons(tank) - lost).max(0.));
             }
         }
@@ -1088,6 +1105,9 @@ impl Fuel {
             if crate::failures::is_active(crate::failures::extra::FEED_TANK_PUNCTURE + i as u64) {
                 let tank = ENGINE_FEED_TANKS[i];
                 let lost = PUNCTURE_LEAK_KG_S * delta / LB_TO_KG / JET_A_LBS_PER_GAL;
+                if self.net.tank_gallons(tank) > 0. {
+                    self.tank_leak_kg_s[tank - 1] += PUNCTURE_LEAK_KG_S;
+                }
                 self.net.set_tank_gallons(tank, (self.net.tank_gallons(tank) - lost).max(0.));
             }
             let line = FEED_LINE[i];
@@ -1095,6 +1115,13 @@ impl Fuel {
             if crate::failures::is_active(crate::failures::extra::ENGINE_SEPARATION + i as u64) {
                 self.net.set_tank_gallons(line, 0.);
                 self.starved[i] = true;
+                let tank = ENGINE_FEED_TANKS[i];
+                let left = self.net.tank_gallons(tank);
+                if self.previous_master[i] == Some(true) && left > 0. {
+                    let lost = TORN_LINE_LEAK_KG_S * delta / LB_TO_KG / JET_A_LBS_PER_GAL;
+                    self.net.set_tank_gallons(tank, (left - lost).max(0.));
+                    self.line_leak_kg_s[i] = TORN_LINE_LEAK_KG_S;
+                }
                 continue;
             }
             let feed = ENGINE_FEED_TANKS[i];

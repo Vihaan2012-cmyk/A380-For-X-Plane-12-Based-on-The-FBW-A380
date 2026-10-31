@@ -1635,6 +1635,13 @@ pub fn main_lua(title: &str, rigs: &[&Rig], sim: Option<&SimState>) -> String {
          \n\
          function fbw_update_body()\n\
          \x20 DEP, DEFL, STEER, TIRE = val(x_dep), val(x_defl), val(x_steer), val(x_tire)\n\
+         \x20 if type(DEP) == "table" then\n\
+         \x20   if rd("fbw/anim/gear_fold_0") > 0 then DEP[1] = 1 end\n\
+         \x20   if rd("fbw/anim/gear_fold_1") > 0 then DEP[2] = 1 end\n\
+         \x20   if rd("fbw/anim/gear_fold_2") > 0 then DEP[3] = 1 end\n\
+         \x20   if rd("fbw/anim/gear_fold_3") > 0 then DEP[4] = 1 end\n\
+         \x20   if rd("fbw/anim/gear_fold_4") > 0 then DEP[5] = 1 end\n\
+         \x20 end\n\
          \x20 GND, N1, REV = val(x_gnd), val(x_n1), val(x_rev)\n\
          \x20 local FLAP, SLAT, SB = val(x_flap), val(x_slat), val(x_sb)\n\
          \x20 local ROLL, PITCH, YAW, TRIM = val(x_roll), val(x_pitch), val(x_yaw), val(x_trim)\n\

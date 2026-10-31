@@ -372,13 +372,25 @@ uniform float amount;
 uniform float glow;
 uniform float weight;
 uniform float sheen;
+uniform float lod;
+uniform vec2 pixel;
 void main() {
     vec2 uv = gl_TexCoord[0].xy;
-    vec4 c = texture2D(tex, uv);
-    vec4 n = texture2D(tex, uv - vec2(0.0, texel.y));
-    vec4 s = texture2D(tex, uv + vec2(0.0, texel.y));
-    vec4 e = texture2D(tex, uv + vec2(texel.x, 0.0));
-    vec4 w = texture2D(tex, uv - vec2(texel.x, 0.0));
+    vec2 reach = texel;
+    float tap = 0.0;
+    vec4 c;
+    if (lod > 0.0) {
+        reach = pixel * 0.5;
+        tap = max(lod - 0.5, 0.0);
+        c = (texture2D(tex, uv + pixel * vec2(-0.125, -0.375), tap) + texture2D(tex, uv + pixel * vec2(0.375, -0.125), tap)
+            + texture2D(tex, uv + pixel * vec2(0.125, 0.375), tap) + texture2D(tex, uv + pixel * vec2(-0.375, 0.125), tap)) * 0.25;
+    } else {
+        c = texture2D(tex, uv);
+    }
+    vec4 n = texture2D(tex, uv - vec2(0.0, reach.y), tap);
+    vec4 s = texture2D(tex, uv + vec2(0.0, reach.y), tap);
+    vec4 e = texture2D(tex, uv + vec2(reach.x, 0.0), tap);
+    vec4 w = texture2D(tex, uv - vec2(reach.x, 0.0), tap);
     vec4 lo = min(c, min(min(n, s), min(e, w)));
     vec4 hi = max(c, max(max(n, s), max(e, w)));
     vec4 blur = (n + s + e + w) * 0.25;
@@ -459,6 +471,8 @@ struct Sharpen {
     glow: c_int,
     weight: c_int,
     sheen: c_int,
+    lod: c_int,
+    pixel: c_int,
 }
 
 /// The multisampled framebuffer every screen draws through.
@@ -518,6 +532,8 @@ struct GpuTimes {
 }
 
 pub struct Renderer {
+    /// Mip bias for the next `draw_bridge`: `view_scale.rs`, how far this screen is minified on the monitor.
+    pub prefilter_lod: f32,
     gpu_times: HashMap<usize, GpuTimes>,
     gl: Fns,
     xp: AvionicsApi,
@@ -620,6 +636,7 @@ impl Renderer {
             gpu_times: HashMap::new(),
             target_stencil: None,
             bridge_no_texture_warned: std::collections::HashSet::new(),
+            prefilter_lod: 0.,
             sharpen: None,
             hud_program: None,
             interop: None,
@@ -1395,6 +1412,8 @@ impl Renderer {
             glow: uniform(c"glow"),
             weight: uniform(c"weight"),
             sheen: uniform(c"sheen"),
+            lod: uniform(c"lod"),
+            pixel: uniform(c"pixel"),
         })
     }
 
@@ -1402,7 +1421,7 @@ impl Renderer {
         let settings = crate::app_settings::current();
         let amount = settings.display_sharpen as f32;
         let finish = [settings.display_glow as f32, settings.display_line_weight as f32, settings.display_sheen as f32];
-        let any = amount > 0. || finish.iter().any(|v| *v > 0.);
+        let any = amount > 0. || self.prefilter_lod > 0. || finish.iter().any(|v| *v > 0.);
         let sharpen = if any && gpu.size.0 > 0 && gpu.size.1 > 0 { self.sharpen_program() } else { None };
         if gpu.texture == 0 {
             // Distinct from the width/height == 0 case below (a ScreenBlock
@@ -1486,6 +1505,9 @@ impl Renderer {
                 (gl.uniform1f)(s.glow, finish[0]);
                 (gl.uniform1f)(s.weight, finish[1]);
                 (gl.uniform1f)(s.sheen, finish[2]);
+                (gl.uniform1f)(s.lod, self.prefilter_lod);
+                let seen = self.prefilter_lod.exp2();
+                (gl.uniform2f)(s.pixel, seen * (cx1 - cx0) / (width as f32 * vw.max(1) as f32), seen * (cy1 - cy0) / (height as f32 * vh.max(1) as f32));
             }
             (gl.draw_arrays)(GL_TRIANGLES, 0, 6);
             #[cfg(feature = "native-displays")]

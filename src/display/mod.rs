@@ -17,6 +17,7 @@ pub mod plan;
 pub mod screens;
 pub mod stream;
 pub mod tessellate;
+mod view_scale;
 pub mod text;
 mod gl;
 #[cfg(test)]
@@ -285,6 +286,7 @@ struct Bridge {
 /// instruments' thread holds it only briefly, to hand over a new mesh.
 pub struct Displays {
     gpu_reported_at: Option<std::time::Instant>,
+    view_scale: view_scale::ViewScale,
     xplm: Option<&'static Xplm>,
     pub(crate) api: Option<xp::AvionicsApi>,
     pub(crate) screens: Vec<Screen>,
@@ -686,6 +688,7 @@ impl Displays {
             hud_targets: std::collections::HashMap::new(),
             renderer: None,
             gpu_reported_at: None,
+            view_scale: view_scale::ViewScale::new(xplm),
             fbo: xplm.and_then(|x| x.find("sim/graphics/view/current_gl_fbo")),
             viewport: xplm.and_then(|x| x.find("sim/graphics/view/viewport")),
             events: VecDeque::new(),
@@ -789,6 +792,7 @@ impl Displays {
             self.renderer = Some(r);
         }
         let Some(Ok(renderer)) = self.renderer.as_mut() else { return };
+        renderer.prefilter_lod = self.view_scale.lod(self.screens[index].def.id);
         let framebuffer = self.fbo.map_or(0, |d| xplm.get_i(d)) as u32;
         // `glGetIntegerv(GL_VIEWPORT)` (the old `renderer.viewport()` path)
         // is exactly what developer.x-plane.com's "Plugin Guidance for
@@ -1686,6 +1690,9 @@ impl Displays {
         // Once per X-Plane frame, from the plugin's tick: a fresh upload budget.
         self.upload_budget = UPLOAD_BUDGET_BYTES;
         self.pace_budget = PACE_BUDGET;
+        if let Some(xplm) = self.xplm {
+            self.view_scale.refresh(xplm);
+        }
         #[cfg(feature = "native-displays")]
         self.native_tick();
         let auto = self.ambient_factor();

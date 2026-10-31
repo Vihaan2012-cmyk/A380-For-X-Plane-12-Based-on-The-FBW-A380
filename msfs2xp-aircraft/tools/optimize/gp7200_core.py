@@ -30,7 +30,21 @@ OVERLAY = {
     "SEAM": (292, 55, (26, 26, 24), (0, 40)),
     "SCREW": (292, 77, (120, 115, 100), (200, 150)),
     "LIP": (987, 35, (208, 208, 204), (130, 150)),
+    "CEDGE": (173, 35, (58, 56, 52), (40, 110)),
+    "CSIDE": (490, 35, (26, 26, 25), (0, 40)),
+    "CFRAME": (590, 35, (12, 12, 12), (0, 30)),
+    "CBACK": (1100, 35, (5, 5, 5), (0, 10)),
+    "CRIM": (1200, 35, (36, 32, 28), (0, 50)),
+    "CFIT": (1608, 35, (78, 62, 50), (40, 70)),
+    "CBAR": (1708, 35, (128, 125, 118), (0, 90)),
+    "CTAB": (1808, 35, (84, 82, 77), (0, 70)),
+    "CPLATE": (1908, 35, (176, 176, 170), (0, 90)),
+    "CWHITE": (1300, 36, (208, 208, 202), (0, 90)),
+    "CSTEEL": (179, 65, (64, 72, 82), (120, 110)),
+    "CFITD": (1737, 65, (40, 33, 28), (0, 50)),
 }
+REVERSER_OF = {2: 1, 3: 2}
+DIRT_RECT = (1863, 49, 128, 48)
 SIZE = 2048
 COUNTS = dict(booster_rotor=72, booster_stator=96, hpc_rotor=56, hpc_stator=64, hpt_ngv=44, hpt_blade=76, lpt_rotor=96, lpt_stator=92, nozzles=24, tcf=10, tec=13)
 PID = [0]
@@ -406,6 +420,38 @@ def lip_overlay():
     return m
 
 
+def tagged_uv(mesh):
+    """Each triangle's vertices on the swatch of its tag."""
+    uv = np.zeros((len(mesh.P), 2))
+    x, y, w, h = DIRT_RECT
+    for t, tag in zip(mesh.T, mesh.tag):
+        if tag == "CDIRT":
+            uv[t] = np.stack([(x + 0.5 + mesh.UV[t, 0] * (w - 1)) / 2048, 1 - (y + 0.5 + mesh.UV[t, 1] * (h - 1)) / 2048], axis=1)
+        else:
+            uv[t] = overlay_uv(tag)
+    mesh.UV = uv
+    return mesh
+
+
+def dirt_patch():
+    """Worn, dirty edge paint for the cascades, brightness measured off photo DSC_8534 (lines 50-60 where the white skin reads 219): the top third for the bright ribs, the middle for the dimmer vanes, the bottom for the rim, each running from clean to filthy downwards."""
+    from scipy.ndimage import gaussian_filter
+    x, y, w, h = DIRT_RECT
+    rng = np.random.default_rng(7200)
+    blotch = gaussian_filter(rng.normal(size=(h, w)), (1.0, 6.0), mode="wrap")
+    grain = gaussian_filter(rng.normal(size=(h, w)), (0.5, 1.2), mode="wrap")
+    field = 1.0 + 0.55 * blotch / blotch.std() * 0.6 + 0.3 * grain / grain.std() * 0.6
+    rows = np.zeros(h)
+    for lo, hi, top, low in ((0.0, 0.34, 78.0, 44.0), (0.34, 0.67, 60.0, 32.0), (0.67, 1.0, 40.0, 20.0)):
+        a, b = int(lo * h), int(hi * h)
+        rows[a:b] = np.linspace(top, low, b - a)
+    value = np.clip(rows[:, None] * field, 8, 170)
+    value[rng.random((h, w)) < 0.006] *= 2.2
+    alb = np.clip(np.stack([value, value * 0.97, value * 0.9], axis=-1), 0, 255).astype(np.uint8)
+    mat = np.stack([np.full((h, w), 30.0), np.clip(70 + 30 * grain / grain.std(), 20, 140), np.zeros((h, w))], axis=-1).astype(np.uint8)
+    return (x, y, w, h), alb, mat
+
+
 def paint_overlay(stage):
     from PIL import Image
     for kind in ("ALB", "MAT"):
@@ -413,6 +459,8 @@ def paint_overlay(stage):
         a = np.array(Image.open(path).convert("RGB"))
         for x, y, colour, material in OVERLAY.values():
             a[y - 11:y + 11, x - 45:x + 45] = colour if kind == "ALB" else (*material, 0)
+        (x, y, w, h), alb, mat = dirt_patch()
+        a[y:y + h, x:x + w] = alb if kind == "ALB" else mat
         Image.fromarray(a).save(path)
 
 
@@ -426,7 +474,7 @@ def obj_lines(parts, chains, pivots):
     nv = 0
     batches = {}
     for e in (1, 2, 3, 4):
-        for key in ("always", "rare", "rot_a", "rot_r", "lip"):
+        for key in ("always", "rare", "rot_a", "rot_r", "lip", "casc", "casc_far", "front"):
             P, N, UV, T = parts[e][key]
             idx_start = len(idx)
             idx += list((np.asarray(T) + nv).ravel())
@@ -447,16 +495,26 @@ def obj_lines(parts, chains, pivots):
     def engine_open(e):
         return ["ANIM_begin"] + chains[e] + ["ANIM_begin", f"ANIM_hide 5.5 6.5 sim/operation/failures/rel_engsep{e - 1}"] + pivots[e]
 
+    def reverser_open(e, moves):
+        import gp7200_nacelle as nac
+        n = REVERSER_OF[e]
+        lines = [f"ANIM_hide 0.5 1.5 fbw/fail/sep/cowl_{e}", f"ANIM_hide -1 0.005 fbw/anim/thrust_rev_{n}"]
+        if moves:
+            lines += [f"ANIM_trans_begin fbw/anim/thrust_rev_{n}", "ANIM_trans_key 0 0 0 0", f"ANIM_trans_key 1 0 0 {nac.REV_STROKE:.5f}", "ANIM_trans_end"]
+        return lines
+
     body = ["ATTR_LOD 0 60", "ATTR_cull"] + gate
     for e in (1, 2, 3, 4):
         body += engine_open(e)
-        for key, rot, bay in (("always", False, False), ("rare", False, True), ("rot_a", True, False), ("rot_r", True, True), ("lip", False, False)):
+        for key, rot, bay in (("always", False, False), ("rare", False, True), ("rot_a", True, False), ("rot_r", True, True), ("lip", False, False), ("casc", False, False), ("front", False, False)):
             s, c = batches[(e, key)]
             if not c:
                 continue
             body += ["ANIM_begin"]
             if key == "lip":
                 body += [f"ANIM_hide 0.5 1.5 fbw/fail/sep/cowl_{e}"]
+            if key in ("casc", "front"):
+                body += reverser_open(e, key == "front")
             if bay:
                 body += [f"ANIM_hide -99999 99999 fbw/anim/engine_bay_{e}", f"ANIM_show 0.5 1.5 fbw/anim/engine_bay_{e}"]
             if rot:
@@ -471,7 +529,12 @@ def obj_lines(parts, chains, pivots):
     for e in (1, 2, 3, 4):
         s, c = lod1_b[e]
         ls, lc = batches[(e, "lip")]
-        body += engine_open(e) + [f"TRIS {s} {c}", "ANIM_begin", f"ANIM_hide 0.5 1.5 fbw/fail/sep/cowl_{e}", f"TRIS {ls} {lc}", "ANIM_end", "ANIM_end", "ANIM_end"]
+        body += engine_open(e) + [f"TRIS {s} {c}", "ANIM_begin", f"ANIM_hide 0.5 1.5 fbw/fail/sep/cowl_{e}", f"TRIS {ls} {lc}", "ANIM_end"]
+        for key, moves in (("casc_far", False), ("front", True)):
+            bs, bc = batches[(e, key)]
+            if bc:
+                body += ["ANIM_begin", *reverser_open(e, moves), f"TRIS {bs} {bc}", "ANIM_end"]
+        body += ["ANIM_end", "ANIM_end"]
     body += ["ANIM_end", ""]
     return np.vstack(vts), np.array(idx), body
 
@@ -543,9 +606,17 @@ def main(installed, stage, only_obj=False):
     rot_a.extend(turning)
     lod.UV = np.tile(lod_uv, (len(lod.P), 1))
     lip = lip_overlay()
+    import gp7200_fan as fan
+    import gp7200_nacelle as nac
+    casc, casc_far, front = Mesh(), Mesh(), Mesh()
+    if fan.DETAIL:
+        casc, casc_far, front = tagged_uv(nac.cascade_ring()), tagged_uv(nac.cascade_far()), tagged_uv(nac.sleeve_front())
+    print("cascades", casc.tri_count(), "triangles per reverser,", casc_far.tri_count(), "far,", front.tri_count(), "sleeve front")
     parts = {}
     for e in (1, 2, 3, 4):
         parts[e] = dict(always=to_world(always, e), rare=to_world(rare, e), rot_a=to_world(rot_a, e), rot_r=to_world(rot_r, e), lod1=to_world(lod, e), lip=to_world(lip, e))
+        for key, m in (("casc", casc), ("casc_far", casc_far), ("front", front)):
+            parts[e][key] = to_world(m if e in REVERSER_OF else Mesh(), e)
     chains, pivots = {}, {}
     for e in (1, 2, 3, 4):
         chains[e], pivots[e] = nacelle_chain(stage, e)

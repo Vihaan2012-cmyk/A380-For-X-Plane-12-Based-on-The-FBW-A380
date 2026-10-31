@@ -194,6 +194,7 @@ pub mod charts;
 mod perf_cal;
 mod cabin_crew;
 mod brake_fire_fx;
+mod fuel_leak_fx;
 mod hail_dents_fx;
 mod windshield_cracks_fx;
 mod binaural;
@@ -1537,6 +1538,8 @@ struct Plugin {
     perf_cal: perf_cal::PerfCal,
     cabin_crew: cabin_crew::CabinCrew,
     brake_fire_fx: brake_fire_fx::BrakeFireFx,
+    fuel_leak_fx: fuel_leak_fx::FuelLeakFx,
+    gear_fold_anim: gear_collapse::GearFoldAnim,
     hail_dents_fx: hail_dents_fx::HailDentsFx,
     windshield_cracks_fx: windshield_cracks_fx::WindshieldCracksFx,
     hail_sound: hail_sound::HailSound,
@@ -1980,6 +1983,8 @@ impl Plugin {
         let perf_cal = perf_cal::PerfCal::new(&mut vars, xplm);
         let cabin_crew = cabin_crew::CabinCrew::new(&mut vars, xplm);
         let brake_fire_fx = brake_fire_fx::BrakeFireFx::new(&mut vars, xplm);
+        let fuel_leak_fx = fuel_leak_fx::FuelLeakFx::new(&mut vars, xplm);
+        let gear_fold_anim = gear_collapse::GearFoldAnim::new(xplm);
         let hail_dents_fx = hail_dents_fx::HailDentsFx::new(&mut vars);
         let windshield_cracks_fx = windshield_cracks_fx::WindshieldCracksFx::new(&mut vars);
         let hail_sound = hail_sound::HailSound::new(&mut vars, xplm);
@@ -2152,6 +2157,8 @@ impl Plugin {
             perf_cal,
             cabin_crew,
             brake_fire_fx,
+            fuel_leak_fx,
+            gear_fold_anim,
             hail_dents_fx,
             windshield_cracks_fx,
             hail_sound,
@@ -2419,6 +2426,7 @@ impl Plugin {
         self.perf_cal.update(&mut self.vars, xplm, delta);
         self.cabin_crew.update(&mut self.vars, xplm, delta);
         self.brake_fire_fx.update(&mut self.vars, xplm);
+        self.fuel_leak_fx.update(&mut self.vars, xplm, self.fuel.as_ref());
         self.hail_dents_fx.update(&mut self.vars);
         self.windshield_cracks_fx.update(&mut self.vars);
         self.hail_sound.update(&mut self.vars, xplm, delta);
@@ -2788,6 +2796,7 @@ impl Plugin {
         if !crate::deep_disabled() && !crate::xp_writes_skip("forces") {
             self.apply_deep_xp_consequences();
         }
+        self.gear_fold_anim.update(xplm, &self.gear_collapse);
         if !crate::xp_writes_skip("forces") {
             self.gear_collapse.update(&self.xp_force_sink, delta);
             self.gear_collapse.damp(xplm, &self.xp_force_sink);

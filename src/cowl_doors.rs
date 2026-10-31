@@ -48,6 +48,7 @@ pub struct CowlDoors {
     toggles: [Command; 4],
     target: [bool; 4],
     position: [f64; 4],
+    bay_shown: [bool; 4],
     n2: [VariableIdentifier; 4],
     mirror: [VariableIdentifier; 4],
     on_ground: Option<DataRef>,
@@ -67,6 +68,7 @@ impl CowlDoors {
             toggles,
             target: [false; 4],
             position: [0.0; 4],
+            bay_shown: [false; 4],
             n2: std::array::from_fn(|e| vars.get(format!("ENGINE_N2:{}", e + 1))),
             mirror: std::array::from_fn(|e| vars.get(mirror_name(e))),
             on_ground: xplm.find("sim/flightmodel/failures/onground_any"),
@@ -104,7 +106,12 @@ impl CowlDoors {
                 self.position[e] = step(self.position[e], self.target[e], delta);
             }
             published::set(self.open[e], self.position[e]);
-            published::set(self.bay[e], (separated || self.position[e] > 0.0) as i32 as f64);
+            let bay = separated || self.position[e] > 0.0;
+            if bay != self.bay_shown[e] {
+                self.bay_shown[e] = bay;
+                crate::log(&format!("cowl doors: engine {} bay {} (cowls separated {separated}, doors {:.2})", e + 1, if bay { "shown" } else { "hidden" }, self.position[e]));
+            }
+            published::set(self.bay[e], bay as i32 as f64);
             vars.write(&self.mirror[e], self.position[e]);
         }
     }

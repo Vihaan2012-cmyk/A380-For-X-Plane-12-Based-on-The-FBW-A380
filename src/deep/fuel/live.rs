@@ -1093,6 +1093,9 @@ impl crate::deep::live::Area for FuelLive {
         // Every variable this area's `registry.rs` names in an ECAM
         // trigger.
         out("FUEL_LEAK_DETECTED", b(self.leak_detected));
+        for (i, tank) in self.tanks.iter().enumerate() {
+            out(&format!("FUEL_TANK_LEAK_KG_S:{}", i + 1), tank.leak_kg_s);
+        }
         out("FUEL_CROSSFEED_OPEN", b(self.crossfeed_open));
         out("FUEL_CROSSFEED_FAULT", b(self.crossfeed_fault));
         out("FUEL_TRIM_TRANSFER_FAULT", b(self.trim_fault));

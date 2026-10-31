@@ -1,8 +1,11 @@
 //! A collapsed gear leg (failures 32_130..32_134, picked by the crew or
-//! armed by `deep::gear_structure` past the strut's ultimate load) folds
-//! all the way up along its own retraction hinge, as a leg does when its
-//! downlock or side stay lets go, while X-Plane's `rel_collapse` takes the
-//! leg's support away.
+//! armed by `deep::gear_structure` past the strut's ultimate load) loses its
+//! support through the deploy ratio, and is drawn breaking away about its
+//! hinge by `fbw/anim/gear_fold_N` (`gear_collapse_fold.py`): the retraction
+//! channels hold the extended pose while that is above 0.
+
+use crate::published::{self, Published, Value};
+use crate::xp::{DataRef, Xplm};
 
 /// X-Plane gear order (.acf `_gear/0..4`, `rel_collapse1..5`): nose, left
 /// body, right body, left wing, right wing.
@@ -22,6 +25,45 @@ const WATCHED: [&str; 6] = [
 ];
 const WATCHED_SCALARS: [&str; 3] = ["sim/flightmodel/position/local_vy", "sim/flightmodel/position/theta", "sim/flightmodel/position/y_agl"];
 const WATCHED_ANIMS: [&str; 6] = ["fbw/anim/c_gear", "fbw/anim/c_gear_comp", "fbw/anim/l_b_gear", "fbw/anim/r_b_gear", "fbw/anim/l_w_gear", "fbw/anim/r_w_gear"];
+
+pub struct GearFoldAnim {
+    _published: Published,
+    out: [Value; 5],
+    deploy: Option<DataRef>,
+    was_down: [bool; 5],
+}
+
+impl GearFoldAnim {
+    pub fn new(xplm: &Xplm) -> Self {
+        let mut p = Published::default();
+        let out = std::array::from_fn(|k| p.number(&format!("fbw/anim/gear_fold_{k}"), 0., false));
+        Self { _published: p, out, deploy: xplm.find("sim/flightmodel2/gear/deploy_ratio"), was_down: [false; 5] }
+    }
+
+    /// Before `GearCollapse::update`, so a leg's position is read before the collapse moves it.
+    pub fn update(&mut self, xplm: &Xplm, collapse: &GearCollapse) {
+        let mut deploy = [0f32; 5];
+        if let Some(d) = self.deploy {
+            xplm.get_vf(d, &mut deploy);
+        }
+        for k in 0..5 {
+            let fold = collapse.fold[k];
+            if fold == 0. {
+                self.was_down[k] = deploy[k] > 0.9;
+            }
+            published::set(self.out[k], fold_pose(fold, self.was_down[k]));
+        }
+    }
+}
+
+/// A leg stowed when it failed stays in its bay; one that was down falls, slow off the lock and fast at the end.
+pub fn fold_pose(fold: f64, was_down: bool) -> f64 {
+    if was_down {
+        fold * fold
+    } else {
+        0.
+    }
+}
 
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct GearCollapse {
@@ -139,6 +181,14 @@ pub fn resting_damping(mass_kg: f64, pitch_inertia: f64, roll_inertia: f64, vy_m
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_leg_that_was_down_falls_and_a_stowed_leg_stays_up() {
+        assert_eq!(fold_pose(0., true), 0.);
+        assert!(fold_pose(0.5, true) < 0.5);
+        assert_eq!(fold_pose(1., true), 1.);
+        assert_eq!(fold_pose(1., false), 0.);
+    }
 
     #[test]
     fn the_belly_skids_come_down_with_the_first_folding_leg_and_go_up_once_all_are_repaired() {

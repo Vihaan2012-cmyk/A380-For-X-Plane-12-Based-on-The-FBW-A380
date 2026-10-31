@@ -289,6 +289,20 @@ def write(path, src, vt, idx, post, marks=("# gp7200_model", "# gp7200_exhaust")
     write_obj(path, pre, vt, idx, post)
 
 
+def set_stroke(post):
+    """The reverser's travel on the GP, measured from photo DSC_8534 (0.86 m +-0.03), in place of the Trent's 0.808 m."""
+    out = list(post)
+    for i, line in enumerate(out):
+        if line.strip().startswith("ANIM_trans_begin") and "thrust_rev" in line:
+            j = i + 1
+            while out[j].strip().startswith("ANIM_trans_key"):
+                t = out[j].split()
+                if abs(float(t[4])) > 0.1:
+                    out[j] = out[j][:len(out[j]) - len(out[j].lstrip())] + " ".join([*t[:4], f"{nac.REV_STROKE:.5f}"])
+                j += 1
+    return out
+
+
 def build_nacelle_meshes(e, sheets):
     fan_s, tr, door_st = nac.outer_skin()
     parts_m = [fan_s, nac.door_inner(door_st), nac.barrel_inner(), nac.core_cowl(), *nac.nozzle(), nac.plug(), nac.upper_fairing(), nac.oil_door(-1), nac.red_line()]
@@ -336,6 +350,10 @@ def run_nacelle(installed, stage):
         lip_skin.UV = np.tile(CORE_GREY[e], (len(lip_skin.P), 1))
         ogv = core_ext.ogv_ring(e)
         flat = [lipm, lip_skin, ogv]
+        if e in (2, 3):
+            back = nac.cascade_back("CASCB", nac.CASC_BACK + 0.005)
+            back.UV = np.tile(CORE_DARK[e], (len(back.P), 1))
+            flat.append(back)
         if PANEL_FIX:
             panel, louv = nac.lower_panel(-1 if e in (1, 2) else 1)
             panel.UV = np.tile(CORE_GREY[e], (len(panel.P), 1))
@@ -356,7 +374,7 @@ def run_nacelle(installed, stage):
             return affine(e, 1.0, -DELTA[e], rigid=True)
 
         src, vt, idx = fill_object(f"a380_exterior_{n}", installed, builders, keep, stage)
-        post = move_pivots(src.post, pivot_fn(1.06))
+        post = set_stroke(move_pivots(src.post, pivot_fn(1.06)))
         write(stage / f"a380_exterior_{n}_gp.obj", src, vt, idx, post)
         print(n, len(vt), "vertices", len(idx) // 3, "triangles")
     return stats

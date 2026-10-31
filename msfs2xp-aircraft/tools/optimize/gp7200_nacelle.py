@@ -144,6 +144,183 @@ def lip_overlay():
     return out
 
 
+REV_STROKE = 0.85
+CASC_FRONT, CASC_GRID_AFT, CASC_END = S_TR + 0.12, S_TR + 0.78, S_TR + 0.02 + REV_STROKE
+CASC_TOP, CASC_DEPTH, CASC_BACK = 0.03, 0.07, 0.125
+CASC_START_DEG, CASC_PANEL_DEG, CASC_PANELS = 16.0, 12.8, 10
+CASC_COLUMNS, CASC_ROWS, CASC_VANE, CASC_VANE_TILT = 9, 6, 0.006, 0.025
+CASC_BLOCKED = (8, 9)
+DIRT_METRES, DIRT_RIB, DIRT_VANE, DIRT_RIM = 0.70, (0.0, 0.32), (0.36, 0.64), (0.70, 1.0)
+
+
+def _arc(s, ph, dr):
+    return sec_points(np.array([s]), np.asarray(ph, float), dr=dr)[0]
+
+
+def _faces(a, b, hint, tag, closed=False):
+    """A quad strip between two rows of points, facing the way of hint."""
+    if closed:
+        a, b = np.vstack([a, a[:1]]), np.vstack([b, b[:1]])
+    along, across = np.gradient(a, axis=0), b - a
+    n = np.cross(along, across)
+    n /= np.maximum(np.linalg.norm(n, axis=1, keepdims=True), 1e-12)
+    n *= np.where(np.einsum("ij,ij->i", n, np.broadcast_to(hint, n.shape)) < 0, -1.0, 1.0)[:, None]
+    P, N = np.stack([a, b]), np.stack([n, n])
+    m = Mesh()
+    m.add(P, N, np.zeros((2, len(a), 2)), wind(P.reshape(-1, 3), grid_tris_fast(2, len(a), False), N.reshape(-1, 3)), tag)
+    return m
+
+
+def _bar(s0, s1, ph0, ph1, top, bottom, n, tag_top, tag_side, tilt=0.0, caps=True, ends=True, lean=0.0, dirt=None):
+    """A bar between stations s0..s1 and angles ph0..ph1 (radians), its top sunk top metres under the skin and its foot at bottom, leaning aft by tilt and skewed by lean metres from one end to the other. dirt = (length, row, rng, along_rows) puts its top on a run of the dirt patch."""
+    ph = np.linspace(ph0, ph1, n + 1)
+    a, b = _arc(s0, ph, top), _arc(s1, ph, top)
+    c, d = _arc(s0 + tilt, ph, bottom), _arc(s1 + tilt, ph, bottom)
+    if lean:
+        skew = np.linspace(-lean, lean, n + 1)
+        for row in (a, b, c, d):
+            row[:, 2] += skew
+    radial = np.stack([np.sin(ph), np.cos(ph), np.zeros_like(ph)], axis=1)
+    out = _faces(a, b, radial, tag_top)
+    if dirt:
+        out.UV = _dirt_run(*dirt, n + 1)
+    if caps:
+        out.extend(_faces(a, c, np.array([0.0, 0.0, -1.0]), tag_side))
+        out.extend(_faces(b, d, np.array([0.0, 0.0, 1.0]), tag_side))
+    if ends:
+        for i, sign in ((0, -1.0), (-1, 1.0)):
+            t = np.array([np.cos(ph[i]), -np.sin(ph[i]), 0.0]) * sign
+            out.extend(_faces(np.stack([a[i], b[i]]), np.stack([c[i], d[i]]), t, tag_side))
+    return out
+
+
+def _dirt_run(length, row, rng, along_rows, j):
+    """Where a strip of this length reads the dirt patch: patch coordinates 0..1, a random run along one row."""
+    span = min(length / DIRT_METRES, 1.0)
+    u0 = rng.uniform(0.0, 1.0 - span)
+    t = np.r_[np.zeros(j), np.ones(j)] if along_rows else np.tile(np.linspace(0.0, 1.0, j), 2)
+    return np.stack([u0 + t * span, np.full(2 * j, float(row))], axis=1)
+
+
+def _angle_of(s, metres):
+    return metres / float(rsec(np.array([s]))[0])
+
+
+def _panel_edges():
+    return [np.radians(CASC_START_DEG + CASC_PANEL_DEG * k) for k in range(CASC_PANELS + 1)]
+
+
+def _blocked_panel(p0, p1, k, side, rng, out):
+    """Photo DSC_8534 F-WWDD: the two lowest panels each side, a pale bar along the upper frame and rows of pale blocks in the cells."""
+    wide = CASC_GRID_AFT - CASC_FRONT
+    bar_aft = CASC_GRID_AFT - (0.04 if k == CASC_BLOCKED[0] else 0.14)
+    w = _angle_of(3.0, 0.03)
+    a, b = (p0 + 0.002, p0 + 0.002 + w) if side > 0 else (p1 - 0.002 - w, p1 - 0.002)
+    out.extend(_bar(CASC_FRONT + 0.04, bar_aft, a, b, CASC_TOP - 0.014, CASC_TOP + 0.03, 2, "CBAR", "CSIDE"))
+    col = wide / CASC_COLUMNS
+    d = _angle_of(3.0, 0.009)
+    for i in range(CASC_COLUMNS):
+        s0 = CASC_FRONT + col * (i + 0.5) - 0.014
+        for j in range(1, CASC_ROWS - 1):
+            if rng.random() < 0.08:
+                continue
+            ph = p0 + (p1 - p0) * (j + 0.5) / CASC_ROWS + rng.normal(0.0, 0.0012)
+            ds = rng.normal(0.0, 0.003)
+            out.extend(_bar(s0 + ds, s0 + ds + rng.uniform(0.022, 0.032), ph - d, ph + d, CASC_TOP + 0.012, CASC_TOP + 0.016, 1, "CTAB", "CTAB", caps=False, ends=False))
+
+
+def _fittings(p0, p1, rng, out):
+    """The lumpy chain of small brackets and fasteners along the cowl's trailing edge: photo DSC_8534 at full size, clumps of parts 1-3 cm across, no two alike, mostly dark with the odd bright one."""
+    for centre in rng.uniform(p0, p1, int(rng.integers(3, 6))):
+        for _ in range(int(rng.integers(3, 6))):
+            pale = rng.random() < 0.15
+            arc = rng.uniform(0.008, 0.016) if pale else rng.uniform(0.01, 0.032)
+            wide = rng.uniform(0.006, 0.012) if pale else rng.uniform(0.008, 0.026)
+            ds = rng.uniform(0.012, 0.07)
+            a = float(np.clip(centre + rng.normal(0.0, _angle_of(S_TR, 0.03)), p0, p1))
+            w = _angle_of(S_TR, arc / 2)
+            tall = rng.uniform(0.004, 0.016)
+            tag = "CBAR" if pale else ("CFIT" if rng.random() < 0.55 else "CFITD")
+            out.extend(_bar(S_TR + ds, S_TR + ds + wide, a - w, a + w, max(0.004, 0.012 + ds * 0.16 - tall), 0.034, 1, tag, "CFITD", lean=rng.normal(0.0, 0.002)))
+
+
+def cascade_ring():
+    """The fixed cascades a deployed reverser uncovers, from photo DSC_8534 F-WWDD (about 182 px/m on the band): irregular fittings under the fan cowl's trailing edge, ten panels a side of 12.8 degrees, each nine columns by six rows of open cells about 7 cm square whose thin edges carry worn, dirty paint, a black margin the sleeve closes on, a pale track plate and silver beam at the top, and a solid black keel."""
+    out = Mesh()
+    rng = np.random.default_rng(7200)
+    grid = CASC_GRID_AFT - CASC_FRONT
+    for side in (1.0, -1.0):
+        p = np.array(_panel_edges()) * side
+        lo, hi = sorted((p[0], p[-1]))
+        out.extend(_bar(CASC_GRID_AFT, CASC_END, lo, hi, CASC_TOP, CASC_BACK, 40, "CFRAME", "CFRAME", ends=False))
+        for s0 in (CASC_FRONT - 0.012, CASC_GRID_AFT - 0.012):
+            out.extend(_bar(s0, s0 + 0.024, lo, hi, CASC_TOP - 0.004, CASC_BACK, 40, "CFRAME", "CFRAME", ends=False))
+        for i, e in enumerate(p):
+            w = _angle_of(3.0, 0.011)
+            out.extend(_bar(CASC_FRONT, CASC_GRID_AFT, e - w, e + w, CASC_TOP - 0.004, CASC_BACK, 1, "CFRAME", "CFRAME", caps=False))
+            lip = e + _angle_of(3.0, 0.009) * (-1.0 if side > 0 else 1.0)
+            t = _angle_of(3.0, 0.0025)
+            out.extend(_bar(CASC_FRONT, CASC_GRID_AFT, lip - t, lip + t, CASC_TOP - 0.0045, CASC_TOP, 1, "CDIRT", "CSIDE", caps=False, ends=False, dirt=(grid, rng.uniform(*DIRT_RIB), rng, True)))
+            if rng.random() > 0.15:
+                w = _angle_of(S_TR, rng.uniform(0.03, 0.042))
+                a = e + rng.normal(0.0, 0.004)
+                out.extend(_bar(S_TR, S_TR + rng.uniform(0.026, 0.036), a - w, a + w, 0.004, 0.012, 1, "CWHITE", "CSIDE", lean=rng.normal(0.0, 0.004)))
+        for k in range(CASC_PANELS):
+            p0, p1 = sorted((p[k], p[k + 1]))
+            shade = float(np.clip(rng.uniform(0.15, 0.85) + (0.25 if k < 3 else 0.0), 0.0, 1.0))
+            ph = np.linspace(p0, p1, 7)
+            rim = _bar(S_TR, CASC_FRONT, p0, p1, 0.006, 0.03, 6, "CDIRT", "CSIDE", caps=False, ends=False, dirt=((p1 - p0) * 1.8, rng.uniform(*DIRT_RIM), rng, False))
+            a, b = _arc(S_TR, ph, 0.006), _arc(CASC_FRONT, ph, CASC_TOP)
+            rim.P[:7], rim.P[7:14] = a, b
+            out.extend(rim)
+            for start in np.sort(rng.uniform(p0, p1, 2)):
+                w = _angle_of(S_TR, rng.uniform(0.03, 0.09))
+                out.extend(_bar(S_TR + 0.002, S_TR + rng.uniform(0.012, 0.02), start - w, start + w, 0.0045, 0.009, 2, "CSTEEL", "CSTEEL", caps=False, ends=False))
+            for i in range(1, CASC_COLUMNS):
+                st = CASC_FRONT + grid * i / CASC_COLUMNS + rng.normal(0.0, 0.0025)
+                row = DIRT_VANE[0] + (DIRT_VANE[1] - DIRT_VANE[0]) * float(np.clip(shade + rng.normal(0.0, 0.14), 0.0, 1.0))
+                out.extend(_bar(st - CASC_VANE / 2, st + CASC_VANE / 2, p0, p1, CASC_TOP, CASC_TOP + CASC_DEPTH, 4, "CDIRT", "CSIDE", tilt=CASC_VANE_TILT, ends=False, lean=rng.normal(0.0, 0.0035), dirt=((p1 - p0) * 1.8, row, rng, False)))
+            w = _angle_of(3.0, CASC_VANE / 2)
+            for j in range(1, CASC_ROWS):
+                a = p0 + (p1 - p0) * j / CASC_ROWS + rng.normal(0.0, 0.0012)
+                row = DIRT_RIB[0] + (DIRT_RIB[1] - DIRT_RIB[0]) * float(np.clip(shade + rng.normal(0.0, 0.14), 0.0, 1.0))
+                out.extend(_bar(CASC_FRONT, CASC_GRID_AFT, a - w, a + w, CASC_TOP, CASC_TOP + CASC_DEPTH, 1, "CDIRT", "CSIDE", caps=False, dirt=(grid, row, rng, True)))
+            _fittings(p0, p1, rng, out)
+            if k in CASC_BLOCKED:
+                _blocked_panel(p0, p1, k, side, rng, out)
+        a, b = sorted((np.radians(16.0) * side, np.radians(6.0) * side))
+        out.extend(_bar(S_TR + 0.06, CASC_END - 0.05, a, b, 0.012, 0.05, 3, "CPLATE", "CSIDE"))
+        a, b = sorted((p[-1], np.pi * side))
+        out.extend(_bar(S_TR, CASC_END, a, b, 0.02, CASC_BACK, 8, "CFRAME", "CFRAME", ends=False))
+    r = np.radians(6.0)
+    out.extend(_bar(S_TR, CASC_END, -r, r, 0.0, 0.035, 8, "LIP", "CSIDE"))
+    out.extend(cascade_back())
+    return out
+
+
+def cascade_back(tag="CBACK", dr=CASC_BACK):
+    return surface(sec_points(np.array([S_TR, 2.9, CASC_END]), PHI, dr=dr), True, "out", tag=tag)
+
+
+def sleeve_front():
+    """The black bulkhead on the sleeve's leading edge, which moves with it and hides its hollow."""
+    s = S_TR + 0.012
+    outer = _arc(s, PHI, 0.002)
+    r = float(duct_radius(np.array([s]))[0])
+    inner = np.stack([r * np.sin(PHI), r * np.cos(PHI), np.full(NPHI, s)], axis=-1)
+    return _faces(outer, inner, np.array([0.0, 0.0, -1.0]), "CFRAME", closed=True)
+
+
+def cascade_far():
+    """What is left of the cascades past the near LOD: the black band and its panel frames."""
+    out = cascade_back()
+    w = _angle_of(3.0, 0.016)
+    for side in (1.0, -1.0):
+        for e in _panel_edges():
+            out.extend(_bar(CASC_FRONT, CASC_GRID_AFT, e * side - w, e * side + w, CASC_TOP - 0.004, CASC_BACK, 1, "CEDGE", "CSIDE", caps=False))
+    return out
+
+
 def barrel_stations():
     sp = np.concatenate([[HL_TOP + 0.75], stations(-0.35, S_NOSE, 0.15)[0:], stations(S_NOSE, 1.50, 0.12)[1:]])
     return np.unique(np.round(sp, 5))

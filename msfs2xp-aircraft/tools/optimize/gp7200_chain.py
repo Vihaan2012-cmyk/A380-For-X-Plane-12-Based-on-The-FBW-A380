@@ -27,6 +27,7 @@ sys.path.insert(0, str(HERE.parent / "engine_interior"))
 
 import cowl_clip as cc  # noqa: E402
 import cowl_hinges as ch  # noqa: E402
+import cowl_piece_backfaces as cb  # noqa: E402
 import cowl_rods as rods  # noqa: E402
 import reverser_hinges as rh  # noqa: E402
 import cowl_separation as cs  # noqa: E402
@@ -133,6 +134,7 @@ def run_tools(stage, install, scratch):
         print("door hinge lines keyed over 0..0.5:", door_keys(scratch))
         dmg.main(scratch)
         run_rods(scratch, real_tips, gp_hinge)
+        cb.main(scratch)
     finally:
         cs.tips = real_tips
         gv.LIFT.update(OLD_LIFT)

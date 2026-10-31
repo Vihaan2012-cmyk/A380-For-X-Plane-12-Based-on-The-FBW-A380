@@ -13,6 +13,7 @@ from gp7200_geom import frames  # noqa: E402
 from gp7200_obj import Obj, engine_of_batch  # noqa: E402
 
 FN = frames()
+STOWED_AWAY = "a380_engcore_gp.obj"
 OTHERS = ("a380_exterior_001_gp.obj", "a380_engdress_gp.obj", "a380_engcore_gp.obj", "a380_exterior_020_gp.obj", "a380_exterior_030_gp.obj")
 SKIN = {1: "a380_exterior_022_gp.obj", 2: "a380_exterior_022_gp.obj", 3: "a380_exterior_023_gp.obj", 4: "a380_exterior_023_gp.obj"}
 
@@ -20,12 +21,13 @@ SKIN = {1: "a380_exterior_022_gp.obj", 2: "a380_exterior_022_gp.obj", 3: "a380_e
 def window_triangles(obj, f, a_lim=1.3, s_lim=(-0.3, 6.0), b_lim=(1.2, 3.4), engine=None):
     P = obj.vt[:, :3]
     T = obj.idx.reshape(-1, 3)
-    if engine is not None:
-        keep = np.zeros(len(T), bool)
-        for b in obj.tris():
-            if engine_of_batch(b) == engine - 1:
-                keep[b["start"] // 3:(b["start"] + b["count"]) // 3] = True
-        T = T[keep]
+    keep = np.full(len(T), engine is None)
+    for b in obj.tris():
+        if engine is not None and engine_of_batch(b) == engine - 1:
+            keep[b["start"] // 3:(b["start"] + b["count"]) // 3] = True
+        if obj.path.name == STOWED_AWAY and any("thrust_rev" in t for t in b["anim"]):
+            keep[b["start"] // 3:(b["start"] + b["count"]) // 3] = False
+    T = T[keep]
     loc = f.local(P)
     lo = np.minimum(np.minimum(loc[T[:, 0]], loc[T[:, 1]]), loc[T[:, 2]])
     hi = np.maximum(np.maximum(loc[T[:, 0]], loc[T[:, 1]]), loc[T[:, 2]])
