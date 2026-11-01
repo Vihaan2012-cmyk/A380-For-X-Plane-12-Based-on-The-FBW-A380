@@ -425,6 +425,7 @@ fn resolve(aircraft: &Path, clean: &str) -> Option<PathBuf> {
         Some(rest) => (aircraft.to_path_buf(), rest),
         None => (aircraft.join("html_ui"), clean),
     };
+    let base = out.clone();
     let mut any = false;
     for seg in rest.split(['/', '\\']) {
         match seg {
@@ -437,7 +438,25 @@ fn resolve(aircraft: &Path, clean: &str) -> Option<PathBuf> {
             }
         }
     }
-    any.then_some(out)
+    if !any {
+        return None;
+    }
+    if !cfg!(windows) && !out.exists() {
+        return Some(on_disk(&base, &out).unwrap_or(out));
+    }
+    Some(out)
+}
+
+/// The file as the disk spells it. FlyByWire's panel asks for `FCU/FCU.html` and the file is
+/// `fcu.html`, which only a disk that ignores case forgives.
+fn on_disk(base: &Path, path: &Path) -> Option<PathBuf> {
+    let mut found = base.to_path_buf();
+    for part in path.strip_prefix(base).ok()?.components() {
+        let want = part.as_os_str().to_string_lossy();
+        let name = std::fs::read_dir(&found).ok()?.flatten().map(|e| e.file_name()).find(|n| n.to_string_lossy().eq_ignore_ascii_case(&want))?;
+        found.push(name);
+    }
+    Some(found)
 }
 
 fn mime_of(path: &str) -> &'static str {
@@ -1019,5 +1038,23 @@ mod tests {
     fn page_scripts_go_first_in_the_head() {
         assert_eq!(inject_first("<!doctype html><html><head><meta></head></html>", "<s>"), "<!doctype html><html><head><s><meta></head></html>");
         assert_eq!(inject_first("<div></div>", "<s>"), "<s><div></div>");
+    }
+}
+
+#[cfg(test)]
+mod case_tests {
+    use super::*;
+
+    #[test]
+    fn a_page_asked_for_in_the_wrong_case_is_found_as_the_disk_spells_it() {
+        let root = std::env::temp_dir().join(format!("fbw-case-{}", std::process::id()));
+        let dir = root.join("Pages").join("FCU");
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("fcu.html"), "x").unwrap();
+        let found = on_disk(&root, &root.join("pages").join("fcu").join("FCU.html")).unwrap();
+        assert_eq!(found, dir.join("fcu.html"));
+        assert_eq!(found.file_name().unwrap().to_string_lossy(), "fcu.html");
+        assert_eq!(on_disk(&root, &root.join("pages").join("nothing.html")), None);
+        std::fs::remove_dir_all(&root).unwrap();
     }
 }

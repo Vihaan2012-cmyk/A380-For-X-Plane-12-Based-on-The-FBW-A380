@@ -57,7 +57,7 @@ const HEVENTS: &str = include_str!("../tools/js-build/hevents.txt");
 
 /// FlyByWire's systems' simulator variables and the unit each is kept in
 /// here, from their MSFS glue (the units the plugin's inputs convert into).
-const SYSTEMS_WASM: &str = include_str!("../../fbw-aircraft/fbw-a380x/src/wasm/systems/a380_systems_wasm/src/lib.rs");
+const SYSTEMS_WASM: &str = include_str!(concat!(env!("FBW_TREE"), "/fbw-a380x/src/wasm/systems/a380_systems_wasm/src/lib.rs"));
 
 fn stored_units() -> &'static HashMap<String, String> {
     static UNITS: std::sync::OnceLock<HashMap<String, String>> = std::sync::OnceLock::new();

@@ -25,7 +25,10 @@ fn main() {
 
     let manifest = PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap());
     let out = PathBuf::from(std::env::var("OUT_DIR").unwrap());
-    let fbw = manifest.join("../fbw-aircraft/fbw-a380x/src/wasm/fbw_a380/src");
+    // FlyByWire's tree: inside the public repo, or beside the working plugin repo.
+    let fbw_tree = Some(manifest.join("fbw/xplane")).filter(|p| p.join("fbw-a380x").is_dir()).unwrap_or_else(|| manifest.join("../fbw-aircraft"));
+    println!("cargo:rustc-env=FBW_TREE={}", fbw_tree.display());
+    let fbw = fbw_tree.join("fbw-a380x/src/wasm/fbw_a380/src");
     let model = fbw.join("model");
     let shim = manifest.join("src/fbw_cpp");
 
