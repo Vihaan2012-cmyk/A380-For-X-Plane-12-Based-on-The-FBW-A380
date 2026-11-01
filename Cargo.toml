@@ -7,7 +7,7 @@ license = "GPL-3.0-or-later"
 
 [workspace]
 members = ["crates/fms"]
-exclude = ["app", "installer", "crates/gpws", "crates/tcas", "crates/hosts_misc", "crates/datalink", "crates/state_snapshot", "crates/rmp", "crates/oans", "crates/fws", "crates/fws_data", "crates/fms_host", "crates/fms_lnav", "crates/fms_vnav", "crates/fms_perf", "crates/fms_data", "crates/css_cascade", "crates/efb_pages", "crates/terrain_map", "crates/mfd_host", "crates/mfd_native", "crates/mfd_pages_a", "crates/mfd_pages_b", "crates/mfd_pages_c", "crates/mfd_pages_d", "crates/oit_native", "crates/oit_pages"]
+exclude = ["fbw", "msfs2xp-aircraft", "Converter", "app", "installer", "crates/gpws", "crates/tcas", "crates/hosts_misc", "crates/datalink", "crates/state_snapshot", "crates/rmp", "crates/oans", "crates/fws", "crates/fws_data", "crates/fms_host", "crates/fms_lnav", "crates/fms_vnav", "crates/fms_perf", "crates/fms_data", "crates/css_cascade", "crates/efb_pages", "crates/terrain_map", "crates/mfd_host", "crates/mfd_native", "crates/mfd_pages_a", "crates/mfd_pages_b", "crates/mfd_pages_c", "crates/mfd_pages_d", "crates/oit_native", "crates/oit_pages"]
 
 [lib]
 # rlib too, for the systems process (src/bin/fbw_a380_systems_server.rs).
