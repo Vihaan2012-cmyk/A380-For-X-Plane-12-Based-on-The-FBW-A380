@@ -5,6 +5,10 @@ edition = "2021"
 description = "FlyByWire's A380X systems simulation as an X-Plane 12 plugin"
 license = "GPL-3.0-or-later"
 
+[workspace]
+members = ["crates/fms"]
+exclude = ["app", "installer", "crates/gpws", "crates/tcas", "crates/hosts_misc", "crates/datalink", "crates/state_snapshot", "crates/rmp", "crates/oans", "crates/fws", "crates/fws_data", "crates/fms_host", "crates/fms_lnav", "crates/fms_vnav", "crates/fms_perf", "crates/fms_data", "crates/css_cascade", "crates/efb_pages", "crates/terrain_map", "crates/mfd_host", "crates/mfd_native", "crates/mfd_pages_a", "crates/mfd_pages_b", "crates/mfd_pages_c", "crates/mfd_pages_d", "crates/oit_native", "crates/oit_pages"]
+
 [lib]
 # rlib too, for the systems process (src/bin/fbw_a380_systems_server.rs).
 crate-type = ["cdylib", "rlib"]
@@ -36,6 +40,38 @@ serde_json = "1"
 serde = { version = "1", features = ["derive"] }
 # The cockpit sounds (src/sound): Vorbis decoding of Wwise's media.
 lewton = { version = "0.10", default-features = false }
+# The native computers run beside FlyByWire's JS (src/native_shadow.rs).
+gpws = { path = "crates/gpws" }
+tcas = { path = "crates/tcas" }
+hosts_misc = { path = "crates/hosts_misc" }
+# The native flight management (src/fms_navdb.rs).
+fms = { path = "crates/fms" }
+state_snapshot = { path = "crates/state_snapshot" }
+datalink = { path = "crates/datalink" }
+rmp = { path = "crates/rmp" }
+oans = { path = "crates/oans" }
+fws = { path = "crates/fws" }
+fms_host = { path = "crates/fms_host" }
+fms_lnav = { path = "crates/fms_lnav" }
+mfd_tree = { path = "crates/mfd_tree" }
+css_cascade = { path = "crates/css_cascade" }
+efb_pages = { path = "crates/efb_pages" }
+terrain_map = { path = "crates/terrain_map" }
+mfd_host = { path = "crates/mfd_host" }
+mfd_native = { path = "crates/mfd_native" }
+oit_native = { path = "crates/oit_native" }
+oit_pages = { path = "crates/oit_pages" }
+
+[target.'cfg(windows)'.dependencies]
+windows = { version = "0.61", features = [
+    "Win32_Foundation",
+    "Win32_Security",
+    "Win32_Graphics_Direct3D",
+    "Win32_Graphics_Direct3D_Fxc",
+    "Win32_Graphics_Direct3D11",
+    "Win32_Graphics_Dxgi",
+    "Win32_Graphics_Dxgi_Common",
+] }
 
 [dev-dependencies]
 # A reference rasteriser and PNG writer for the display snapshot tests only.
@@ -58,6 +94,9 @@ js = ["dep:rquickjs", "dep:oxc", "dep:lyon_tessellation", "dep:ab_glyph", "dep:p
 # can drive the real plugin code with no live X-Plane process. Does not
 # change the plugin's own behaviour or its default/js build.
 test-support = []
+# The cockpit screens drawn by the native C++/Skia displays in a380-displays
+# (src/native_displays), built with CMake by build.rs. Off by default.
+native-displays = ["js", "dep:png"]
 
 [build-dependencies]
 cc = "1"
