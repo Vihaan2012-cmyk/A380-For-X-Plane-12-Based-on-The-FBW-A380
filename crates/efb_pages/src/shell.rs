@@ -27,7 +27,7 @@ pub const SECTIONS: [Section; 12] = [
     Section { key: "home", title: "Home", subs: &[("Home", "home")] },
     Section { key: "flight", title: "Flight", subs: &[("Flight Plan", "flightplan"), ("Payload & Fuel", "loadsheet"), ("Cargo", "cargo"), ("Performance", "performance"), ("Charts", "charts"), ("ATC", "atc")] },
     Section { key: "checklists", title: "Documents", subs: &[("Documents", "checklists")] },
-    Section { key: "ground", title: "Ground", subs: &[("Ground Services", "ground"), ("Pushback", "pushback")] },
+    Section { key: "ground", title: "Ground", subs: &[("Ground Services", "ground")] },
     Section { key: "cabin", title: "Cabin", subs: &[("Flight Attendant Panel", "fap")] },
     Section {
         key: "aircraft",

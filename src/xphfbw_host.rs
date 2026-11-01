@@ -204,6 +204,9 @@ impl XphfbwHost {
         // display/mod.rs's `Bridge` can work out which view governs each
         // screen (`view_for_screen`) once, here, instead of every frame.
         crate::display::set_bridge(Some(tag), Some(session), &views);
+        if crate::browser_screens::enabled() {
+            crate::browser_screens::attach(tag, session, &views);
+        }
         Some(Self {
             session,
             env: EnvRefs::new(xplm),
@@ -326,6 +329,7 @@ impl XphfbwHost {
         self.retry_calls(vars, time);
         self.retry_game_strings();
         self.update_displays_active();
+        crate::browser_screens::tick(self.session);
     }
 
     /// The MFD's DOM snapshot script stays dormant until this variable is up,
@@ -826,6 +830,7 @@ impl Drop for XphfbwHost {
     /// is fine: it is a fixed, small, one-time-per-session leak).
     fn drop(&mut self) {
         self.save_slots();
+        crate::browser_screens::detach();
         crate::display::set_bridge(None, None, &[]);
     }
 }

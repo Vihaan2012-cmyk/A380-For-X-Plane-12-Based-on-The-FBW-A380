@@ -66,8 +66,7 @@ impl Direction {
 /// into its `N` concrete points).
 #[derive(Clone, Debug, PartialEq)]
 pub struct AnimTrigger {
-    /// The `fbw/cockpit/<anim>` dataref to watch (already registered by
-    /// `Plugin::register_cockpit_variables`, `cockpit_variables.txt`).
+    /// The `fbw/cockpit/<anim>` dataref to watch, the cockpit script's own.
     pub dataref: String,
     pub direction: Direction,
     /// Where in the clip's 0..1 travel this fires.

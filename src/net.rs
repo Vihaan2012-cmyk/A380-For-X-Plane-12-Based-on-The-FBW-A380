@@ -114,6 +114,7 @@ const CONNECT_MS: i32 = 10_000;
 const SEND_MS: i32 = 30_000;
 pub const RECEIVE_MS: u32 = 30_000;
 
+#[cfg(windows)]
 #[link(name = "kernel32")]
 extern "system" {
     fn LoadLibraryA(name: *const i8) -> *mut c_void;
@@ -123,6 +124,7 @@ extern "system" {
 /// One WinHTTP entry point, looked up by name the same way the XPLM ones
 /// are. Missing WinHTTP is not an error worth panicking over -- the request
 /// simply cannot be made.
+#[cfg(windows)]
 fn symbol(name: &str) -> Option<*mut c_void> {
     unsafe {
         let dll = std::ffi::CString::new("winhttp.dll").ok()?;
@@ -194,7 +196,50 @@ pub(crate) fn request_with(method: &str, url: &str, body: &str, receive_ms: u32)
     request_bytes(method, url, body.as_bytes(), headers, receive_ms).map(|(status, _, out)| (status, String::from_utf8_lossy(&out).into_owned()))
 }
 
+/// What curl prints after the body.
+#[cfg(not(windows))]
+const CURL_TRAILER: &str = "\n\u{1}fbw-http ";
+
+#[cfg(not(windows))]
+fn parse_curl_output(mut out: Vec<u8>) -> Option<(u16, String, Vec<u8>)> {
+    let trailer = CURL_TRAILER.as_bytes();
+    let at = out.windows(trailer.len()).rposition(|w| w == trailer)?;
+    let info = String::from_utf8_lossy(&out[at + trailer.len()..]).into_owned();
+    out.truncate(at);
+    let (status, content_type) = info.split_once(' ')?;
+    let status: u16 = status.parse().ok()?;
+    (status != 0).then(|| (status, content_type.to_string(), out))
+}
+
+/// The status, the Content-Type header and the raw body. curl comes with macOS
+/// and every Linux that runs X-Plane.
+#[cfg(not(windows))]
+pub(crate) fn request_bytes(method: &str, url: &str, body: &[u8], headers: &str, receive_ms: u32) -> Option<(u16, String, Vec<u8>)> {
+    use std::io::Write;
+    use std::process::{Command, Stdio};
+    let seconds = (receive_ms as u64 + SEND_MS as u64) / 1000;
+    let write_out = format!("{CURL_TRAILER}%{{http_code}} %{{content_type}}");
+    let mut curl = Command::new("curl");
+    curl.args(["-sS", "-L", "--connect-timeout"]).arg((CONNECT_MS / 1000).to_string());
+    curl.arg("--max-time").arg(seconds.to_string()).arg("-X").arg(method);
+    curl.args(["-A", "A380 for X-Plane 12", "-w"]).arg(write_out);
+    for header in headers.split("\r\n").filter(|h| !h.is_empty()) {
+        curl.arg("-H").arg(header);
+    }
+    if !body.is_empty() {
+        curl.args(["--data-binary", "@-"]);
+    }
+    curl.arg(url).stdout(Stdio::piped()).stderr(Stdio::null());
+    curl.stdin(if body.is_empty() { Stdio::null() } else { Stdio::piped() });
+    let mut child = curl.spawn().ok()?;
+    if let Some(mut stdin) = child.stdin.take() {
+        let _ = stdin.write_all(body);
+    }
+    parse_curl_output(child.wait_with_output().ok()?.stdout)
+}
+
 /// The status, the Content-Type header and the raw body.
+#[cfg(windows)]
 pub(crate) fn request_bytes(method: &str, url: &str, body: &[u8], headers: &str, receive_ms: u32) -> Option<(u16, String, Vec<u8>)> {
     type Open = unsafe extern "system" fn(*const u16, u32, *const u16, *const u16, u32) -> Handle;
     type Connect = unsafe extern "system" fn(Handle, *const u16, u16, u32) -> Handle;
@@ -301,6 +346,15 @@ pub(crate) fn request_bytes(method: &str, url: &str, body: &[u8], headers: &str,
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    #[cfg(not(windows))]
+    fn curl_output_gives_status_type_and_body() {
+        let out = format!("{{\"a\":1}}{CURL_TRAILER}200 application/json").into_bytes();
+        assert_eq!(parse_curl_output(out), Some((200, "application/json".to_string(), b"{\"a\":1}".to_vec())));
+        assert_eq!(parse_curl_output(format!("{CURL_TRAILER}000 ").into_bytes()), None);
+        assert_eq!(parse_curl_output(b"no trailer".to_vec()), None);
+    }
 
     #[test]
     fn a_url_splits_into_what_winhttp_needs() {

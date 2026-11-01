@@ -1165,3 +1165,20 @@ fn the_hud_page_renders() {
         println!("hud {}: {} ops, {} strings, errors: {:?}", scene.name, ops.len(), strings.len(), host.errors);
     }
 }
+
+#[test]
+fn a_right_drag_looking_around_is_not_a_right_click() {
+    use super::RightPress;
+    use std::time::{Duration, Instant};
+    let at = Instant::now();
+    let soon = at + Duration::from_millis(120);
+    assert!(RightPress::new(100, 100, at).is_click(soon));
+    let mut nudged = RightPress::new(100, 100, at);
+    nudged.moved_to(103, 102);
+    assert!(nudged.is_click(soon), "a hand is not perfectly still");
+    let mut dragged = RightPress::new(100, 100, at);
+    dragged.moved_to(140, 100);
+    dragged.moved_to(100, 100);
+    assert!(!dragged.is_click(soon), "and coming back does not undo the drag");
+    assert!(!RightPress::new(100, 100, at).is_click(at + Duration::from_millis(900)), "held to look around without moving yet");
+}

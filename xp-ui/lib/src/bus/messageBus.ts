@@ -46,7 +46,11 @@ class Listener implements Bond {
       this._missed = true;
       return;
     }
-    this._deliver(value);
+    try {
+      this._deliver(value);
+    } catch (err) {
+      console.error(err);
+    }
   }
 
   replay(): void {

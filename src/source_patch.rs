@@ -36,6 +36,47 @@ pub struct SourcePatch {
 /// turn that bool into whatever their own log takes (`js/msfs/mod.rs`:
 /// `LogLevel::Info`/`LogLevel::Error`; `app/src/scheme.rs`:
 /// `crate::logging::log`, which has no level).
+/// The message list and the other dialogs stop 10 px above the footer, and the bottom edges of
+/// the page's own buttons showed under them.
+pub fn mfd_dialog_height_patch() -> SourcePatch {
+    SourcePatch {
+        path: "/Pages/VCockpit/Instruments/A380X/MFD/mfd.css".to_string(),
+        find: "  width: 768px;\n  height: 852px;\n  overflow: visible;".to_string(),
+        replace: "  width: 768px;\n  height: 862px;\n  overflow: visible;".to_string(),
+        reason: "MFD dialogs cover the page down to the footer".to_string(),
+    }
+}
+
+/// A handler's error stays with that handler, as in msfs-sdk's EventBus. Without this an
+/// error in a page listening to a flight plan event reached `FlightPlanManager.reset`, which
+/// never recreated its plans: a cold and dark start with F-PLN open left the FMS without any,
+/// and every MFD page after it black.
+pub fn listener_error_patches() -> Vec<SourcePatch> {
+    const BUNDLES: [&str; 12] = [
+        "Clock/clock.js",
+        "EWD/ewd.js",
+        "ExtrasHost/index.js",
+        "FCU/fcu.js",
+        "HUD/hud.js",
+        "MFD/mfd.js",
+        "ND/nd.js",
+        "OIT/oit.js",
+        "PFD/pfd.js",
+        "RMP/rmp.js",
+        "SDv2/sdv2.js",
+        "SystemsHost/SystemsHost.js",
+    ];
+    BUNDLES
+        .iter()
+        .map(|bundle| SourcePatch {
+            path: format!("/Pages/VCockpit/Instruments/A380X/{bundle}"),
+            find: "        this._missed = true;\n        return;\n      }\n      this._deliver(value);\n    }\n    replay() {".to_string(),
+            replace: "        this._missed = true;\n        return;\n      }\n      try {\n        this._deliver(value);\n      } catch (e) {\n        console.error(e);\n      }\n    }\n    replay() {".to_string(),
+            reason: "a bus handler's error stays with that handler".to_string(),
+        })
+        .collect()
+}
+
 pub fn apply(patches: &[SourcePatch], clean: &str, mut text: String, mut log: impl FnMut(bool, &str)) -> String {
     for patch in patches.iter().filter(|p| p.path.eq_ignore_ascii_case(clean)) {
         let (spans, _) = locate(&text, &patch.find);
@@ -425,6 +466,31 @@ pub fn flight_plan_backup_patches() -> Vec<SourcePatch> {
 
 /// `amdb.ts`'s two Navigraph calls in `nd.js`, sent through `fetch` to XPHFBW's `/__plugin/` route instead of axios,
 /// so the plugin answers them from the local AMDB folder (`oans::plugin`).
+/// The RMP reads the radios' frequencies once, as the session starts. A page's first read of
+/// a variable returns 0 until the host has resolved it on its next tick, so it stored 0 and
+/// came up blank. Read them until they answer, for up to ten seconds.
+pub fn rmp_start_frequency_patches() -> Vec<SourcePatch> {
+    const FIND: &str = "Waits.forValue(SessionState.get(), (v) => v === SessionPhase.flying, true).then(() => {\n          if (this.index === 3) {";
+    const REPLACE: &str = "Waits.forValue(SessionState.get(), (v) => v === SessionPhase.flying, true).then(async () => {\n          for (let i = 0; i < 100; i++) {\n            const active = Vars.read(`fbw/COM_ACTIVE_FREQUENCY_${this.index}`, \"Frequency BCD32\");\n            const standby = Vars.read(`fbw/COM_STANDBY_FREQUENCY_${this.index}`, \"Frequency BCD32\");\n            if (active && standby) break;\n            await new Promise((r) => setTimeout(r, 100));\n          }\n          if (this.index === 3) {";
+    vec![SourcePatch {
+        path: "/Pages/VCockpit/Instruments/A380X/RMP/rmp.js".to_string(),
+        find: FIND.to_string(),
+        replace: REPLACE.to_string(),
+        reason: "the RMP's one read of the radios' frequencies came back 0: it was the page's first read of them".to_string(),
+    }]
+}
+
+/// `LightSync.ts` sets the RMP knobs at start with `#RMP_ID#` left in the variable's name and
+/// the value as percent times 100, so the real knobs stayed at 0 and all three RMPs stayed dark.
+pub fn rmp_start_brightness_patch() -> SourcePatch {
+    SourcePatch {
+        path: "/Pages/VCockpit/Instruments/A380X/ExtrasHost/index.js".to_string(),
+        find: "Vars.write(`L:A380X_RMP_#RMP_ID#_BRIGHTNESS_KNOB`, \"number\" /* Number */, brightness);".to_string(),
+        replace: "Vars.write(`L:A380X_RMP_${rmp}_BRIGHTNESS_KNOB`, \"number\" /* Number */, brightness / 100);".to_string(),
+        reason: "LightSync wrote the RMP knobs under an unsubstituted template name, 100 times too large".to_string(),
+    }
+}
+
 pub fn amdb_fetch_patches() -> Vec<SourcePatch> {
     const OLD_LINE: &str = "const response = await navigraphRequest.get(`https://amdb.api.navigraph.com/v1/${query}`);";
     const NEW_LINE: &str = "const response = { data: await (await fetch(`/__plugin/amdb/v1/${query}`)).json() };";

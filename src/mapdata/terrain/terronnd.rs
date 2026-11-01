@@ -428,9 +428,10 @@ impl Gauge {
             let terrain_map_mode = matches!(c.mode, ROSE_LS | ROSE_VOR | ROSE_NAV | ARC);
             p.extend((c.range as u16).to_le_bytes());
             p.push((c.mode == ARC) as u8);
-            // The captain's side sends TERR ON ND, the first officer's TERR on ND or VD (collection.cpp).
-            let active = if i == 0 { c.terr_on_nd } else { c.terr_on_nd || c.terr_on_vd };
-            p.push((active && terrain_map_mode) as u8);
+            // Bit 0 TERR ON ND, bit 1 the first officer's always-active VD: collection.cpp sends
+            // the two as one flag, and read that way the VD draws terrain on the ND as well.
+            let flags = c.terr_on_nd as u8 | ((i == 1 && c.terr_on_vd) as u8) << 1;
+            p.push(if terrain_map_mode { flags } else { 0 });
             p.push(c.mode);
         }
         p.push(rendering_mode);
@@ -467,8 +468,8 @@ mod tests {
         assert_eq!(i16::from_le_bytes(p[13..15].try_into().unwrap()), 263);
         assert_eq!(u16::from_le_bytes(p[27..29].try_into().unwrap()), 40);
         assert_eq!((p[29], p[30], p[31]), (1, 1, 3));
-        // The first officer's flag includes the always-active VD.
-        assert_eq!((p[34], p[35], p[36]), (0, 1, 2));
+        // The first officer's flags: no TERR ON ND, the always-active VD.
+        assert_eq!((p[34], p[35], p[36]), (0, 2, 2));
         assert_eq!(p[37], 3);
         assert_eq!(f32::from_le_bytes(p[38..42].try_into().unwrap()), 47.01);
         // Powered, no frame yet: black.

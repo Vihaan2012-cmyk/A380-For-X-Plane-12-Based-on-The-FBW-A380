@@ -274,6 +274,9 @@ pub fn tick(vars: &mut Vars, time: f64) {
                 crate::mapdata::plugin::set_native_terrain(side, authoritative);
             }
         }
+        if !authoritative {
+            return;
+        }
         if let Some(f) = FMS.lock().unwrap_or_else(|e| e.into_inner()).as_mut().filter(|f| f.dirty) {
             f.dirty = false;
             r.host.set_fms_path(FmsPath::from_vectors(&f.vectors, f.track_change_nm));

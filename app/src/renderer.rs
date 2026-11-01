@@ -14,8 +14,7 @@
 //! than fighting.
 
 pub(crate) mod snapshot;
-pub(crate) mod stored_data;
-pub(crate) mod wmm;
+pub(crate) use fbw_a380_systems::{stored_data, wmm};
 
 use std::cell::{Cell, OnceCell, RefCell};
 use std::collections::{HashMap, HashSet};

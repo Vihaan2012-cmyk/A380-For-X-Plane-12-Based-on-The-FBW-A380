@@ -1,4 +1,4 @@
-//! The EFB interface: FlyByWire's flyPad ground, payload, fuel, pushback,
+//! The EFB interface: FlyByWire's flyPad ground, payload, fuel,
 //! settings and failures functions as `fbw/efb/...` datarefs and commands,
 //! for a third-party EFB. docs/efb-interface.md lists every one.
 //!
@@ -549,10 +549,6 @@ struct Ids {
     ac_powered: [VariableIdentifier; 4],
     dc_ess_powered: VariableIdentifier,
     dc_ess_feeds: [VariableIdentifier; 6],
-    pushback_enabled: VariableIdentifier,
-    pushback_speed: VariableIdentifier,
-    pushback_heading: VariableIdentifier,
-    pushback_wait: VariableIdentifier,
     park_brake: VariableIdentifier,
     start_state: VariableIdentifier,
     on_any_runway: VariableIdentifier,
@@ -680,7 +676,6 @@ pub struct Efb {
     ground: Ground,
     payload: Payload,
     refuel: Refuel,
-    pushback: Pushback,
     other: Other,
     random: Random,
     empty_weight_kg: f64,
@@ -775,16 +770,6 @@ impl Efb {
             total: read_value(&mut p, "refuel/total_kg", false),
             eta: read_value(&mut p, "refuel/eta_s", false),
         };
-        let pushback = Pushback {
-            enabled: read_value(&mut p, "pushback/system_enabled", true),
-            speed: read_value(&mut p, "pushback/speed_factor", true),
-            heading: read_value(&mut p, "pushback/heading_factor", true),
-            stop: cmd(&mut p, "pushback/stop", "flyPad: stop the tug"),
-            call_tug: cmd(&mut p, "pushback/call_tug", "flyPad: call the tug"),
-            release_tug: cmd(&mut p, "pushback/release_tug", "flyPad: release the tug"),
-            attached: read_value(&mut p, "pushback/attached", false),
-            parking_brake: read_value(&mut p, "pushback/parking_brake", true),
-        };
         let other = Other {
             settings: SETTINGS.iter().map(|s| read_value(&mut p, &format!("settings/{}", s.key.to_ascii_lowercase()), true)).collect(),
             activate: read_value(&mut p, "failures/activate", true),
@@ -826,10 +811,6 @@ impl Efb {
             ac_powered: [1, 2, 3, 4].map(|n| get(&format!("ELEC_AC_{n}_BUS_IS_POWERED"))),
             dc_ess_powered: get("ELEC_DC_ESS_BUS_IS_POWERED"),
             dc_ess_feeds: ["ELEC_AC_ESS_BUS_IS_POWERED", "ELEC_DC_1_BUS_IS_POWERED", "ELEC_CONTACTOR_6PE_IS_CLOSED", "ELEC_CONTACTOR_6PC2_IS_CLOSED", "ELEC_CONTACTOR_6PB3_IS_CLOSED", "ELEC_CONTACTOR_6PC1_IS_CLOSED"].map(|n| get(n)),
-            pushback_enabled: get("PUSHBACK_SYSTEM_ENABLED"),
-            pushback_speed: get("PUSHBACK_SPD_FACTOR"),
-            pushback_heading: get("PUSHBACK_HDG_FACTOR"),
-            pushback_wait: get("PUSHBACK WAIT"),
             park_brake: get("PARK_BRAKE_LEVER_POS"),
             start_state: get("START_STATE"),
             on_any_runway,
@@ -871,7 +852,6 @@ impl Efb {
             ground,
             payload,
             refuel,
-            pushback,
             other,
             random: Random::from_clock(),
             // A:EMPTY WEIGHT, which the page reads (A380Payload.tsx:318).
@@ -1007,18 +987,12 @@ impl Efb {
             xplm.get_vi(d, &mut r);
             r
         });
-        // X-Plane's own tug, or FlyByWire's (extra_backend pushback.rs keeps
-        // `PUSHBACK ATTACHED`).
-        let attached = self.refs.pushback_attached.is_some_and(|d| xplm.get_i(d) != 0)
-            || {
-                let tug = vars.get("PUSHBACK ATTACHED".to_string());
-                vars.read(&tug) != 0.
-            };
+        // X-Plane's own tug.
+        let attached = self.refs.pushback_attached.is_some_and(|d| xplm.get_i(d) != 0);
 
         self.update_ground(vars, xplm, doors, on_ground, attached, groundspeed_ms * KT_PER_MS, delta);
         self.update_payload(vars, doors, on_ground, running[0] != 0 || running[3] != 0, running[..4].iter().any(|&r| r != 0), delta);
         self.update_refuel(vars, on_ground, running[..4].iter().any(|&r| r != 0));
-        self.update_pushback(vars, attached);
         self.update_other(vars);
     }
 
@@ -1382,40 +1356,6 @@ impl Efb {
         published::set(rf.allowed, refuel_allowed(vars.read(&self.ids.refuel_started) != 0., engine_running, on_ground, rate) as i32 as f64);
         published::set(rf.total, total);
         published::set(rf.eta, refuel_seconds(total, desired, rate));
-    }
-
-    fn update_pushback(&mut self, vars: &mut Vars, attached: bool) {
-        let pb = &self.pushback;
-        if let Some(v) = published::take(pb.enabled) {
-            vars.write(&self.ids.pushback_enabled, (v != 0.) as i32 as f64);
-        }
-        // handleTugSpeed / handleTugDirection (PushbackPage.tsx:129-135).
-        if let Some(v) = published::take(pb.speed) {
-            vars.write(&self.ids.pushback_speed, v.clamp(-1., 1.));
-        }
-        if let Some(v) = published::take(pb.heading) {
-            vars.write(&self.ids.pushback_heading, v.clamp(-1., 1.));
-        }
-        if published::presses(pb.stop) > 0 {
-            vars.write(&self.ids.pushback_speed, 0.);
-            vars.write(&self.ids.pushback_heading, 0.);
-        }
-        // callTug / releaseTug (:72-86): PUSHBACK WAIT here; the tug itself
-        // (K:TOGGLE_PUSHBACK) is the pushback module's.
-        if published::presses(pb.call_tug) > 0 {
-            vars.write(&self.ids.pushback_wait, 1.);
-        }
-        if published::presses(pb.release_tug) > 0 {
-            vars.write(&self.ids.pushback_wait, 0.);
-        }
-        if let Some(v) = published::take(pb.parking_brake) {
-            vars.write(&self.ids.park_brake, (v != 0.) as i32 as f64);
-        }
-        published::set(pb.enabled, vars.read(&self.ids.pushback_enabled));
-        published::set(pb.speed, vars.read(&self.ids.pushback_speed));
-        published::set(pb.heading, vars.read(&self.ids.pushback_heading));
-        published::set(pb.attached, attached as i32 as f64);
-        published::set(pb.parking_brake, vars.read(&self.ids.park_brake));
     }
 
     fn update_other(&mut self, vars: &mut Vars) {

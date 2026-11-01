@@ -4,7 +4,9 @@
 //! several stack frames, more than X-Plane's main thread leaves a plugin
 //! (it crashed with a stack overflow, 0xC00000FD). The XPLM calls made while
 //! building must stay on that thread, so the closure runs on a Windows fiber:
-//! the same thread, with a stack of its own.
+//! the same thread, with a stack of its own. Linux and macOS have no fibers worth
+//! using, so there it is the same idea by hand: the stack pointer moves to a mapped
+//! block for the call.
 
 use std::ffi::c_void;
 
@@ -82,9 +84,104 @@ pub fn run<R, F: FnOnce() -> R>(work: F) -> std::thread::Result<R> {
         }
         job.result.unwrap_or_else(|| Err(Box::new("the fiber did not run")))
     }
-    #[cfg(not(all(windows, target_arch = "x86_64")))]
+    #[cfg(all(unix, any(target_arch = "x86_64", target_arch = "aarch64")))]
+    unsafe {
+        extern "C" fn start<F: FnOnce() -> R, R>(parameter: *mut c_void) {
+            let job = unsafe { &mut *(parameter as *mut (Option<F>, Option<std::thread::Result<R>>)) };
+            if let Some(work) = job.0.take() {
+                job.1 = Some(std::panic::catch_unwind(std::panic::AssertUnwindSafe(work)));
+            }
+        }
+        let Some(stack) = unix::Stack::map(STACK_BYTES) else {
+            return std::panic::catch_unwind(std::panic::AssertUnwindSafe(work));
+        };
+        let mut job: (Option<F>, Option<std::thread::Result<R>>) = (Some(work), None);
+        unix::call_on(stack.top(), start::<F, R>, &mut job as *mut _ as *mut c_void);
+        job.1.unwrap_or_else(|| Err(Box::new("the work did not run")))
+    }
+    #[cfg(not(any(all(windows, target_arch = "x86_64"), all(unix, any(target_arch = "x86_64", target_arch = "aarch64")))))]
     {
         std::panic::catch_unwind(std::panic::AssertUnwindSafe(work))
+    }
+}
+
+#[cfg(all(unix, any(target_arch = "x86_64", target_arch = "aarch64")))]
+mod unix {
+    use std::ffi::{c_int, c_void};
+
+    extern "C" {
+        fn mmap(address: *mut c_void, length: usize, protection: c_int, flags: c_int, file: c_int, offset: i64) -> *mut c_void;
+        fn munmap(address: *mut c_void, length: usize) -> c_int;
+        fn mprotect(address: *mut c_void, length: usize, protection: c_int) -> c_int;
+    }
+
+    const PROT_NONE: c_int = 0;
+    const PROT_READ_WRITE: c_int = 3;
+    const MAP_PRIVATE: c_int = 2;
+    #[cfg(target_os = "macos")]
+    const MAP_ANONYMOUS: c_int = 0x1000;
+    #[cfg(not(target_os = "macos"))]
+    const MAP_ANONYMOUS: c_int = 0x20;
+    const GUARD_BYTES: usize = 64 * 1024;
+
+    /// Pages come when touched; overflowing it faults on the guard at the bottom.
+    pub struct Stack {
+        base: *mut c_void,
+        bytes: usize,
+    }
+
+    impl Stack {
+        pub fn map(bytes: usize) -> Option<Self> {
+            unsafe {
+                let base = mmap(std::ptr::null_mut(), bytes, PROT_READ_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+                if base as isize == -1 {
+                    return None;
+                }
+                mprotect(base, GUARD_BYTES, PROT_NONE);
+                Some(Self { base, bytes })
+            }
+        }
+
+        pub fn top(&self) -> *mut u8 {
+            unsafe { (self.base as *mut u8).add(self.bytes) }
+        }
+    }
+
+    impl Drop for Stack {
+        fn drop(&mut self) {
+            unsafe { munmap(self.base, self.bytes) };
+        }
+    }
+
+    /// `top` is page aligned, so aligned as both ABIs want at a call.
+    #[cfg(target_arch = "x86_64")]
+    pub unsafe fn call_on(top: *mut u8, f: extern "C" fn(*mut c_void), argument: *mut c_void) {
+        std::arch::asm!(
+            "mov r12, rsp",
+            "mov rsp, {top}",
+            "call {f}",
+            "mov rsp, r12",
+            top = in(reg) top,
+            f = in(reg) f,
+            in("rdi") argument,
+            out("r12") _,
+            clobber_abi("C"),
+        );
+    }
+
+    #[cfg(target_arch = "aarch64")]
+    pub unsafe fn call_on(top: *mut u8, f: extern "C" fn(*mut c_void), argument: *mut c_void) {
+        std::arch::asm!(
+            "mov x20, sp",
+            "mov sp, {top}",
+            "blr {f}",
+            "mov sp, x20",
+            top = in(reg) top,
+            f = in(reg) f,
+            in("x0") argument,
+            out("x20") _,
+            clobber_abi("C"),
+        );
     }
 }
 

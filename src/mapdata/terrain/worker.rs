@@ -450,7 +450,8 @@ impl TerrainWorker {
             return;
         }
         let (lat, lon) = (f32_at(1), f32_at(5));
-        let (terr_capt, terr_fo) = (b[30] != 0, b[35] != 0);
+        let terr_capt = b[30] != 0;
+        let (terr_fo_nd, terr_fo_vd) = (b[35] & 1 != 0, b[35] & 2 != 0);
         let heading = i16_at(13);
         let status = AircraftStatus {
             adiru_data_valid: b[0] != 0,
@@ -465,7 +466,7 @@ impl TerrainWorker {
             runway_latitude: f32_at(19),
             runway_longitude: f32_at(23),
             efis_data_capt: EfisData::new(u16_at(27), b[29] != 0, terr_capt, terr_capt, b[31] as f64, -500., 24000.),
-            efis_data_fo: EfisData::new(u16_at(32), b[34] != 0, terr_fo, terr_fo, b[36] as f64, -500., 24500.),
+            efis_data_fo: EfisData::new(u16_at(32), b[34] != 0, terr_fo_nd, terr_fo_vd, b[36] as f64, -500., 24500.),
             navigation_display_rendering_mode: b[37] as u32,
             manual_azim_enabled: true,
             manual_azim_degrees: heading,

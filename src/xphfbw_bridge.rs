@@ -64,11 +64,11 @@ extern "system" {
     fn CloseHandle(object: win::Handle) -> i32;
 }
 
-/// Not Windows -- the MSFS wasm build compiles this file, though no second
-/// process exists there to share a mutex with. Answers as the real calls do
-/// when the object cannot be had, so `NamedMutex::create`/`open` return
-/// `None` through their existing null checks.
-#[cfg(not(windows))]
+/// The MSFS wasm build compiles this file, though no second process exists
+/// there to share a mutex with. Answers as the real calls do when the object
+/// cannot be had, so `NamedMutex::create`/`open` return `None` through their
+/// existing null checks.
+#[cfg(target_arch = "wasm32")]
 #[allow(non_snake_case)]
 mod stand_ins {
     use crate::remote::win;
@@ -78,8 +78,10 @@ mod stand_ins {
     pub unsafe fn WaitForSingleObject(_: win::Handle, _: u32) -> u32 { win::WAIT_TIMEOUT }
     pub unsafe fn CloseHandle(_: win::Handle) -> i32 { 0 }
 }
-#[cfg(not(windows))]
+#[cfg(target_arch = "wasm32")]
 use stand_ins::*;
+#[cfg(all(not(windows), not(target_arch = "wasm32")))]
+use win::in_process::{CloseHandle, CreateMutexW, OpenMutexW, ReleaseMutex, WaitForSingleObject};
 
 fn wide(s: &str) -> Vec<u16> {
     s.encode_utf16().chain(std::iter::once(0)).collect()

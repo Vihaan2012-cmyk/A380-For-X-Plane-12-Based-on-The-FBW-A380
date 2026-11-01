@@ -30,6 +30,12 @@ pub struct Latest {
     pub page: String,
 }
 
+#[cfg(not(windows))]
+fn reg_value(_name: &str) -> Option<String> {
+    None
+}
+
+#[cfg(windows)]
 fn reg_value(name: &str) -> Option<String> {
     use std::os::windows::process::CommandExt;
     for hive in ["HKCU", "HKLM"] {

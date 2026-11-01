@@ -27,12 +27,31 @@ use systems::simulation::{Simulation, SimulatorReaderWriter};
 pub enum Systems {
     Local(Box<Simulation<A380>>),
     Remote(client::RemoteSystems),
+    /// They panicked in the plugin; a rebuild starts them again.
+    Stopped,
+}
+
+fn build_local<V: systems::simulation::VariableRegistry + SimulatorReaderWriter>(state: systems::simulation::StartState, vars: &mut V) -> std::thread::Result<Box<Simulation<A380>>> {
+    crate::big_stack::run(|| Box::new(Simulation::new(state, A380::new, vars)))
 }
 
 impl Systems {
+    pub fn local<V: systems::simulation::VariableRegistry + SimulatorReaderWriter>(state: systems::simulation::StartState, vars: &mut V) -> Self {
+        match build_local(state, vars) {
+            Ok(s) => Systems::Local(s),
+            Err(e) => std::panic::resume_unwind(e),
+        }
+    }
+
     pub fn tick<V: SimulatorReaderWriter>(&mut self, delta: Duration, time: f64, vars: &mut V) {
         match self {
-            Systems::Local(s) => s.tick(delta, time, vars),
+            Systems::Local(s) => {
+                if std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| s.tick(delta, time, vars))).is_err() {
+                    crate::log("systems: panicked during a tick; they are stopped");
+                    *self = Systems::Stopped;
+                }
+            }
+            Systems::Stopped => {}
             Systems::Remote(r) => {
                 if let Some(message) = r.tick(delta, time, vars) {
                     crate::log(&format!("systems process: {message}"));
@@ -43,8 +62,11 @@ impl Systems {
 
     pub fn rebuild<V: systems::simulation::VariableRegistry + SimulatorReaderWriter>(&mut self, state: systems::simulation::StartState, vars: &mut V) {
         match self {
-            Systems::Local(s) => **s = Simulation::new(state, A380::new, vars),
             Systems::Remote(r) => r.rebuild(state),
+            _ => match build_local(state, vars) {
+                Ok(s) => *self = Systems::Local(s),
+                Err(_) => crate::log("systems: panicked while being rebuilt; the old ones keep running"),
+            },
         }
     }
 
@@ -69,6 +91,7 @@ impl FailureSink for Systems {
         match self {
             Systems::Local(s) => s.update_active_failures(set),
             Systems::Remote(r) => r.update_active_failures(set),
+            Systems::Stopped => {}
         }
     }
 }
@@ -323,6 +346,106 @@ mod tests {
             edp_1a_ever_pressurised,
             "EDP 1A never pressurised with engine 1 \"running\" -- see this test's doc comment"
         );
+    }
+
+    #[test]
+    fn systems_on_a_thread_tick_in_lockstep_and_stop_with_the_drop() {
+        let mut vars = TestVars::default();
+        let mut systems = client::RemoteSystems::on_thread(StartState::Apron, &mut vars, |_| {}).expect("the systems connect");
+        let delta = Duration::from_millis(16);
+        for tick in 0..3000 {
+            inputs(&mut vars, tick);
+            assert!(systems.tick(delta, tick as f64 * 0.016, &mut vars).is_none());
+        }
+        assert_eq!(vars.value("A32NX_ELEC_AC_1_BUS_IS_POWERED"), 1.);
+        assert_eq!(systems.stats.late, 0);
+        let dropped = std::time::Instant::now();
+        drop(systems);
+        assert!(dropped.elapsed() < Duration::from_secs(2));
+    }
+
+    #[test]
+    fn a_slow_tick_does_not_hold_the_frame() {
+        use std::sync::atomic::Ordering::Relaxed;
+        let mut vars = TestVars::default();
+        let mut slow = None;
+        let mut systems = client::RemoteSystems::connect(StartState::Apron, &mut vars, |tag| {
+            let tag = tag.to_string();
+            slow = Some(std::thread::spawn(move || {
+                let (shm, req, rep) = wire::names(&tag);
+                let shared = win::Shared::open(&shm, wire::TOTAL_BYTES).unwrap();
+                let request = win::Event::open(&req).unwrap();
+                let reply = win::Event::open(&rep).unwrap();
+                let block = unsafe { wire::Block::new(shared.ptr()) };
+                block.header().state.store(wire::STATE_READY, Relaxed);
+                reply.set();
+                loop {
+                    if request.wait(1000) != win::WAIT_OBJECT_0 {
+                        continue;
+                    }
+                    if block.header().state.load(Relaxed) == wire::STATE_QUIT {
+                        return;
+                    }
+                    let seq = block.header().request.load(Relaxed);
+                    std::thread::sleep(Duration::from_millis(400));
+                    block.header().reply.store(seq, Relaxed);
+                    reply.set();
+                }
+            }));
+            Ok(None)
+        })
+        .expect("connects");
+        let delta = Duration::from_millis(33);
+        let frame = std::time::Instant::now();
+        systems.tick(delta, 0., &mut vars);
+        assert!(frame.elapsed() < Duration::from_millis(250));
+        assert_eq!(systems.stats.late, 1);
+        let frame = std::time::Instant::now();
+        systems.tick(delta, 0.033, &mut vars);
+        assert!(frame.elapsed() < Duration::from_millis(50));
+        assert_eq!(systems.stats.late, 2);
+        std::thread::sleep(Duration::from_millis(500));
+        systems.tick(delta, 0.066, &mut vars);
+        assert_eq!(systems.stats.late, 3);
+        drop(systems);
+        slow.unwrap().join().unwrap();
+    }
+
+    /// What a tick costs on the plugin's own thread: time, and whether it fits
+    /// a small stack (X-Plane's main thread reserves 1 MB).
+    #[test]
+    #[ignore = "a measurement; a stack overflow ends the test program"]
+    fn a_tick_in_the_plugin_time_and_stack() {
+        let kb: usize = std::env::var("FBW_TICK_STACK_KB").ok().and_then(|v| v.parse().ok()).unwrap_or(256);
+        for (state, name) in [(StartState::Apron, "apron"), (StartState::Cruise, "cruise")] {
+            std::thread::Builder::new()
+                .stack_size(kb << 10)
+                .spawn(move || {
+                    let mut vars = TestVars::default();
+                    let built = std::time::Instant::now();
+                    let mut sim = Systems::local(state, &mut vars);
+                    let built = built.elapsed();
+                    let delta = Duration::from_millis(33);
+                    vars.set("A32NX_IS_READY", 1.);
+                    let mut total = Duration::ZERO;
+                    let mut worst = Duration::ZERO;
+                    for tick in 0..6000 {
+                        inputs(&mut vars, tick);
+                        let t = std::time::Instant::now();
+                        sim.tick(delta, tick as f64 * 0.033, &mut vars);
+                        let t = t.elapsed();
+                        total += t;
+                        worst = worst.max(t);
+                    }
+                    assert!(matches!(sim, Systems::Local(_)));
+                    sim.rebuild(state, &mut vars);
+                    assert!(matches!(sim, Systems::Local(_)));
+                    eprintln!("LOCAL {name} on {kb} KB: build {built:?}; 6000 ticks avg {:?} worst {worst:?}", total / 6000);
+                })
+                .unwrap()
+                .join()
+                .unwrap();
+        }
     }
 
     /// The real executable as its own process: builds, mirrors, and ticks a

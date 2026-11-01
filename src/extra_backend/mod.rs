@@ -2,9 +2,9 @@
 //! VCockpit21 htmlgauge03), ported from its C++:
 //!
 //! - fbw-a380x/src/wasm/extra-backend-a380x/src/Gauge_Extra_Backend.cpp: the
-//!   modules and their order (LightingPresets_A380X, Pushback_A380X,
+//!   modules and their order (LightingPresets_A380X,
 //!   AircraftPresets);
-//! - fbw-common/src/wasm/extra-backend/: LightingPresets, Pushback,
+//! - fbw-common/src/wasm/extra-backend/: LightingPresets,
 //!   AircraftPresets with PresetProcedures and ProcedureStep.
 //!
 //! The C++ talks to MSFS through FlyByWire's cpp-msfs-framework (DataManager
@@ -20,7 +20,6 @@
 pub mod aircraft_presets;
 pub mod lighting_presets;
 pub mod procedures;
-pub mod pushback;
 pub mod rpn;
 pub mod sim;
 
@@ -110,44 +109,25 @@ pub fn calculator_variable<V: VariableRegistry>(vars: &mut V, kind: &str, name: 
     }
 }
 
-/// The extra backend's three modules, in Gauge_Extra_Backend.cpp's order.
+/// The extra backend's modules, in Gauge_Extra_Backend.cpp's order.
 pub struct ExtraBackend {
     xplane: Xplane,
     lighting: lighting_presets::LightingPresets,
-    pushback: pushback::Pushback,
     pub presets: aircraft_presets::AircraftPresets,
 }
 
 impl ExtraBackend {
     pub fn new(vars: &mut crate::Vars, xplm: &'static Xplm) -> Self {
-        let mut xplane = Xplane::new(xplm);
+        let xplane = Xplane::new(xplm);
         let lighting = lighting_presets::LightingPresets::new(vars, lighting_presets::ini_path());
-        let pushback = pushback::Pushback::new(vars, &mut xplane);
         let presets = aircraft_presets::AircraftPresets::new(vars);
-        crate::log("extra backend: lighting presets, pushback and aircraft presets running");
-        Self { xplane, lighting, pushback, presets }
-    }
-
-    /// Before the systems: the tug's state as MSFS's PUSHBACK STATE, which
-    /// FlyByWire's nose wheel steering reads.
-    pub fn inputs<V: VariableRegistry + SimulatorReaderWriter>(&mut self, vars: &mut V) {
-        self.pushback.write_pushback_state(vars);
+        crate::log("extra backend: lighting and aircraft presets running");
+        Self { xplane, lighting, presets }
     }
 
     /// One MsfsHandler update (`PANEL_SERVICE_PRE_DRAW`).
     pub fn update<V: VariableRegistry + SimulatorReaderWriter>(&mut self, vars: &mut V, delta: f64, time: f64) {
         self.lighting.update(vars, time);
-        self.pushback.update(vars, &mut self.xplane, delta);
         self.presets.update(vars, &mut self.xplane, delta);
-    }
-
-    /// Key events from the scripts (the EFB): true when one was the tug's.
-    pub fn handle_event(&mut self, name: &str, _value: f64) -> bool {
-        self.pushback.handle_event(name)
-    }
-
-    /// X-Plane's aircraft back to X-Plane.
-    pub fn release(&mut self) {
-        self.pushback.release(&mut self.xplane);
     }
 }

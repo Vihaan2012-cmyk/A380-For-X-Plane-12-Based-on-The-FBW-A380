@@ -173,18 +173,157 @@ extern "system" {
     fn GetProcAddress(module: *mut c_void, name: *const c_char) -> *mut c_void;
 }
 
-/// Not Windows -- the MSFS wasm build compiles this file. There is no
-/// XPLM_64.dll (nor opengl32.dll) in that process to load, and these answer exactly as the real
-/// calls do for a DLL that is not there: a null module, so every loader
-/// above returns `None`. Nothing is stood in for.
-#[cfg(not(windows))]
+/// Linux and macOS: the Windows names this file asks for, from what is already in
+/// the process. XPLM's symbols are global there, and OpenGL has its own library.
+#[cfg(unix)]
+mod unix_dl {
+    use std::ffi::{c_char, c_int, c_void, CStr};
+
+    #[cfg_attr(target_os = "linux", link(name = "dl"))]
+    extern "C" {
+        fn dlopen(path: *const c_char, flags: c_int) -> *mut c_void;
+        fn dlsym(module: *mut c_void, name: *const c_char) -> *mut c_void;
+        fn dladdr(address: *const c_void, info: *mut DlInfo) -> c_int;
+    }
+
+    #[repr(C)]
+    struct DlInfo {
+        file: *const c_char,
+        base: *mut c_void,
+        symbol: *const c_char,
+        address: *mut c_void,
+    }
+
+    const RTLD_NOW: c_int = 2;
+    #[cfg(target_os = "macos")]
+    const RTLD_NOLOAD: c_int = 0x10;
+    #[cfg(not(target_os = "macos"))]
+    const RTLD_NOLOAD: c_int = 4;
+    #[cfg(target_os = "macos")]
+    const RTLD_DEFAULT: *mut c_void = -2isize as *mut c_void;
+    #[cfg(not(target_os = "macos"))]
+    const RTLD_DEFAULT: *mut c_void = std::ptr::null_mut();
+    #[cfg(target_os = "macos")]
+    const OPENGL: &CStr = c"/System/Library/Frameworks/OpenGL.framework/OpenGL";
+    #[cfg(not(target_os = "macos"))]
+    const OPENGL: &CStr = c"libGL.so.1";
+
+    #[cfg(target_os = "macos")]
+    extern "C" {
+        fn _dyld_image_count() -> u32;
+        fn _dyld_get_image_name(index: u32) -> *const c_char;
+    }
+
+    /// A library already in the process, by part of its file name. X-Plane may hold
+    /// it privately, where a search of the global scope would miss it.
+    #[cfg(target_os = "macos")]
+    unsafe fn loaded(part: &str) -> *mut c_void {
+        for i in 0.._dyld_image_count() {
+            let name = _dyld_get_image_name(i);
+            if !name.is_null() && CStr::from_ptr(name).to_string_lossy().contains(part) {
+                let module = dlopen(name, RTLD_NOW | RTLD_NOLOAD);
+                if !module.is_null() {
+                    return module;
+                }
+            }
+        }
+        std::ptr::null_mut()
+    }
+
+    #[cfg(not(target_os = "macos"))]
+    unsafe fn loaded(part: &str) -> *mut c_void {
+        match std::ffi::CString::new(format!("{part}.so")) {
+            Ok(name) => dlopen(name.as_ptr(), RTLD_NOW | RTLD_NOLOAD),
+            Err(_) => std::ptr::null_mut(),
+        }
+    }
+
+    unsafe fn xplm() -> *mut c_void {
+        #[cfg(target_os = "macos")]
+        let (part, path) = ("XPLM.framework/", c"@executable_path/../../../Resources/plugins/XPLM.framework/XPLM");
+        #[cfg(not(target_os = "macos"))]
+        let (part, path) = ("XPLM_64", c"XPLM_64.so");
+        let has_xplm = |module: *mut c_void| !module.is_null() && !dlsym(module, c"XPLMGetVersions".as_ptr()).is_null();
+        for module in [loaded(part), dlopen(path.as_ptr(), RTLD_NOW), dlopen(std::ptr::null(), RTLD_NOW)] {
+            if has_xplm(module) {
+                return module;
+            }
+        }
+        std::ptr::null_mut()
+    }
+
+    /// A function of a library X-Plane has loaded, found by part of the library's name.
+    pub unsafe fn library_symbol(part: &str, name: &CStr) -> *mut c_void {
+        let module = loaded(part);
+        if !module.is_null() {
+            let p = dlsym(module, name.as_ptr());
+            if !p.is_null() {
+                return p;
+            }
+        }
+        dlsym(RTLD_DEFAULT, name.as_ptr())
+    }
+
+    pub unsafe fn load(name: *const c_char) -> *mut c_void {
+        match CStr::from_ptr(name).to_bytes() {
+            b"XPLM_64.dll" => xplm(),
+            b"opengl32.dll" => dlopen(OPENGL.as_ptr(), RTLD_NOW),
+            _ => std::ptr::null_mut(),
+        }
+    }
+
+    #[cfg(target_os = "macos")]
+    unsafe extern "system" fn gl_lookup(name: *const c_char) -> *mut c_void {
+        dlsym(dlopen(OPENGL.as_ptr(), RTLD_NOW), name)
+    }
+
+    pub unsafe fn symbol(module: *mut c_void, name: *const c_char) -> *mut c_void {
+        if CStr::from_ptr(name).to_bytes() != b"wglGetProcAddress" {
+            return dlsym(module, name);
+        }
+        #[cfg(target_os = "macos")]
+        return gl_lookup as *mut c_void;
+        #[cfg(not(target_os = "macos"))]
+        dlsym(module, c"glXGetProcAddressARB".as_ptr())
+    }
+
+    /// The file of the library holding `address`.
+    pub fn file_of(address: *const c_void) -> Option<std::path::PathBuf> {
+        unsafe {
+            let mut info = std::mem::zeroed::<DlInfo>();
+            if dladdr(address, &mut info) == 0 || info.file.is_null() {
+                return None;
+            }
+            Some(std::path::PathBuf::from(CStr::from_ptr(info.file).to_string_lossy().into_owned()))
+        }
+    }
+}
+#[cfg(unix)]
+pub(crate) use unix_dl::{file_of, library_symbol};
+
+#[cfg(unix)]
 #[allow(non_snake_case)]
-unsafe fn LoadLibraryA(_name: *const c_char) -> *mut c_void {
+pub(crate) unsafe fn LoadLibraryA(name: *const c_char) -> *mut c_void {
+    unix_dl::load(name)
+}
+#[cfg(unix)]
+#[allow(non_snake_case)]
+pub(crate) unsafe fn GetProcAddress(module: *mut c_void, name: *const c_char) -> *mut c_void {
+    unix_dl::symbol(module, name)
+}
+
+/// The MSFS wasm build compiles this file. There is no XPLM_64.dll (nor
+/// opengl32.dll) in that process to load, and these answer exactly as the real
+/// calls do for a DLL that is not there: a null module, so every loader above
+/// returns `None`. Nothing is stood in for.
+#[cfg(not(any(windows, unix)))]
+#[allow(non_snake_case)]
+pub(crate) unsafe fn LoadLibraryA(_name: *const c_char) -> *mut c_void {
     std::ptr::null_mut()
 }
-#[cfg(not(windows))]
+#[cfg(not(any(windows, unix)))]
 #[allow(non_snake_case)]
-unsafe fn GetProcAddress(_module: *mut c_void, _name: *const c_char) -> *mut c_void {
+pub(crate) unsafe fn GetProcAddress(_module: *mut c_void, _name: *const c_char) -> *mut c_void {
     std::ptr::null_mut()
 }
 
@@ -256,6 +395,17 @@ fn load_gl() -> Option<Gl> {
     }
 }
 
+/// Says in `Log.txt` why the plugin is refusing to start.
+unsafe fn report_missing(module: *mut c_void, name: &std::ffi::CStr) {
+    let debug = GetProcAddress(module, c"XPLMDebugString".as_ptr());
+    if debug.is_null() {
+        return;
+    }
+    if let Ok(line) = CString::new(format!("A380 systems: this X-Plane has no {}\n", name.to_string_lossy())) {
+        std::mem::transmute::<*mut c_void, DebugStringFn>(debug)(line.as_ptr());
+    }
+}
+
 impl Xplm {
     /// Bind to XPLM, or nothing if this is not running inside X-Plane.
     pub fn load() -> Option<Self> {
@@ -268,6 +418,9 @@ impl Xplm {
             let symbol = |s: &str| -> Option<*mut c_void> {
                 let s = CString::new(s).ok()?;
                 let p = GetProcAddress(module, s.as_ptr());
+                if p.is_null() {
+                    report_missing(module, &s);
+                }
                 (!p.is_null()).then_some(p)
             };
             Some(Self {
@@ -1321,6 +1474,16 @@ pub fn run_queued_commands() {
     let names = std::mem::take(&mut *QUEUED_COMMANDS.lock().unwrap_or_else(std::sync::PoisonError::into_inner));
     for name in names {
         command_once(&name);
+    }
+}
+
+/// Unix paths from X-Plane: on a Mac it otherwise hands out `Macintosh HD:Users:...`.
+/// Must run before anything asks for a path.
+#[cfg(not(windows))]
+pub fn use_native_paths() {
+    type EnableFeatureFn = unsafe extern "C" fn(*const c_char, c_int);
+    if let Some(f) = Xplm::xplm_symbol("XPLMEnableFeature") {
+        unsafe { std::mem::transmute::<*mut c_void, EnableFeatureFn>(f)(c"XPLM_USE_NATIVE_PATHS".as_ptr(), 1) };
     }
 }
 

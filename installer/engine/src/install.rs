@@ -216,8 +216,20 @@ pub struct Remembered {
     pub cockpit_cap: Option<u32>,
 }
 
+/// Where a user's own program data goes on this system.
+pub fn data_home() -> Option<PathBuf> {
+    if cfg!(windows) {
+        return std::env::var_os("LOCALAPPDATA").map(PathBuf::from);
+    }
+    let home = PathBuf::from(std::env::var_os("HOME")?);
+    if cfg!(target_os = "macos") {
+        return Some(home.join("Library").join("Application Support"));
+    }
+    Some(std::env::var_os("XDG_DATA_HOME").map_or_else(|| home.join(".local").join("share"), PathBuf::from))
+}
+
 fn remembered_path() -> Option<PathBuf> {
-    Some(PathBuf::from(std::env::var("LOCALAPPDATA").ok()?).join("A380 for X-Plane 12").join("installer.json"))
+    Some(data_home()?.join("A380 for X-Plane 12").join("installer.json"))
 }
 
 impl Remembered {
@@ -245,6 +257,12 @@ pub fn installed_version(xplane: &Path) -> Option<String> {
     std::fs::read_to_string(xplane.join(AIRCRAFT_DIR).join(VERSION_FILE)).ok().map(|v| v.trim().to_owned()).filter(|v| !v.is_empty())
 }
 
+#[cfg(not(windows))]
+fn xplane_running() -> bool {
+    std::process::Command::new("pgrep").args(["-x", "X-Plane"]).output().map(|o| o.status.success()).unwrap_or(false)
+}
+
+#[cfg(windows)]
 fn xplane_running() -> bool {
     use std::os::windows::process::CommandExt;
     std::process::Command::new("tasklist")
@@ -396,7 +414,7 @@ pub fn uninstall(xplane: &Path, ctx: &Ctx) -> Result<String, String> {
         return Ok("The A380X is not installed".to_owned());
     }
     ctx.status("Removing the A380X and every trace of it...");
-    let local = std::env::var("LOCALAPPDATA").ok().map(PathBuf::from);
+    let local = data_home();
     let temp = std::env::temp_dir();
     let removed = wipe_traces(xplane, local.as_deref(), &temp, &temp.join("fbw-a380x-xp-keep-nothing"))?;
     for p in &removed {
@@ -646,7 +664,7 @@ fn wipe_install(a: &Answers, ctx: &Ctx, work_root: &Path) -> Result<(), String> 
         move_entries(&liveries, &kept).map_err(|e| format!("could not set the liveries aside: {e}"))?;
     }
     let keep = kept.is_dir();
-    let local = std::env::var("LOCALAPPDATA").ok().map(PathBuf::from);
+    let local = data_home();
     let wiped = wipe_traces(&a.xplane, local.as_deref(), &std::env::temp_dir(), work_root);
     if keep {
         move_entries(&kept, &liveries).map_err(|e| format!("could not put the liveries back from {}: {e}", kept.display()))?;
@@ -1152,7 +1170,8 @@ fn apply_text_patch(patch: &str, template: &[u8]) -> Result<Vec<u8>, String> {
 }
 
 pub fn detect_sound_pack() -> Option<PathBuf> {
-    let downloads = PathBuf::from(std::env::var("USERPROFILE").ok()?).join("Downloads");
+    let home = std::env::var_os("USERPROFILE").or_else(|| std::env::var_os("HOME"))?;
+    let downloads = PathBuf::from(home).join("Downloads");
     let mut found: Vec<PathBuf> = std::fs::read_dir(&downloads)
         .ok()?
         .filter_map(Result::ok)
@@ -1355,15 +1374,14 @@ fn copy_tree(from: &Path, to: &Path) -> Result<(), String> {
 
 fn run_program(program: &Path, args: &[String], ctx: &Ctx) -> Result<(), String> {
     use std::io::BufRead;
-    use std::os::windows::process::CommandExt;
-    const CREATE_NO_WINDOW: u32 = 0x0800_0000;
-    let mut child = std::process::Command::new(program)
-        .args(args)
-        .stdout(std::process::Stdio::piped())
-        .stderr(std::process::Stdio::piped())
-        .creation_flags(CREATE_NO_WINDOW)
-        .spawn()
-        .map_err(|e| format!("{}: {e}", program.display()))?;
+    let mut command = std::process::Command::new(program);
+    command.args(args).stdout(std::process::Stdio::piped()).stderr(std::process::Stdio::piped());
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        command.creation_flags(0x0800_0000);
+    }
+    let mut child = command.spawn().map_err(|e| format!("{}: {e}", program.display()))?;
     if let Some(err) = child.stderr.take() {
         let json = ctx.json;
         std::thread::spawn(move || {
@@ -1391,7 +1409,14 @@ fn run_program(program: &Path, args: &[String], ctx: &Ctx) -> Result<(), String>
 /// X-Plane 12's own record of its installs (`%LOCALAPPDATA%\x-plane_install_12.txt`,
 /// one folder per line); the first that exists.
 pub fn detect_xplane() -> Option<PathBuf> {
-    let list = std::fs::read_to_string(PathBuf::from(std::env::var("LOCALAPPDATA").ok()?).join("x-plane_install_12.txt")).ok()?;
+    let record = if cfg!(windows) {
+        data_home()?
+    } else if cfg!(target_os = "macos") {
+        PathBuf::from(std::env::var_os("HOME")?).join("Library").join("Preferences")
+    } else {
+        PathBuf::from(std::env::var_os("HOME")?).join(".x-plane")
+    };
+    let list = std::fs::read_to_string(record.join("x-plane_install_12.txt")).ok()?;
     list.lines().map(|l| PathBuf::from(l.trim())).find(|p| !p.as_os_str().is_empty() && p.join("Aircraft").is_dir())
 }
 

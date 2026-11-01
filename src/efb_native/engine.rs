@@ -75,7 +75,7 @@ pub const SECTIONS: &[(&str, &str, &[(&str, &str)])] = &[
     ("home", "Home", &[("Home", "home")]),
     ("flight", "Flight", &[("Flight Plan", "flightplan"), ("Payload & Fuel", "loadsheet"), ("Cargo", "cargo"), ("Performance", "performance"), ("Charts", "charts"), ("ATC", "atc")]),
     ("checklists", "Documents", &[("Documents", "checklists")]),
-    ("ground", "Ground", &[("Ground Services", "ground"), ("Pushback", "pushback")]),
+    ("ground", "Ground", &[("Ground Services", "ground")]),
     ("cabin", "Cabin", &[("Flight Attendant Panel", "fap")]),
     ("aircraft", "Systems", &[("Systems", "study")]),
     ("components", "Components", &[("Components", "components")]),

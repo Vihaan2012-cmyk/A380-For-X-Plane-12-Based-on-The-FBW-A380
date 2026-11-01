@@ -270,6 +270,14 @@ pub fn terrain_layer(side: Side) -> Option<(u32, u32, u64, Arc<[u8]>)> {
     Some((image.width, image.height, image.generation, image.rgba.clone()))
 }
 
+/// A page's request to SimBridge's address: its health check, then the terrain API.
+pub fn simbridge_answer(method: &str, path: &str, body: &str) -> (u16, String) {
+    if path.split('?').next() == Some("/health") {
+        return (200, r#"{"status":"ok","info":{"api":{"status":"up"}},"error":{},"details":{"api":{"status":"up"}}}"#.to_string());
+    }
+    simbridge_request(method, path, body).unwrap_or((404, String::new()))
+}
+
 /// A request to SimBridge's terrain API, as FlyByWire's `TawsData`
 /// (fbw-common `simbridge/components/TawsData.ts`) sends it: the status
 /// code and body, or `None` if the path is not one this answers.

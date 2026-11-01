@@ -11,11 +11,10 @@ use crate::published::{self, Command, Published, Value};
 use crate::xp::{self, DataRef, Xplm};
 use crate::Vars;
 
-pub const VEHICLES: [&str; 19] = [
+pub const VEHICLES: [&str; 18] = [
     "gpu_tld409",
     "asu_unit",
     "pca_unit",
-    "tow_tpx500",
     "fuel_hydrant",
     "fuel_tanker",
     "water_truck",
@@ -52,11 +51,10 @@ pub enum Service {
     Clean,
     Deice,
     Stairs,
-    Tug,
 }
 
 impl Service {
-    pub const ALL: [Service; 12] = [
+    pub const ALL: [Service; 11] = [
         Service::Gpu,
         Service::Pca,
         Service::Asu,
@@ -68,7 +66,6 @@ impl Service {
         Service::Clean,
         Service::Deice,
         Service::Stairs,
-        Service::Tug,
     ];
 
     pub fn name(self) -> &'static str {
@@ -84,7 +81,6 @@ impl Service {
             Service::Clean => "clean",
             Service::Deice => "deice",
             Service::Stairs => "stairs",
-            Service::Tug => "tug",
         }
     }
 
@@ -101,12 +97,11 @@ impl Service {
             Service::Clean => "Cabin cleaning",
             Service::Deice => "De-icing",
             Service::Stairs => "Stairs",
-            Service::Tug => "Pushback tug",
         }
     }
 
     fn toggled_by_crew(self) -> bool {
-        !matches!(self, Service::Gpu | Service::Tug)
+        self != Service::Gpu
     }
 }
 
@@ -123,7 +118,6 @@ fn take_requests() -> Vec<Service> {
 }
 
 pub const NOSE_Z: f64 = -35.19;
-pub const NOSE_GEAR_Z: f64 = -30.22;
 pub const GPU_RECEPTACLE: [f64; 3] = [0.45, 3.15, NOSE_Z + 5.99];
 pub const LP_CONNECTION: [f64; 3] = [-4.0, 2.07, -8.0];
 pub const HP_CONNECTION: [f64; 3] = [4.0, 1.8, -5.0];
@@ -170,14 +164,12 @@ pub enum Anchor {
     Door(usize),
     Body([f64; 3]),
     Ground([f64; 3]),
-    NoseGear,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum Heading {
     Fixed(f64),
     Towards,
-    Steer,
 }
 
 #[derive(Debug)]
@@ -200,7 +192,6 @@ const DOCK_BOX: &[&str] = &["platform_front_edge", "box_front", "bridge_front", 
 const DOCK_LOADER: &[&str] = &["platform_front_edge", "bridge_lip_front_min", "bridge_deck_front_edge_min", "platform_front", "bridge_front", "front_platform", "platform_edge", "platform"];
 const DOCK_BELT: &[&str] = &["belt_tip_top_min", "tip_bumper_front_min", "belt_top_edge", "belt_top", "belt_end", "boom_end", "top"];
 const HOLD: &[&str] = &["rear_platform", "curtain", "cradle", "plug_dz"];
-const DOCK_TUG: &[&str] = &["cradle_centre", "cradle", "nosewheel", "nose_wheel", "wheel_cradle"];
 
 const fn park(id: &'static str, vehicle: &'static str, service: Service, anchor: Anchor, offset: [f64; 2], heading: Heading) -> Placement {
     Placement { id, vehicle, service, anchor, offset, heading, attach: &[], gap: 0., lift: &[], lift_offset: 0., door: None }
@@ -231,7 +222,7 @@ const fn dock(
     }
 }
 
-pub static PLACEMENTS: [Placement; 30] = [
+pub static PLACEMENTS: [Placement; 25] = [
     Placement {
         id: "gpu",
         vehicle: "gpu_tld409",
@@ -283,8 +274,8 @@ pub static PLACEMENTS: [Placement; 30] = [
     dock("udcat_u1r", "udcat_highloader", Service::Catering, U1R, -90., DOCK_BOX, &["lift"], true),
     dock("ldcl_fwd", "ldcl_loader", Service::Baggage, CARGO_FWD, -90., DOCK_LOADER, &["lift", "platform_lift", "bridge_lift", "bridge_platform"], true),
     dock("ldcl_aft", "ldcl_loader", Service::Baggage, CARGO_AFT, -90., DOCK_LOADER, &["lift", "platform_lift", "bridge_lift", "bridge_platform"], true),
-    park("uld_fwd", "uld_set", Service::Baggage, Anchor::Door(CARGO_FWD), [11.5, 2.0], Heading::Fixed(0.)),
-    park("uld_aft", "uld_set", Service::Baggage, Anchor::Door(CARGO_AFT), [11.5, -2.0], Heading::Fixed(0.)),
+    park("uld_fwd", "uld_set", Service::Baggage, Anchor::Door(CARGO_FWD), [14.0, 2.0], Heading::Fixed(0.)),
+    park("uld_aft", "uld_set", Service::Baggage, Anchor::Door(CARGO_AFT), [14.0, -2.0], Heading::Fixed(0.)),
     Placement {
         id: "belt_bulk",
         vehicle: "belt_loader",
@@ -306,35 +297,17 @@ pub static PLACEMENTS: [Placement; 30] = [
     park("deice", "deice_truck", Service::Deice, Anchor::Ground(DEICE_SPOT), [0.0, 0.0], Heading::Fixed(0.)),
     dock("stairs_m1l", "stairs_main", Service::Stairs, M1L, 90., DOCK_STAIRS, &["lift"], true),
     dock("stairs_m2l", "stairs_main", Service::Stairs, M2L, 90., DOCK_STAIRS, &["lift"], true),
-    dock("stairs_u1l", "stairs_upper", Service::Stairs, U1L, 120., DOCK_STAIRS, &["lift"], true),
-    Placement {
-        id: "tug",
-        vehicle: "tow_tpx500",
-        service: Service::Tug,
-        anchor: Anchor::NoseGear,
-        offset: [0., 0.],
-        heading: Heading::Steer,
-        attach: DOCK_TUG,
-        gap: 0.,
-        lift: &[],
-        lift_offset: 0.,
-        door: None,
-    },
-    park("tug_standby", "tow_tpx500", Service::Tug, Anchor::NoseGear, [0.0, -9.0], Heading::Fixed(180.)),
-    park("crew_headset", CREW, Service::Tug, Anchor::NoseGear, [-3.5, 0.5], Heading::Fixed(-90.)),
-    park("crew_wing_l", CREW, Service::Tug, Anchor::Ground([-WINGTIP[0], 0., WINGTIP[2]]), [-2.0, -1.0], Heading::Fixed(-90.)),
-    park("crew_wing_r", CREW, Service::Tug, Anchor::Ground(WINGTIP), [2.0, -1.0], Heading::Fixed(90.)),
+    dock("stairs_u1l", "stairs_upper", Service::Stairs, U1L, 95., DOCK_STAIRS, &["lift"], true),
     park("crew_bag_fwd", CREW, Service::Baggage, Anchor::Door(CARGO_FWD), [6.0, 4.0], Heading::Fixed(180.)),
     park("crew_bag_aft", CREW, Service::Baggage, Anchor::Door(CARGO_AFT), [6.0, -4.0], Heading::Fixed(0.)),
     park("crew_bulk", CREW, Service::Baggage, Anchor::Body(BULK_DOOR), [4.0, 3.0], Heading::Fixed(180.)),
     park("crew_fuel", CREW, Service::Fuel, Anchor::Ground(REFUEL_COUPLING_LEFT), [-1.5, 2.5], Heading::Fixed(180.)),
 ];
 
-/// Every vehicle position the crew can call or send away on its own: not
-/// the tug (its position follows the pushback) and not the ground crew,
+/// Every vehicle position the crew can call or send away on its own: not the ground crew,
 /// who come with their vehicles.
 pub fn per_place(p: &Placement) -> bool {
-    p.service != Service::Tug && p.vehicle != CREW
+    p.vehicle != CREW
 }
 
 pub fn placement(id: &str) -> Option<&'static Placement> {
@@ -348,13 +321,12 @@ struct Fallback {
     reach: f64,
 }
 
-const FALLBACKS: [Fallback; 8] = [
+const FALLBACKS: [Fallback; 7] = [
     Fallback { vehicle: "gpu_tld409", attach: [3.55, 3.15, 1.168], lift_travel: None, reach: 0. },
     Fallback { vehicle: "stairs_main", attach: [0., 4.9, 0.], lift_travel: Some(0.7), reach: 0.35 },
     Fallback { vehicle: "stairs_upper", attach: [0., 7.7, 0.], lift_travel: Some(0.6), reach: 0.45 },
     Fallback { vehicle: "cat_highloader", attach: [0., 1.8, 0.], lift_travel: Some(3.8), reach: 1.3 },
     Fallback { vehicle: "udcat_highloader", attach: [0., 1.9, 0.], lift_travel: Some(6.4), reach: 0.9 },
-    Fallback { vehicle: "tow_tpx500", attach: [0., 0., 2.5], lift_travel: None, reach: 0. },
     Fallback { vehicle: "ldcl_loader", attach: [0., 0.6, -4.0], lift_travel: None, reach: 0. },
     Fallback { vehicle: "belt_loader", attach: [0., 1.0, -4.0], lift_travel: None, reach: 0. },
 ];
@@ -708,7 +680,6 @@ fn anchor_body(anchor: Anchor) -> ([f64; 3], bool) {
         Anchor::Door(d) => (SILLS.get(d).copied().unwrap_or([0.; 3]), true),
         Anchor::Body(p) => (p, true),
         Anchor::Ground(p) => ([p[0], 0., p[2]], false),
-        Anchor::NoseGear => ([0., 0., NOSE_GEAR_Z], false),
     }
 }
 
@@ -719,7 +690,7 @@ pub struct Placed {
     pub target_height: f64,
 }
 
-pub fn place(p: &Placement, g: &Geometry, pose: &Pose, cg_reference: [f64; 3], steer_deg: f64, ground: &mut dyn FnMut(f64, f64, f64) -> Option<f64>) -> Placed {
+pub fn place(p: &Placement, g: &Geometry, pose: &Pose, cg_reference: [f64; 3], ground: &mut dyn FnMut(f64, f64, f64) -> Option<f64>) -> Placed {
     let (body, on_body) = anchor_body(p.anchor);
     let anchor_world = pose.to_world(cg_reference, body);
     let shifted = {
@@ -728,7 +699,6 @@ pub fn place(p: &Placement, g: &Geometry, pose: &Pose, cg_reference: [f64; 3], s
     };
     let heading = match p.heading {
         Heading::Fixed(h) => wrap360(pose.psi + h),
-        Heading::Steer => wrap360(pose.psi + steer_deg),
         Heading::Towards => {
             if p.offset == [0., 0.] {
                 wrap360(pose.psi)
@@ -767,8 +737,6 @@ pub struct Inputs {
     pub ext_power: bool,
     pub refuelling: bool,
     pub boarding: bool,
-    pub tug_attached: bool,
-    pub tug_called: bool,
     pub jetway: [bool; 3],
     pub door_open: [bool; 3],
     pub hydrant: bool,
@@ -784,7 +752,6 @@ pub fn may_enter(service: Service, i: &Inputs) -> bool {
     }
     let parked = i.on_ground && i.stationary && (i.park_brake || i.chocks);
     match service {
-        Service::Tug => i.on_ground && i.stationary,
         Service::Gpu => parked && !i.engines_running,
         _ => parked && !i.engines_running && !i.beacon,
     }
@@ -800,9 +767,9 @@ pub fn refusal(service: Service, i: &Inputs) -> Option<&'static str> {
         "vehicles never drive onto a runway; taxi to a stand first"
     } else if !i.on_ground || !i.stationary {
         "the aircraft must be stopped on the ground"
-    } else if service != Service::Tug && !(i.park_brake || i.chocks) {
+    } else if !(i.park_brake || i.chocks) {
         "set the parking brake or place chocks first"
-    } else if service != Service::Tug && i.engines_running {
+    } else if i.engines_running {
         "shut the engines down first"
     } else {
         "switch the beacon off first"
@@ -811,7 +778,6 @@ pub fn refusal(service: Service, i: &Inputs) -> Option<&'static str> {
 
 pub fn may_stay(service: Service, i: &Inputs) -> bool {
     match service {
-        Service::Tug => i.on_ground,
         Service::Gpu => i.on_ground && i.stationary && !i.on_runway,
         _ => i.on_ground && i.stationary && !i.beacon && !i.on_runway,
     }
@@ -823,7 +789,6 @@ fn automatic(service: Service, i: &Inputs) -> bool {
         Service::Pca | Service::Asu => i.on_ground && !i.engines_running && !i.apu_running,
         Service::Fuel => i.refuelling,
         Service::Baggage | Service::Water | Service::Lav | Service::Clean => i.boarding,
-        Service::Tug => i.tug_attached || i.tug_called,
         _ => false,
     }
 }
@@ -843,6 +808,15 @@ impl Wants {
 
     pub fn toggle_place(&mut self, id: &'static str, present: bool) {
         self.place.insert(id, !present);
+        // Both park at the same wing coupling.
+        let rival = match id {
+            "fuel_hydrant" => Some("fuel_tanker"),
+            "fuel_tanker" => Some("fuel_hydrant"),
+            _ => None,
+        };
+        if let (false, Some(rival)) = (present, rival) {
+            self.place.insert(rival, false);
+        }
     }
 
     pub fn wanted(&self, service: Service, i: &Inputs) -> bool {
@@ -883,10 +857,6 @@ pub fn wanted_placements(w: &Wants, i: &Inputs, present: &BTreeSet<&'static str>
                         });
                     }
                 }
-            }
-            Service::Tug if on => {
-                ids.extend(if i.tug_attached { ["tug", "crew_wing_l", "crew_wing_r"].as_slice() } else { ["tug_standby"].as_slice() });
-                ids.push("crew_headset");
             }
             Service::Fuel if on => ids.extend([if i.hydrant { "fuel_hydrant" } else { "fuel_tanker" }, "crew_fuel"]),
             _ if on => ids.extend(PLACEMENTS.iter().filter(|p| p.service == s).map(|p| p.id)),
@@ -1218,7 +1188,6 @@ pub struct Context<'a> {
     pub inputs: Inputs,
     pub pose: Pose,
     pub cg_reference: [f64; 3],
-    pub steer_deg: f64,
     pub operator: Option<&'a str>,
     pub door_opening: [bool; 20],
     pub delta: f64,
@@ -1290,7 +1259,7 @@ impl Fleet {
         let names = geometry.anims.iter().filter_map(|(a, _)| CString::new(a.dataref.clone()).ok()).collect::<Vec<_>>();
         let values = geometry.anims.iter().map(|(a, r)| if *r == Role::Hold { 0f64.clamp(a.min.min(a.max), a.min.max(a.max)) as f32 } else { a.min as f32 }).collect();
         crate::log(&format!("gse: {} ({}) called{}", p.id, p.vehicle, operator.map_or(String::new(), |o| format!(", {o}"))));
-        let drive = if p.anchor == Anchor::NoseGear || p.vehicle == CREW { 0. } else { DRIVE_IN_M };
+        let drive = if p.vehicle == CREW { 0. } else { DRIVE_IN_M };
         self.units.push(Unit { placement: p, path, geometry, names, values, instance: None, phase: Phase::Arriving, placed: None, drive, clock: 0., odometer: 0. });
     }
 
@@ -1314,7 +1283,7 @@ impl Fleet {
 
         let mut gone = Vec::new();
         for (k, u) in self.units.iter_mut().enumerate() {
-            let vanish = !i.on_ground || (!i.stationary && u.placement.service != Service::Tug);
+            let vanish = !i.on_ground || !i.stationary;
             if vanish {
                 gone.push(k);
                 continue;
@@ -1345,19 +1314,17 @@ impl Fleet {
                     }
                 }
             }
-            let follow = u.placement.anchor == Anchor::NoseGear;
             let stale = match u.placed {
                 None => true,
-                Some((at, _)) => follow || ctx.pose.moved_from(&at),
+                Some((at, _)) => ctx.pose.moved_from(&at),
             };
             if stale {
                 let mut ground = |x: f64, y: f64, z: f64| scene.ground(x, y, z);
-                let placed = place(u.placement, &u.geometry, &ctx.pose, ctx.cg_reference, ctx.steer_deg, &mut ground);
+                let placed = place(u.placement, &u.geometry, &ctx.pose, ctx.cg_reference, &mut ground);
                 u.placed = Some((ctx.pose, placed));
             }
             let Some((_, placed)) = u.placed else { continue };
             u.clock += ctx.delta;
-            let can_drive = u.placement.anchor != Anchor::NoseGear;
             if u.phase == Phase::Arriving && u.drive > 0. {
                 let step = (drive_speed(u.drive) * ctx.delta).min(u.drive);
                 u.drive -= step;
@@ -1438,7 +1405,7 @@ impl Fleet {
                         }
                     }
                     if lifts_done && extends_done {
-                        if can_drive && u.drive < DRIVE_IN_M {
+                        if u.drive < DRIVE_IN_M {
                             let step = drive_speed(DRIVE_IN_M - u.drive + 1.) * ctx.delta;
                             u.drive += step;
                             u.odometer += step;
@@ -1527,8 +1494,6 @@ struct Ids {
     on_runway: VariableIdentifier,
     refuel: VariableIdentifier,
     boarding: VariableIdentifier,
-    tug_attached: VariableIdentifier,
-    tug_wait: VariableIdentifier,
     apu_n: VariableIdentifier,
 }
 
@@ -1538,8 +1503,6 @@ struct Refs {
     lat_lon: [Option<DataRef>; 2],
     engines: Option<DataRef>,
     beacon: Option<DataRef>,
-    xplane_tug: Option<DataRef>,
-    steer: Option<DataRef>,
     cg: [Option<DataRef>; 2],
 }
 
@@ -1611,8 +1574,6 @@ impl Gse {
             ext_power: [1, 2, 3, 4].map(|n| get(&format!("EXT_PWR_AVAIL:{n}"))),
             refuel: get("REFUEL_STARTED_BY_USR"),
             boarding: get("BOARDING_STARTED_BY_USR"),
-            tug_attached: get("PUSHBACK ATTACHED"),
-            tug_wait: get("PUSHBACK WAIT"),
             apu_n: get("APU_N_RAW"),
         };
         let f = |n: &str| xplm.find(n);
@@ -1622,8 +1583,6 @@ impl Gse {
             lat_lon: ["sim/flightmodel/position/latitude", "sim/flightmodel/position/longitude"].map(f),
             engines: f("sim/flightmodel/engine/ENGN_running"),
             beacon: f("sim/cockpit2/switches/beacon_on"),
-            xplane_tug: f("sim/aircraft/overflow/pushback_attached"),
-            steer: f("sim/flightmodel2/gear/tire_steer_actual_deg"),
             cg: ["sim/aircraft/weight/acf_cgY_original", "sim/aircraft/weight/acf_cgZ_original"].map(f),
         };
         let root = objects_root();
@@ -1747,8 +1706,6 @@ impl Gse {
             ext_power: self.ids.ext_power.iter().any(|id| vars.read(id) != 0.),
             refuelling: read(vars, &self.ids.refuel) != 0.,
             boarding: read(vars, &self.ids.boarding) != 0.,
-            tug_attached: read(vars, &self.ids.tug_attached) != 0. || self.refs.xplane_tug.is_some_and(|d| xplm.get_i(d) != 0),
-            tug_called: read(vars, &self.ids.tug_wait) != 0.,
             jetway: bridge_at,
             door_open: [external(0, M1L), external(1, M2L), external(2, U1L)],
             hydrant: self.airport.as_deref().is_some_and(|a| self.operators.has_airport(a)),
@@ -1812,15 +1769,9 @@ impl Gse {
         };
         let ft = |d: Option<DataRef>, fallback: f64| d.map_or(fallback, |d| xplm.get_f(d) as f64) * 0.3048;
         let cg_reference = [0., ft(self.refs.cg[0], 2.8), ft(self.refs.cg[1], -8.0)];
-        let steer_deg = self.refs.steer.map_or(0., |d| {
-            let mut v = [0f32; 1];
-            xplm.get_vf(d, &mut v);
-            v[0] as f64
-        });
-
         let inputs = if settings.ground_equipment { inputs } else { Inputs { on_ground: false, ..inputs } };
         crate::physics::tyre::ground_crew_check(inputs.on_ground && inputs.chocks && !inputs.engines_running);
-        let ctx = Context { inputs, pose, cg_reference, steer_deg, operator, door_opening, delta };
+        let ctx = Context { inputs, pose, cg_reference, operator, door_opening, delta };
         for action in self.fleet.step(&ctx, &mut self.library, &mut self.scene) {
             match action {
                 DoorAction::Open(_) | DoorAction::Close(_) => {}
@@ -1842,6 +1793,23 @@ impl Gse {
 impl Drop for Gse {
     fn drop(&mut self) {
         self.fleet.clear(&mut self.scene);
+    }
+}
+
+#[cfg(test)]
+mod fuel_vehicle_tests {
+    use super::*;
+
+    #[test]
+    fn calling_the_fuel_truck_sends_the_hydrant_dispenser_away() {
+        let mut w = Wants::default();
+        w.toggle_place("fuel_hydrant", false);
+        w.toggle_place("fuel_tanker", false);
+        assert_eq!(w.place.get("fuel_tanker"), Some(&true));
+        assert_eq!(w.place.get("fuel_hydrant"), Some(&false));
+        w.toggle_place("fuel_tanker", true);
+        assert_eq!(w.place.get("fuel_tanker"), Some(&false));
+        assert_eq!(w.place.get("fuel_hydrant"), Some(&false), "sending one away calls nothing else");
     }
 }
 
@@ -1942,29 +1910,6 @@ mod tests {
         }
     }
 
-    #[test]
-    fn ground_crew_walk_the_wingtips_during_pushback() {
-        let mut fleet = Fleet::default();
-        let mut lib = FakeLibrary::default();
-        let mut scene = FakeScene::default();
-        let mut i = parked();
-        i.tug_called = true;
-        run(&mut fleet, &ctx(i), &mut lib, &mut scene, 2);
-        assert!(fleet.phase("crew_headset").is_some() && fleet.phase("crew_wing_l").is_none());
-        i.tug_attached = true;
-        run(&mut fleet, &ctx(i), &mut lib, &mut scene, 2);
-        let l = fleet.placed("crew_wing_l").unwrap();
-        let r = fleet.placed("crew_wing_r").unwrap();
-        assert!(l.origin[0] < -WINGTIP[0] && r.origin[0] > WINGTIP[0], "outboard of the tips: {l:?} {r:?}");
-        assert_eq!(fleet.values("crew_headset").unwrap().len(), 4, "every marshaller dataref per instance");
-        assert!(fleet.values("crew_headset").unwrap().iter().all(|(_, v)| *v == 0.), "standing, arms down");
-        i.stationary = false;
-        let mut c = ctx(i);
-        c.pose.position = [0., 0., 3.];
-        run(&mut fleet, &c, &mut lib, &mut scene, 6);
-        assert!(fleet.phase("crew_wing_r").is_some(), "wing walkers stay with the aircraft");
-        assert!(close(fleet.placed("crew_wing_r").unwrap().origin[2], WINGTIP[2] - 1. + 3., 1e-6));
-    }
 
     #[test]
     fn baggage_and_fuel_bring_their_crews() {
@@ -1998,7 +1943,7 @@ mod tests {
         run(&mut fleet, &ctx(i), &mut lib, &mut scene, 2);
         assert_eq!(fleet.phase("cat_m2r"), Some(Phase::Departing), "sent away on its own");
         assert!(fleet.phase("udcat_u1r").is_some_and(|p| p != Phase::Departing));
-        assert!(PLACEMENTS.iter().filter(|p| per_place(p)).all(|p| p.service != Service::Tug && p.vehicle != CREW));
+        assert!(PLACEMENTS.iter().filter(|p| per_place(p)).all(|p| p.vehicle != CREW));
     }
 
     fn parked() -> Inputs {
@@ -2006,7 +1951,7 @@ mod tests {
     }
 
     fn ctx(inputs: Inputs) -> Context<'static> {
-        Context { inputs, pose: Pose::default(), cg_reference: [0.; 3], steer_deg: 0., operator: Some("dnata"), door_opening: [false; 20], delta: 0.5 }
+        Context { inputs, pose: Pose::default(), cg_reference: [0.; 3], operator: Some("dnata"), door_opening: [false; 20], delta: 0.5 }
     }
 
     fn run(fleet: &mut Fleet, c: &Context, lib: &mut FakeLibrary, scene: &mut FakeScene, ticks: usize) -> Vec<DoorAction> {
@@ -2068,7 +2013,7 @@ mod tests {
         let mut i = parked();
         i.ext_power = true;
         i.on_runway = true;
-        assert!(Service::ALL.iter().filter(|s| **s != Service::Tug).all(|s| !may_stay(*s, &i)));
+        assert!(Service::ALL.iter().all(|s| !may_stay(*s, &i)));
     }
 
     #[test]
@@ -2101,7 +2046,7 @@ mod tests {
         let mut ground = |_: f64, _: f64, _: f64| Some(0.);
         for psi in [0., 90.] {
             let pose = Pose { psi, ..Default::default() };
-            let at = place(p, &g, &pose, [0.; 3], 0., &mut ground);
+            let at = place(p, &g, &pose, [0.; 3], &mut ground);
             let tip = yaw(at.heading, [g.attach[0], g.attach[2]]);
             let receptacle = pose.to_world([0.; 3], [GPU_RECEPTACLE[0], 0., GPU_RECEPTACLE[2]]);
             assert!(close(at.origin[0] + tip[0], receptacle[0], 1e-9) && close(at.origin[2] + tip[1], receptacle[2], 1e-9), "plug under the receptacle at psi {psi}");
@@ -2146,7 +2091,7 @@ mod tests {
             assert!(g.anims.iter().all(|(_, r)| *r == Role::Extend), "the hose runs out once parked");
             for psi in [0., 90.] {
                 let pose = Pose { psi, ..Default::default() };
-                let at = place(p, &g, &pose, [0.; 3], 0., &mut ground);
+                let at = place(p, &g, &pose, [0.; 3], &mut ground);
                 let tip = yaw(at.heading, [g.attach[0], g.attach[2]]);
                 let target = pose.to_world([0.; 3], [connector[0], 0., connector[2]]);
                 assert!(close(at.origin[0] + tip[0], target[0], 1e-9) && close(at.origin[2] + tip[1], target[2], 1e-9), "{id} nozzle under the connector at psi {psi}");
@@ -2210,31 +2155,29 @@ mod tests {
     }
 
     #[test]
-    fn the_beacon_sends_everything_away_but_the_tug_and_the_gpu() {
+    fn the_beacon_sends_everything_away_but_the_gpu() {
         let mut w = Wants::default();
         let mut i = parked();
         i.ext_power = true;
-        i.tug_attached = true;
         w.toggle(Service::Catering, &i);
         let present: BTreeSet<&'static str> = PLACEMENTS.iter().map(|p| p.id).collect();
         let before: Vec<_> = wanted_placements(&w, &i, &present).iter().map(|p| p.id).collect();
         assert!(before.contains(&"cat_m2r"));
         i.beacon = true;
         let after: Vec<_> = wanted_placements(&w, &i, &present).iter().map(|p| p.id).collect();
-        assert!(after.contains(&"gpu") && after.contains(&"tug"));
+        assert!(after.contains(&"gpu"));
         assert!(!after.contains(&"cat_m2r") && !after.contains(&"pca"));
     }
 
     #[test]
-    fn vehicles_vanish_when_the_aircraft_moves_but_the_tug_stays() {
+    fn vehicles_vanish_when_the_aircraft_moves() {
         let mut fleet = Fleet::default();
         let mut lib = FakeLibrary::default();
         let mut scene = FakeScene::default();
         let mut i = parked();
         i.ext_power = true;
-        i.tug_attached = true;
         run(&mut fleet, &ctx(i), &mut lib, &mut scene, 3);
-        assert!(fleet.phase("gpu").is_some() && fleet.phase("tug").is_some());
+        assert!(fleet.phase("gpu").is_some());
         i.stationary = false;
         let mut c = ctx(i);
         c.pose.position = [0., 0., 3.];
@@ -2243,8 +2186,6 @@ mod tests {
         run(&mut fleet, &c, &mut lib, &mut scene, 4);
         assert!(fleet.phase("gpu").is_none(), "gone once really rolling");
         assert!(fleet.phase("pca").is_none());
-        let tug = fleet.placed("tug").unwrap();
-        assert!(close(tug.origin[2], NOSE_GEAR_Z + 3. - 2.5, 1e-6), "the tug follows the nose gear: {tug:?}");
     }
 
     #[test]
@@ -2314,21 +2255,16 @@ mod tests {
         let p = placement("stairs_m1l").unwrap();
         let g = geometry(p, parse_manifest("stairs_main", STAIRS_MANIFEST).as_ref());
         let mut ground = |_: f64, _: f64, _: f64| Some(0.);
-        let level = place(p, &g, &Pose { position: [0., 4.2, 0.], ..Default::default() }, [0., 0.853, -2.438], 0., &mut ground);
-        let nose_up = place(p, &g, &Pose { position: [0., 4.2, 0.], theta: 1.0, ..Default::default() }, [0., 0.853, -2.438], 0., &mut ground);
-        let lower = place(p, &g, &Pose { position: [0., 4.0, 0.], ..Default::default() }, [0., 0.853, -2.438], 0., &mut ground);
+        let level = place(p, &g, &Pose { position: [0., 4.2, 0.], ..Default::default() }, [0., 0.853, -2.438], &mut ground);
+        let nose_up = place(p, &g, &Pose { position: [0., 4.2, 0.], theta: 1.0, ..Default::default() }, [0., 0.853, -2.438], &mut ground);
+        let lower = place(p, &g, &Pose { position: [0., 4.0, 0.], ..Default::default() }, [0., 0.853, -2.438], &mut ground);
         assert!(close(level.target_height, 4.2 + SILLS[M1L][1] - 0.853, 1e-9));
         assert!(nose_up.target_height > level.target_height + 0.4, "the forward door rises nose up");
         assert!(close(level.target_height - lower.target_height, 0.2, 1e-9), "gear compression lowers the sill");
     }
 
     #[test]
-    fn tug_docks_by_its_cradle_and_the_gpu_plug_rests_centred() {
-        let tug = r#"{"vehicle":"tow_tpx500","anims":[{"dataref":"fbw/gse/tow/cradle","min":0,"max":1}],"attach":{"cradle_centre":[0,0.76,-2.0],"cradle_roller_top":[0,0.82,-2.0]}}"#;
-        let m = parse_manifest("tow_tpx500", tug).unwrap();
-        let g = geometry(placement("tug").unwrap(), Some(&m));
-        assert!(close(g.attach[2], -2.0, 1e-9));
-        assert_eq!(g.anims[0].1, Role::Hold);
+    fn the_gpu_plug_rests_centred() {
         let gpu = r#"{"vehicle":"gpu_tld409","anims":[{"dataref":"fbw/gse/gpu/plug_dz","min":-0.15,"max":0.15}],"attach":{"plug_tip_0":[3.55,3.15,1.168]}}"#;
         let m = parse_manifest("gpu_tld409", gpu).unwrap();
         let g = geometry(placement("gpu").unwrap(), Some(&m));
@@ -2408,6 +2344,24 @@ mod tests {
         let g = geometry(placement("cat_m2r").unwrap(), Some(&m));
         assert_eq!(g.attach, [0., 1.8, 0.]);
         assert!(close(g.lift_travel.unwrap(), 3.8, 1e-9) && close(g.reach, 1.3, 1e-9));
+    }
+
+    /// Where every vehicle stands with the aircraft at the origin, heading north, for
+    /// tools that draw them: `FBW_GSE_DIR=<objects/gse> FBW_GSE_DUMP=<file.json>`.
+    #[test]
+    #[ignore]
+    fn dump_placements() {
+        let dir = std::env::var("FBW_GSE_DIR").unwrap();
+        let mut out = Vec::new();
+        for p in PLACEMENTS.iter() {
+            let text = std::fs::read_to_string(format!("{dir}/{}/manifest.json", p.vehicle)).unwrap_or_default();
+            let m = parse_manifest(p.vehicle, &text);
+            let g = geometry(p, m.as_ref());
+            let mut ground = |_: f64, _: f64, _: f64| Some(-4.3);
+            let placed = place(p, &g, &Pose::default(), [0., 0.853, -2.438], &mut ground);
+            out.push(serde_json::json!({ "id": p.id, "vehicle": p.vehicle, "origin": placed.origin, "heading": placed.heading, "attach": g.attach, "reach": g.reach }));
+        }
+        std::fs::write(std::env::var("FBW_GSE_DUMP").unwrap(), serde_json::to_string_pretty(&out).unwrap()).unwrap();
     }
 
     #[test]

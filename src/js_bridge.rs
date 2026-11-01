@@ -770,11 +770,7 @@ fn simbridge_fetch(args_json: &str) -> CallReply {
         };
     }
     let path = url.splitn(4, '/').nth(3).map(|p| format!("/{p}")).unwrap_or_default();
-    let (status, text) = if path.split('?').next() == Some("/health") {
-        (200, r#"{"status":"ok","info":{"api":{"status":"up"}},"error":{},"details":{"api":{"status":"up"}}}"#.to_string())
-    } else {
-        crate::mapdata::plugin::simbridge_request(&method, &path, &body).unwrap_or((404, String::new()))
-    };
+    let (status, text) = crate::mapdata::plugin::simbridge_answer(&method, &path, &body);
     CallReply::Resolved(serde_json::json!({ "status": status, "body": text }).to_string())
 }
 
@@ -796,13 +792,22 @@ mod fetch_tests {
     }
 }
 
+#[cfg(windows)]
 #[link(name = "kernel32")]
 extern "system" {
     fn GetModuleHandleExW(flags: u32, name: *const u16, module: *mut *mut c_void) -> i32;
     fn GetModuleFileNameW(module: *mut c_void, buffer: *mut u16, size: u32) -> u32;
 }
 
+/// This plugin's folder (the one holding `64/lin.xpl`, or `mac_x64/...`).
+#[cfg(unix)]
+pub(crate) fn plugin_dir() -> Option<PathBuf> {
+    let file = crate::xp::file_of(plugin_dir as *const () as *const c_void)?;
+    Some(file.parent()?.parent()?.to_path_buf())
+}
+
 /// This plugin's folder (the one holding `64/win.xpl`).
+#[cfg(windows)]
 pub(crate) fn plugin_dir() -> Option<PathBuf> {
     const FROM_ADDRESS: u32 = 0x4;
     const UNCHANGED_REFCOUNT: u32 = 0x2;

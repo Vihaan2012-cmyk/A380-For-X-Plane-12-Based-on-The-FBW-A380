@@ -465,6 +465,7 @@ pub struct Throttles {
     calibration: Calibration,
     generation: u64,
     hardware_levers: [bool; 4],
+    lever_waking: [crate::WakingAxis; 4],
     levers: [Cockpit; 4],
     reversers: [Cockpit; 2],
     /// The hardware throttles (X-Plane's ratios, then the raw axes) when TOGA was latched.
@@ -501,6 +502,7 @@ impl Throttles {
             calibration: Calibration::default(),
             generation: u64::MAX,
             hardware_levers: [false; 4],
+            lever_waking: [crate::WakingAxis::default(); 4],
             levers: [
                 Cockpit::new("fbw/cockpit/throttle_lever_1"),
                 Cockpit::new("fbw/cockpit/throttle_lever_2"),
@@ -597,8 +599,12 @@ impl Throttles {
                 None if toga && reverse & (1 << i) == 0 => ((TOGA_LO + TOGA_HI) / 2., TLA_TOGA),
                 None => match (&self.calibrated, raw[i]) {
                     (Some(table), Some(r)) if self.calibration.enabled && (self.calibration.reverse_on_axis || ratio[i] >= -0.01 || !HAS_REVERSER[i]) => {
-                        let axis = self.calibration.axis(r);
-                        (axis, angle_for_axis(table, axis, HAS_REVERSER[i]))
+                        if self.lever_waking[i].woken(r) {
+                            let axis = self.calibration.axis(r);
+                            (axis, angle_for_axis(table, axis, HAS_REVERSER[i]))
+                        } else {
+                            (axis_for_angle(TLA_IDLE), TLA_IDLE)
+                        }
                     }
                     _ => {
                         let r = if HAS_REVERSER[i] { ratio[i] as f64 } else { (ratio[i] as f64).max(0.) };

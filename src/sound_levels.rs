@@ -128,7 +128,19 @@ impl Fmod {
 
     #[cfg(not(windows))]
     fn load() -> Option<Fmod> {
-        None
+        let studio = crate::xp::Xplm::xplm_symbol("XPLMGetFMODStudio")?;
+        let f = |n: &std::ffi::CStr| {
+            let p = unsafe { crate::xp::library_symbol("fmodstudio", n) };
+            (!p.is_null()).then_some(p)
+        };
+        unsafe {
+            Some(Fmod {
+                studio: std::mem::transmute::<*mut c_void, GetStudio>(studio),
+                by_id: std::mem::transmute::<*mut c_void, GetEventById>(f(c"FMOD_Studio_System_GetEventByID")?),
+                instances: std::mem::transmute::<*mut c_void, GetInstanceList>(f(c"FMOD_Studio_EventDescription_GetInstanceList")?),
+                set_volume: std::mem::transmute::<*mut c_void, SetVolume>(f(c"FMOD_Studio_EventInstance_SetVolume")?),
+            })
+        }
     }
 }
 

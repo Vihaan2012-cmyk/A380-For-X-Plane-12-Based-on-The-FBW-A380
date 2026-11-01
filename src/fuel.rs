@@ -1172,7 +1172,7 @@ impl Fuel {
             }
         }
 
-        self.write_xplane(xplm);
+        self.write_xplane(xplm, delta);
 
         self.since_save += delta;
         let on_ground = vars.read(&self.ids.on_ground) != 0.;
@@ -1612,7 +1612,7 @@ impl Fuel {
         }
     }
 
-    fn write_xplane(&mut self, xplm: &Xplm) {
+    fn write_xplane(&mut self, xplm: &Xplm, delta: f64) {
         // `weight_balance.rs`'s payload/CG writes are bisectable with
         // `FBW_XP_WRITES=weight`/`weight-stations`/`weight-cg`; `m_fuel` is
         // the fourth mass X-Plane's own physics sums in (alongside
@@ -1629,6 +1629,12 @@ impl Fuel {
         for (x, tanks) in XPLANE_TANKS.iter().enumerate() {
             let gallons: f64 = tanks.iter().map(|&t| self.net.tank_gallons(t)).sum();
             kg[x] = (gallons * JET_A_LBS_PER_GAL * LB_TO_KG) as f32;
+        }
+        if let Some(was) = self.last_written {
+            let step = crate::weight_balance::MASS_SLEW_KG_S * delta;
+            for (now, was) in kg.iter_mut().zip(was) {
+                *now = crate::weight_balance::slew_toward(was as f64, *now as f64, step) as f32;
+            }
         }
         xplm.set_vf(d, &kg);
         self.last_written = Some(kg);

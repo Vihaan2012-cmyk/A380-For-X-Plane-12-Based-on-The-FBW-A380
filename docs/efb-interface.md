@@ -113,28 +113,6 @@ these variables.
 |---|---|
 | `fbw/efb/refuel/start_stop` | `switchRefuelState`. |
 
-## Pushback
-
-Source: `Ground/Pages/Pushback/PushbackPage.tsx`. FlyByWire's pushback module
-(`fbw-common/src/wasm/extra-backend/Pushback`) moves the aircraft from these variables.
-
-| name | type | units / range | rw | meaning |
-|---|---|---|---|---|
-| `fbw/efb/pushback/system_enabled` | int | 0/1 | rw | `A32NX_PUSHBACK_SYSTEM_ENABLED`. |
-| `fbw/efb/pushback/speed_factor` | float | -1 to 1 | rw | `A32NX_PUSHBACK_SPD_FACTOR`. |
-| `fbw/efb/pushback/heading_factor` | float | -1 to 1 | rw | `A32NX_PUSHBACK_HDG_FACTOR`. |
-| `fbw/efb/pushback/parking_brake` | int | 0/1 | rw | `A32NX_PARK_BRAKE_LEVER_POS`. |
-| `fbw/efb/pushback/attached` | int | 0/1 | ro | `sim/aircraft/overflow/pushback_attached`. |
-
-| command | does |
-|---|---|
-| `fbw/efb/pushback/stop` | Sets both factors to 0. |
-| `fbw/efb/pushback/call_tug` | Sets `PUSHBACK WAIT` to 1. |
-| `fbw/efb/pushback/release_tug` | Sets `PUSHBACK WAIT` to 0. |
-
-Attaching the tug (`K:TOGGLE_PUSHBACK` and `PUSHBACK STATE`) is not handled here. sensors.rs sets
-`PUSHBACK STATE` from X-Plane's tug.
-
 ## Settings
 
 Sources: `Settings/sync.ts:40-251` and `fbw-a380x/src/systems/instruments/src/EFB/settingsSync.ts`.

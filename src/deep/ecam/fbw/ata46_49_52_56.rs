@@ -35,8 +35,8 @@
 //! exactly the disagreement the real alert exists to catch, independent of
 //! the door's real position.
 
-use super::{phase, proc, sd_page, FbwProc};
-use crate::deep::api::{any, var, Level};
+use super::{item, proc, sd_page, FbwProc};
+use crate::deep::api::{any, not, var, Cond, Level};
 
 pub fn wire(v: &mut Vec<FbwProc>) {
     let doors: [(u64, &str, &str); 6] = [
@@ -64,8 +64,15 @@ pub fn wire(v: &mut Vec<FbwProc>) {
             // while the door is mid-travel, matching the confirm scale
             // `ata24.rs`'s own bus-fault family uses for the same reason.
             .confirm(1.0)
-            .inhibit(phase::NONE)
-            .items(6, Vec::new()),
+            // FwsAbnormalSensed.ts 520800017, MAIN 1L NOT CLOSED: the pack line needs all
+            // four OCSMs failed, the rest are for a door coming open in flight.
+            .inhibit(&[1, 4, 5, 6, 7, 9, 10, 12])
+            .items(
+                6,
+                std::iter::once(item(0).shown_if(not(Cond::Always)))
+                    .chain((1..6).map(|i| item(i).shown_if(not(super::ata32::any_leg_on_ground()))))
+                    .collect(),
+            ),
         );
     }
 }

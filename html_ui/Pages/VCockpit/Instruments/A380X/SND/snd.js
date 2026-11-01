@@ -257,7 +257,8 @@
       box(14, 26, 84, 'GS');
       box(CX - 50, CY - 70, 100, 'HDG');
       box(10, 350, 104, 'POS');
-      box(CX - 90, CY + 40, 180, 'INIT');
+      make('rect', { x: CX - 90, y: CY + 40, width: 180, height: 40, class: 'y' }, this.test);
+      make('text', { x: CX - 80, y: CY + 71, 'font-size': 30, class: 'k' }, this.test, 'INIT');
       this.testTimer = make('text', { x: CX + 84, y: CY + 71, 'font-size': 30, class: 'k end' }, this.test);
 
       this.dim = make('rect', { x: 0, y: 0, width: 512, height: 512, fill: '#000000', opacity: 0 }, svg);

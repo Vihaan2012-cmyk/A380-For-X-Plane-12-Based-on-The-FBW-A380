@@ -7,6 +7,9 @@ use crate::install::{download, github_get, unzip, Ctx, ReleaseFile, AIRCRAFT_DIR
 
 pub const INDEX: &str = "liveries.json";
 
+/// Withdrawn: not offered, whatever the published index says.
+const WITHDRAWN_AIRLINES: [&str; 1] = ["Air France"];
+
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct Edition {
     pub file: String,
@@ -70,6 +73,9 @@ pub fn index_from(text: &str, assets: &BTreeMap<String, String>) -> Result<Vec<L
     let index: Index = serde_json::from_str(text).map_err(|e| format!("{INDEX}: {e}"))?;
     let mut out = Vec::new();
     for mut livery in index.liveries {
+        if WITHDRAWN_AIRLINES.contains(&livery.airline.as_str()) {
+            continue;
+        }
         livery.editions.retain(|_, e| folder_name_ok(&e.folder));
         for e in livery.editions.values_mut() {
             e.url = assets.get(&e.file).cloned().unwrap_or_default();
@@ -205,6 +211,17 @@ mod tests {
         {"id": "bad", "airline": "X", "name": "Y",
          "editions": {"2K": {"file": "livery-bad-2k.zip", "folder": "../escape", "size": 1, "sha256": "ef"}}}
     ]}"#;
+
+    #[test]
+    fn a_withdrawn_airline_is_not_offered() {
+        let text = r#"{"liveries": [
+            {"id": "air-france-f-hpjd", "airline": "Air France", "name": "F-HPJD", "editions": {"2K": {"file": "a.zip", "folder": "A", "size": 1, "sha256": "x"}}},
+            {"id": "ana-ja381a", "airline": "ANA", "name": "JA381A", "editions": {"2K": {"file": "b.zip", "folder": "B", "size": 1, "sha256": "x"}}}
+        ]}"#;
+        let assets: BTreeMap<String, String> = [("a.zip", "u"), ("b.zip", "u")].into_iter().map(|(a, b)| (a.to_owned(), b.to_owned())).collect();
+        let list = index_from(text, &assets).unwrap();
+        assert_eq!(list.iter().map(|l| l.id.as_str()).collect::<Vec<_>>(), ["ana-ja381a"]);
+    }
 
     #[test]
     fn the_index_gets_its_download_urls_and_drops_unsafe_folders() {

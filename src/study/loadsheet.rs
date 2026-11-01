@@ -101,11 +101,25 @@ fn kg(cv: &Canvas, name: &str) -> f64 {
     cv.value(name).unwrap_or(0.0)
 }
 
+/// The zone variables are seat bit flags (`efb.rs`).
+fn pax_in(cv: &Canvas, name: &str) -> f64 {
+    (kg(cv, name) as u64).count_ones() as f64
+}
+
 /// `value` against `desired`, shown as "now / wanted" when they differ so a
 /// boarding in progress reads as one.
 fn against_desired(cv: &Canvas, name: &str, unit: &str, dp: usize) -> String {
     let now = kg(cv, name);
     let want = cv.value(&format!("{name}_DESIRED"));
+    now_against_wanted(now, want, unit, dp)
+}
+
+fn pax_against_desired(cv: &Canvas, name: &str) -> String {
+    let want = cv.value(&format!("{name}_DESIRED")).map(|w| (w as u64).count_ones() as f64);
+    now_against_wanted(pax_in(cv, name), want, "pax", 0)
+}
+
+fn now_against_wanted(now: f64, want: Option<f64>, unit: &str, dp: usize) -> String {
     match want {
         Some(w) if (w - now).abs() > 0.5 => format!("{now:.dp$} / {w:.dp$} {unit}", dp = dp),
         _ => format!("{now:.dp$} {unit}", dp = dp),
@@ -118,7 +132,7 @@ pub fn draw(cv: &mut Canvas, scroll: c_int) -> c_int {
     let lh = cv.line_h;
     let row_h = lh + 10;
 
-    let pax: f64 = PAX_ZONES.iter().map(|z| kg(cv, z.var)).sum();
+    let pax: f64 = PAX_ZONES.iter().map(|z| pax_in(cv, z.var)).sum();
     let cargo_kg: f64 = CARGO_HOLDS.iter().map(|h| kg(cv, h.var)).sum();
     let payload_kg = pax * KG_PER_PAX + cargo_kg;
     // The same latch `weight_balance.rs` waits on, read the same way: a
@@ -219,7 +233,7 @@ pub fn draw(cv: &mut Canvas, scroll: c_int) -> c_int {
 
     heading(cv, &mut y, &mut height, "PASSENGERS");
     for z in PAX_ZONES {
-        line(cv, &mut y, &mut height, z.label, &against_desired(cv, z.var, "pax", 0));
+        line(cv, &mut y, &mut height, z.label, &pax_against_desired(cv, z.var));
     }
     line(cv, &mut y, &mut height, "Total", &format!("{pax:.0} pax, {:.0} kg", pax * KG_PER_PAX));
 

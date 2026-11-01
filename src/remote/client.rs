@@ -48,6 +48,7 @@ pub struct RemoteSystems {
     reply: Event,
     _shared: Shared,
     child: Option<Child>,
+    worker: Option<std::thread::JoinHandle<()>>,
     map: Vec<VariableIdentifier>,
     seq: u64,
     pending: bool,
@@ -77,6 +78,28 @@ impl RemoteSystems {
                 .map(Some)
                 .map_err(|e| format!("cannot start {}: {e}", exe.display()))
         })
+    }
+
+    /// The systems on a thread of this process, served as a separate process
+    /// would be, so a slow tick is left behind as it is there.
+    pub fn on_thread<V: VariableRegistry + SimulatorReaderWriter>(state: StartState, vars: &mut V, tagged: impl FnOnce(&str)) -> Result<Self, String> {
+        let mut worker = None;
+        let mut systems = Self::connect(state, vars, |tag| {
+            tagged(tag);
+            let tag = tag.to_string();
+            worker = Some(
+                std::thread::Builder::new()
+                    .name("fbw systems".into())
+                    .stack_size(crate::big_stack::STACK_BYTES)
+                    .spawn(move || {
+                        let _ = super::server::serve(&tag, None);
+                    })
+                    .map_err(|e| format!("cannot start the systems thread: {e}"))?,
+            );
+            Ok(None)
+        })?;
+        systems.worker = worker;
+        Ok(systems)
     }
 
     /// Create the shared objects, let `launch` start the systems for `tag`,
@@ -143,6 +166,7 @@ impl RemoteSystems {
             reply,
             _shared: shared,
             child,
+            worker: None,
             map,
             seq: 0,
             pending: false,
@@ -270,6 +294,18 @@ impl Drop for RemoteSystems {
     fn drop(&mut self) {
         self.block.header().state.store(wire::STATE_QUIT, Ordering::Relaxed);
         self.request.set();
+        // The plugin's DLL unloads after this, so the thread has to be gone.
+        if let Some(w) = self.worker.take() {
+            let until = Instant::now() + Duration::from_secs(5);
+            while !w.is_finished() && Instant::now() < until {
+                std::thread::sleep(Duration::from_millis(5));
+            }
+            if w.is_finished() {
+                let _ = w.join();
+            } else {
+                crate::log("systems: their thread did not stop in 5 s");
+            }
+        }
         if let Some(c) = self.child.as_mut() {
             let until = Instant::now() + Duration::from_secs(2);
             while Instant::now() < until {

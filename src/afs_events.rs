@@ -617,8 +617,9 @@ struct KnobVar {
     zoom_dataref: Option<DataRef>,
     /// The value `prim.rs` last published, taken after the systems tick
     /// ([`EfisKnobs::latch`]). A read that differs from this is the crew's,
-    /// because nothing else writes between the two points.
-    baseline: Option<f64>,
+    /// because nothing else writes between the two points. The second number
+    /// is the OANS range, for the range knob only.
+    baseline: Option<(f64, f64)>,
 }
 
 /// A knob cannot be turned more than this in one tick. Anything larger is
@@ -635,16 +636,16 @@ impl KnobVar {
         Self { path, zoom_path: Some(zoom_path), event, side, dataref: None, zoom_dataref: None, baseline: None }
     }
 
-    fn read(&mut self, xplm: &Xplm) -> Option<f64> {
+    fn read(&mut self, xplm: &Xplm) -> Option<(f64, f64)> {
         if self.dataref.is_none() {
             self.dataref = xplm.find(self.path);
         }
         let value = xplm.get_f(self.dataref?) as f64;
-        let Some(zoom_path) = self.zoom_path else { return Some(value) };
+        let Some(zoom_path) = self.zoom_path else { return Some((value, 0.0)) };
         if self.zoom_dataref.is_none() {
             self.zoom_dataref = xplm.find(zoom_path);
         }
-        Some(range_selection(value, xplm.get_f(self.zoom_dataref?) as f64))
+        Some((value, xplm.get_f(self.zoom_dataref?) as f64))
     }
 
     /// Turn the crew's write into detents.
@@ -662,20 +663,24 @@ impl KnobVar {
     /// A *difference* needs no shared origin. Both scales increase with
     /// range and with mode, so one step up on the published scale is one
     /// detent clockwise, whatever either scale's zero happens to mean.
-    fn poll(&mut self, xplm: &Xplm) {
-        let Some(value) = self.read(xplm) else { return };
+    /// `send` false: the change is noted but not passed on to the FCU.
+    /// `mode_moved`: the mode knob turned this tick, so an OANS write is its own.
+    /// Returns the value before and after when the variable moved.
+    fn poll(&mut self, xplm: &Xplm, send: bool, mode_moved: bool) -> Option<(f64, f64)> {
+        let value = self.read(xplm)?;
         let Some(baseline) = self.baseline else {
             // First sight of it: record where the knob is, and send nothing.
             self.baseline = Some(value);
-            return;
+            return None;
         };
-        let moved = value - baseline;
-        if moved != 0.0 && moved.abs() <= MAX_DETENTS_PER_TICK {
+        let moved = if self.zoom_path.is_some() { range_detents(baseline, value, mode_moved) } else { value.0 - baseline.0 };
+        if send && moved != 0.0 && moved.abs() <= MAX_DETENTS_PER_TICK {
             send_from_panel((self.event)(self.side, moved as i8));
         }
         // Either way this read is now the reference, so one turn is not
         // sent twice while the FCU catches up.
         self.baseline = Some(value);
+        (value.0 != baseline.0).then_some((baseline.0, value.0))
     }
 
     /// Record what `prim.rs` has just published, so the next tick's read is
@@ -698,6 +703,26 @@ fn range_selection(nd_range: f64, oans_range: f64) -> f64 {
     }
 }
 
+/// The range knob's turn, from (ND range, OANS range) before and after the cockpit's script.
+/// The script only raises the ND range when the OANS range reads 4, and the FCU publishes 5
+/// when not zoomed. Outside ROSE LS and VOR its turn up writes nothing but that 4, so a turn
+/// up from any range looked like no turn at all (ARC stuck at 10 NM).
+fn range_detents(was: (f64, f64), now: (f64, f64), mode_moved: bool) -> f64 {
+    let moved = range_selection(now.0, now.1) - range_selection(was.0, was.1);
+    if moved == 0.0 && !mode_moved && was.0 > 0.0 && now.0 == was.0 && was.1 != 4.0 && now.1 == 4.0 {
+        1.0
+    } else {
+        moved
+    }
+}
+
+/// ND mode 3 is ARC. The FCU steps the range itself entering or leaving ARC
+/// (FCOM DSC-31-20-50), and the cockpit's mode knob script does too: passing the
+/// script's step on as a range knob turn moved the range two steps.
+fn arc_changed(mode_was: f64, mode_now: f64) -> bool {
+    mode_was != mode_now && (mode_was == 3.0 || mode_now == 3.0)
+}
+
 /// The four EFIS knob variables, captain and first officer.
 pub struct EfisKnobs {
     vars: [KnobVar; 4],
@@ -718,8 +743,9 @@ impl EfisKnobs {
     /// Call once a tick, before [`take`] collects the tick's events and
     /// before `prim.rs` republishes the variables.
     pub fn update(&mut self, xplm: &Xplm) {
-        for v in &mut self.vars {
-            v.poll(xplm);
+        for side in self.vars.chunks_mut(2) {
+            let mode = side[0].poll(xplm, true, false);
+            side[1].poll(xplm, !mode.is_some_and(|(was, now)| arc_changed(was, now)), mode.is_some());
         }
     }
 
@@ -801,8 +827,34 @@ impl ButtonVar {
     }
 }
 
+/// The METER button: the cockpit's script only flips this variable, and the FCU only takes the push.
+struct MetricAltButton {
+    dataref: Option<DataRef>,
+    baseline: Option<f64>,
+}
+
+impl MetricAltButton {
+    fn poll(&mut self, xplm: &Xplm) {
+        if self.dataref.is_none() {
+            self.dataref = xplm.find("fbw/A32NX_METRIC_ALT_TOGGLE");
+        }
+        let Some(dataref) = self.dataref else { return };
+        let value = xplm.get_f(dataref) as f64;
+        if metric_alt_pushed(self.baseline, value) {
+            crate::diag::event("fcu", &format!("METER -> {value}"));
+            send_from_panel(Event::FcuMetricAltTogglePush);
+        }
+        self.baseline = Some(value);
+    }
+}
+
+fn metric_alt_pushed(was: Option<f64>, now: f64) -> bool {
+    was.is_some_and(|was| was != now)
+}
+
 pub struct EfisButtons {
     vars: Vec<ButtonVar>,
+    metric_alt: MetricAltButton,
 }
 
 impl EfisButtons {
@@ -825,13 +877,14 @@ impl EfisButtons {
             add(format!("fbw/A32NX_EFIS_{s}_NAVAID_2_MODE"), ButtonWatch::Toggle(EfisButton::Navaid2));
             add(format!("fbw/cockpit/PUSH_EFIS_{cockpit}_TAXI"), ButtonWatch::Pressed(EfisButton::Taxi));
         }
-        Self { vars }
+        Self { vars, metric_alt: MetricAltButton { dataref: None, baseline: None } }
     }
 
     pub fn update(&mut self, xplm: &Xplm) {
         for v in &mut self.vars {
             v.poll(xplm);
         }
+        self.metric_alt.poll(xplm);
     }
 
     pub fn latch(&mut self, xplm: &Xplm) {
@@ -1079,6 +1132,35 @@ mod tests {
     }
 
     #[test]
+    fn the_range_knob_goes_up_from_any_range_in_arc() {
+        // The script's turn up in ARC at 10 NM: nothing but the OANS range, 5 to 4.
+        assert_eq!(range_detents((1.0, 5.0), (1.0, 4.0), false), 1.0);
+        assert_eq!(range_detents((6.0, 5.0), (6.0, 4.0), false), 1.0);
+        // ROSE LS and VOR: the script sets 4 first, then raises the range itself.
+        assert_eq!(range_detents((1.0, 5.0), (2.0, 4.0), false), 1.0);
+        // Down, into ZOOM and back out.
+        assert_eq!(range_detents((2.0, 5.0), (1.0, 4.0), false), -1.0);
+        assert_eq!(range_detents((1.0, 5.0), (0.0, 5.0), false), -1.0);
+        assert_eq!(range_detents((0.0, 4.0), (1.0, 4.0), false), 1.0);
+        // Unchanged, or the FCU's own publish.
+        assert_eq!(range_detents((1.0, 5.0), (1.0, 5.0), false), 0.0);
+        assert_eq!(range_detents((1.0, 4.0), (1.0, 5.0), false), 0.0);
+    }
+
+    #[test]
+    fn the_mode_knob_writing_the_oans_range_is_not_a_range_turn() {
+        assert_eq!(range_detents((3.0, 5.0), (3.0, 4.0), true), 0.0);
+    }
+
+    #[test]
+    fn the_meter_button_is_a_push_each_time_the_script_flips_it() {
+        assert!(!metric_alt_pushed(None, 0.0), "first sight is not a press");
+        assert!(!metric_alt_pushed(Some(0.0), 0.0));
+        assert!(metric_alt_pushed(Some(0.0), 1.0));
+        assert!(metric_alt_pushed(Some(1.0), 0.0));
+    }
+
+    #[test]
     fn a_turn_becomes_a_detent_in_the_direction_it_moved() {
         let mut inputs = EventInputs::default();
         assert_eq!(inputs.efis[0].efis_range_knob_turns, 0);
@@ -1293,6 +1375,14 @@ mod tests {
         for n in 1..=4 {
             assert!(has(&format!("TURBINE_IGNITION_SWITCH_SET{n}"), &[2.]));
         }
+    }
+
+    #[test]
+    fn only_a_mode_change_into_or_out_of_arc_leaves_the_range_to_the_fcu() {
+        assert!(arc_changed(3., 4.));
+        assert!(arc_changed(2., 3.));
+        assert!(!arc_changed(1., 2.));
+        assert!(!arc_changed(3., 3.));
     }
 
     #[test]

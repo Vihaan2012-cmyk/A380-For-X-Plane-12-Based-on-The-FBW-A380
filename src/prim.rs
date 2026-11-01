@@ -1116,6 +1116,12 @@ impl Prims {
         n.set(vars, "A32NX_AUTOPILOT_HEADING_SELECTED", hdg);
         n.set(vars, "A320_FCU_SHOW_SELECTED_HEADING", f(s.hdg_trk_dashes == 0));
         n.set(vars, "A32NX_FCU_HDG_MANAGED_DASHES", s.hdg_trk_dashes as f64);
+        // HEADING_BUG_SET in the MSFS aircraft. The ND's bug follows this simvar:
+        // its Simplane provider posts after the L: var publisher every frame.
+        if s.hdg_trk_dashes == 0 {
+            n.set(vars, "AUTOPILOT HEADING LOCK DIR", s.hdg_trk_value);
+            n.set(vars, "AUTOPILOT HEADING LOCK DIR:1", s.hdg_trk_value);
+        }
         n.set(vars, "A32NX_AUTOPILOT_VS_SELECTED", if s.trk_fpa_mode != 0 { 0. } else { s.vs_fpa_value });
         n.set(vars, "A32NX_AUTOPILOT_FPA_SELECTED", if s.trk_fpa_mode == 0 { 0. } else { s.vs_fpa_value });
         n.set(vars, "A32NX_FCU_VS_MANAGED", s.vs_fpa_dashes as f64);

@@ -152,6 +152,11 @@ pub fn bcd16_to_code(bcd: u32) -> u32 {
     (0..4).rev().fold(0, |code, i| code * 10 + ((bcd >> (4 * i)) & 0xf))
 }
 
+/// X-Plane's four-digit code as MSFS's `TRANSPONDER CODE`, a BCD16.
+pub fn code_to_bcd16(code: u32) -> u32 {
+    (0..4).fold(0, |bcd, i| bcd | ((code / 10u32.pow(i)) % 10) << (4 * i))
+}
+
 /// The FCU and autothrust events a script can send by name.
 fn afs_event(name: &str, value: f64) -> Option<Event> {
     if let Some(event) = afs_events::efis_button_event(name) {
@@ -406,6 +411,9 @@ mod tests {
         // 7700 in BCD16.
         assert!(apply(&mut vars, &mut xp, "XPNDR_SET", &[0x7700 as f64]));
         assert_eq!(xp.values[TRANSPONDER_CODE], 7700.);
+        assert_eq!(code_to_bcd16(7700), 0x7700);
+        assert_eq!(code_to_bcd16(2000), 0x2000);
+        assert_eq!(bcd16_to_code(code_to_bcd16(1234)), 1234);
         assert!(apply(&mut vars, &mut xp, "XPNDR_IDENT_ON", &[1.]));
         assert_eq!(xp.commands, vec!["sim/transponder/transponder_ident"]);
         xp.values.insert(SIM_SPEED.into(), 1.);

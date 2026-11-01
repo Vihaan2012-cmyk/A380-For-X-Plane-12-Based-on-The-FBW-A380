@@ -6,6 +6,10 @@ from pathlib import Path
 PSS = "a380_engdetach_fire.pss"
 OBJ = "a380_brake_fire.obj"
 
+# The tail cone's end, for an APU fire. FIRE_SMOKE is the "Fire Smoke" particle already in the file.
+APU_EXHAUST = (0.0, 3.7, 35.6)
+FIRE_SMOKE = 4
+
 # fuel_leak_N order: the 11 network tanks, then the 4 pylon stubs.
 SITES = [
     (-33.0, 2.15, 9.0),
@@ -105,6 +109,7 @@ def patch_pss(path):
         emitter("Fuel_Mist", first, (15, 25), (0, 0.4), 0.25, (0.2, 0.5), (0.06, 0.12), (2.5, 4)),
         emitter("Fuel_Drip", first + 1, (55, 75), (0, 0.3), 0.12, (0.05, 0.11), (0.55, 0.8), (1.0, 1.5)),
         emitter("Fuel_Plume", first + 2, (130, 160), (0, 0.5), 0.15, (0.35, 0.7), (0.18, 0.28), (2.5, 3.5)),
+        emitter("Fuel_Apu_Smoke", FIRE_SMOKE, (14, 20), (0, 1.5), 0.15, (0.7, 1.4), (0.6, 0.9), (3.5, 5.5)),
     ]
     add_particles = "\r\n".join(l for p in particles for l in p) + "\r\n"
     add_emitters = "\r\n".join(l for e in emitters for l in e) + "\r\n"
@@ -136,10 +141,12 @@ def site_groups(n, site):
 
 def patch_obj(path):
     text = Path(path).read_text(encoding="utf-8").replace("\r\n", "\n")
-    text = re.sub(r"ANIM_begin\nANIM_hide -1000000 1000000 fbw/damage/fuel_leak_\d+\n.*?ANIM_end\n\n?", "", text, flags=re.S)
+    text = re.sub(r"ANIM_begin\nANIM_hide -1000000 1000000 fbw/damage/(?:fuel_leak_\d+|apu_fire)\n.*?ANIM_end\n\n?", "", text, flags=re.S)
     lines = text.rstrip("\n").split("\n") + [""]
     for n, site in enumerate(SITES):
         lines += site_groups(n, site)
+    x, y, z = APU_EXHAUST
+    lines += ["ANIM_begin", "ANIM_hide -1000000 1000000 fbw/damage/apu_fire", "ANIM_show 0.5 1.5 fbw/damage/apu_fire", line("Fuel_Apu_Smoke", x, y, z), line("Fuel_Apu_Smoke", x, y + 0.2, z + 0.2), "ANIM_end", ""]
     Path(path).write_text("\n".join(lines), encoding="utf-8", newline="\n")
 
 

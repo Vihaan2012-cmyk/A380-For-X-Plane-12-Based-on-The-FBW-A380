@@ -253,6 +253,7 @@ struct Refs {
     left_brake: Option<DataRef>,
     right_brake: Option<DataRef>,
     parkbrake: Option<DataRef>,
+    parking_brake_ratio: Option<DataRef>,
     auto_brake_level: Option<DataRef>,
     flaprqst: Option<DataRef>,
     flap_handle_request: Option<DataRef>,
@@ -288,6 +289,7 @@ impl Refs {
             left_brake: f("sim/cockpit2/controls/left_brake_ratio"),
             right_brake: f("sim/cockpit2/controls/right_brake_ratio"),
             parkbrake: f("sim/flightmodel/controls/parkbrake"),
+            parking_brake_ratio: f("sim/cockpit2/controls/parking_brake_ratio"),
             auto_brake_level: f("sim/cockpit2/switches/auto_brake_level"),
             flaprqst: f("sim/flightmodel/controls/flaprqst"),
             flap_handle_request: f("sim/cockpit2/controls/flap_handle_request_ratio"),
@@ -786,12 +788,14 @@ impl Handling {
         if let Some(d) = r.right_brake {
             xplm.set_f(d, (read(&ids.brake_right_force).clamp(0., 1.) * pivot) as f32);
         }
-        if let Some(d) = r.parkbrake {
-            let hold = physics::park_brake_hold(
-                read(&ids.park_brake_lever) >= 0.5,
-                read(&ids.body_gear_brake_press[0]),
-                read(&ids.body_gear_brake_press[1]),
-            );
+        // Both names, so pushback plugins waiting for the brake to come off see it whichever
+        // one they read.
+        let hold = physics::park_brake_hold(
+            read(&ids.park_brake_lever) >= 0.5,
+            read(&ids.body_gear_brake_press[0]),
+            read(&ids.body_gear_brake_press[1]),
+        );
+        for d in [r.parkbrake, r.parking_brake_ratio].into_iter().flatten() {
             xplm.set_f(d, hold as f32);
         }
         // X-Plane's autobrake off (1), FlyByWire's autobrake braking through

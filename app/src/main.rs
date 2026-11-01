@@ -16,16 +16,15 @@
 
 mod chromium_fix;
 mod crash;
-mod font_metrics;
+pub(crate) use fbw_a380_systems::font_metrics;
 mod glass;
-mod gpu_share;
+pub(crate) use fbw_a380_systems::gpu_share;
 mod logging;
 mod plugin_route;
 mod renderer;
-mod runways;
 pub(crate) use fbw_a380_systems::charts;
 mod scheme;
-mod settings;
+pub(crate) use fbw_a380_systems::efb_settings as settings;
 mod tray;
 mod views;
 mod web;
@@ -222,6 +221,7 @@ fn main() {
         });
     }
 
+    gpu_share::set_logger(logging::log);
     web::start(shared.clone());
     window::watch_show_requests(SHOW_EVENT, shared.clone());
     window::watch_restart_displays();

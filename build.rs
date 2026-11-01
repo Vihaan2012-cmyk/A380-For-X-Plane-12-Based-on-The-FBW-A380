@@ -143,6 +143,10 @@ fn main() {
         .cargo_metadata(false)
         .compile("fbw_controllers");
     println!("cargo:rustc-link-search=native={}", out.display());
+    // A Mac dylib must resolve everything when it is linked, unlike a Linux one.
+    if std::env::var("CARGO_CFG_TARGET_OS").is_ok_and(|os| os == "macos") {
+        println!("cargo:rustc-link-lib=c++");
+    }
 }
 
 fn copy(from: &Path, to: &Path) {

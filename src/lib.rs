@@ -95,6 +95,7 @@ mod efb_native;
 mod oans_host;
 // crates/oans; `oans` alone is the AMDB module below.
 extern crate oans as oans_native;
+extern crate self as fbw_a380_systems;
 mod livery_identity;
 mod datalink_host;
 #[cfg(feature = "js")]
@@ -103,6 +104,7 @@ mod datalink_native_patches;
 mod spill_lights;
 mod cabin_option;
 mod flight_deck_view;
+mod light_spills;
 mod panel;
 mod study;
 mod throttle;
@@ -191,6 +193,16 @@ mod buffet;
 mod copilot;
 mod oit_files;
 pub mod charts;
+#[cfg(feature = "js")]
+pub mod browser_screens;
+#[cfg(windows)]
+pub mod gpu_share;
+pub mod efb_settings;
+pub mod efb_web;
+pub mod font_metrics;
+pub mod runways;
+pub mod stored_data;
+pub mod wmm;
 mod perf_cal;
 mod cabin_crew;
 mod brake_fire_fx;
@@ -215,7 +227,7 @@ mod sound;
 mod procedure_pack;
 mod sound_levels;
 mod sound_pack;
-// [slot modules: extra_backend] FlyByWire's extra backend: lighting and aircraft presets, pushback.
+// [slot modules: extra_backend] FlyByWire's extra backend: lighting and aircraft presets.
 mod extra_backend;
 // [slot modules: fcdc] FlyByWire's two FCDCs and the spoiler lever LVars (FlyByWireInterface updateFcdc, updateSpoilers).
 mod extra_backend_fcdc;
@@ -307,6 +319,10 @@ pub fn static_source_patches() -> Vec<source_patch::SourcePatch> {
     ];
     patches.extend(source_patch::amdb_fetch_patches());
     patches.extend(source_patch::flight_plan_backup_patches());
+    patches.extend(source_patch::rmp_start_frequency_patches());
+    patches.extend(source_patch::listener_error_patches());
+    patches.push(source_patch::mfd_dialog_height_patch());
+    patches.push(source_patch::rmp_start_brightness_patch());
     patches.extend(ecam_patches::source_patches());
     patches.extend(cds_reconf::source_patches());
     patches.extend(aircraft_options::source_patches());
@@ -1146,6 +1162,8 @@ fn mapping(name: &str) -> Option<(&'static str, Kind, fn(f64) -> f64)> {
         "GPS GROUND SPEED" => ("sim/flightmodel/position/groundspeed", Float, |v| v * MS_TO_KNOT),
         "GROUND VELOCITY" => ("sim/flightmodel/position/groundspeed", Float, |v| v * MS_TO_KNOT),
         "PUSHBACK ATTACHED" => ("sim/aircraft/overflow/pushback_attached", Int, identity),
+        // The code the RMP and MFD show. XPNDR_SET only writes X-Plane's, and nothing read it back.
+        "TRANSPONDER CODE:1" => ("sim/cockpit2/radios/actuators/transponder_code", Int, |v| key_events::code_to_bcd16(v as u32) as f64),
         "AIRSPEED MACH" => ("sim/flightmodel/misc/machno", Float, identity),
         "PRESSURE ALTITUDE" => (
             "sim/weather/aircraft/barometer_current_pas",
@@ -1451,6 +1469,7 @@ struct Plugin {
     replay: replay::Replay,
     cabin_option: cabin_option::CabinOption,
     flight_deck_view: flight_deck_view::FlightDeckView,
+    light_spills: light_spills::LightSpills,
     // [slot fields: flight_controls] X-Plane's control surfaces, driven by
     // FlyByWire's hydraulic actuators.
     flight_controls: flight_controls::FlightControls,
@@ -1479,7 +1498,7 @@ struct Plugin {
     // [slot fields: mapdata] The terrain worker's inputs and outputs, and TCAS targets.
     mapdata: mapdata::MapData,
     maintenance_log: maintenance_log::MaintenanceLog,
-    // [slot fields: efb] flyPad ground services, payload, refuel, pushback, settings.
+    // [slot fields: efb] flyPad ground services, payload, refuel, settings.
     efb: efb::Efb,
     gse: gse::Gse,
     // [slot fields: sound] FlyByWire's Wwise sounds, loaded and decoded off
@@ -1487,7 +1506,7 @@ struct Plugin {
     sound: sound::Sound,
     sound_pack: Option<sound_pack::SoundPack>,
     sound_levels: sound_levels::SoundLevels,
-    // [slot fields: extra_backend] Lighting presets, pushback, aircraft presets.
+    // [slot fields: extra_backend] Lighting presets, aircraft presets.
     extra_backend: extra_backend::ExtraBackend,
     // [slot fields: fcdc] FlyByWire's FCDCs 1 and 2 and the spoiler lever LVars.
     fcdc: extra_backend_fcdc::ExtraBackendFcdc,
@@ -1592,6 +1611,10 @@ pub(crate) struct WakingAxis {
 impl WakingAxis {
     pub(crate) fn read(&mut self, value: Option<f64>) -> Option<f64> {
         let v = value?;
+        Some(if self.woken(v) { v } else { 0. })
+    }
+
+    pub(crate) fn woken(&mut self, v: f64) -> bool {
         if !self.moved {
             match self.start {
                 None => self.start = Some(v),
@@ -1599,7 +1622,7 @@ impl WakingAxis {
                 Some(_) => {}
             }
         }
-        Some(if self.moved { v } else { 0. })
+        self.moved
     }
 }
 
@@ -2124,6 +2147,7 @@ impl Plugin {
             replay: replay::Replay::new(xplm),
             cabin_option: cabin_option::CabinOption::default(),
             flight_deck_view: flight_deck_view::FlightDeckView::default(),
+            light_spills: light_spills::LightSpills::default(),
             // [slot init: flight_controls]
             flight_controls,
             handling,
@@ -2454,11 +2478,6 @@ impl Plugin {
         // truth (docs/physics/adirs.md; patches/fbw-rust/navigation-sensors.patch).
         self.adirs_physics.update(&mut self.vars, xplm, delta, self.time);
         self.handling.inputs(&mut self.vars, xplm);
-        crate::perf::lap("tick-inputs: extra_backend");
-        // [slot tick-inputs: extra_backend] After the sensors' PUSHBACK STATE:
-        // FlyByWire's own tug.
-        self.extra_backend.inputs(&mut self.vars);
-
         // The engines first, so the systems see this tick's engines.
         let levers = self.throttles.update(xplm, delta);
         self.fadec.update(&mut self.vars, xplm, &levers, delta, self.time);
@@ -2732,6 +2751,10 @@ impl Plugin {
         // cabin" switch, into the dataref the cabin objects show by.
         self.cabin_option.update(xplm, delta);
         self.flight_deck_view.update(xplm);
+        self.light_spills.update(xplm);
+        display::device_grabs_on_request();
+        #[cfg(feature = "js")]
+        browser_screens::note_view(xplm);
         crate::perf::lap("tick-after-systems: flight_controls");
         // [slot tick-after-systems: flight_controls] The actuators have moved
         // this tick; X-Plane's surfaces follow.
@@ -2815,7 +2838,7 @@ impl Plugin {
         // [slot tick-after-systems: weight_balance] After the payload aspect and
         // the fuel have written this tick's weights.
         if !crate::xp_writes_skip("weight") {
-            self.weight_balance.update(&mut self.vars, xplm);
+            self.weight_balance.update(&mut self.vars, xplm, delta);
         }
         crate::perf::lap("tick-after-systems: doors");
         // [slot tick-after-systems: doors] The hydraulic cargo doors' clips.
@@ -2886,16 +2909,18 @@ impl Plugin {
             // both the plugin's own QuickJS cockpit and XPHFBW's views — a
             // double press (docs/deep/debug_mcdu.md).
             let was_active = self.xphfbw.as_ref().is_some_and(|h| h.displays_active());
-            crate::perf::lap("native: shadow");
-            native_shadow::tick(&mut self.vars, self.time);
-            crate::perf::lap("native: systems host");
-            native_systems_host::tick(&mut self.vars, self.time, &h_events);
-            crate::perf::lap("native: datalink");
-            datalink_native::tick(&mut self.vars, self.time);
-            h_events.extend(native_systems_host::take_h_events());
+            if app_settings::native_mode::any_native_work() {
+                crate::perf::lap("native: shadow");
+                native_shadow::tick(&mut self.vars, self.time);
+                crate::perf::lap("native: systems host");
+                native_systems_host::tick(&mut self.vars, self.time, &h_events);
+                crate::perf::lap("native: datalink");
+                datalink_native::tick(&mut self.vars, self.time);
+                h_events.extend(native_systems_host::take_h_events());
+                crate::perf::lap("native: fms + mfd host");
+                events.extend(native_fms_shadow::tick(&mut self.vars, self.time));
+            }
             app_settings::native_mode::show_notices();
-            crate::perf::lap("native: fms + mfd host");
-            events.extend(native_fms_shadow::tick(&mut self.vars, self.time));
             crate::perf::lap("native: screen feed");
             #[cfg(feature = "native-displays")]
             if self.xphfbw.as_ref().map_or(true, |h| h.gone()) {
@@ -2940,11 +2965,9 @@ impl Plugin {
             for (name, value) in events {
                 let name = name.trim_start_matches("K:");
                 crate::perf::lap("tick-after-systems: extra_backend #2");
-                // [slot tick-after-systems: extra_backend] ... the pushback tug its own,
                 // and key_events.rs every other K: event FlyByWire sends.
                 let handled = self.radios.handle_event(name, value, xplm)
                     || self.doors.handle_event(name, value)
-                    || self.extra_backend.handle_event(name, value)
                     // [slot tick-after-systems: fuel] FUELSYSTEM_PUMP_ON/OFF/
                     // TOGGLE clicks, routed to the native fuel network.
                     || self.fuel.as_mut().is_some_and(|f| f.handle_event(name, &[value]))
@@ -2970,7 +2993,6 @@ impl Plugin {
             let handled = self.key_events.handle_args(&mut self.vars, &name, &args)
                 || self.radios.handle_event(&name, value, xplm)
                 || self.doors.handle_event(&name, value)
-                || self.extra_backend.handle_event(&name, value)
                 // [slot tick-after-systems: fuel]
                 || self.fuel.as_mut().is_some_and(|f| f.handle_event(&name, &args));
             if !handled {
@@ -3048,6 +3070,8 @@ impl Plugin {
         }
         if cmds.restart_displays {
             xphfbw_datarefs::signal_restart_displays();
+            #[cfg(feature = "js")]
+            browser_screens::request_refresh();
         }
         if cmds.restart_app {
             log("XPHFBW: restart_app pressed; relaunching the systems backend");
@@ -3249,6 +3273,11 @@ fn set_session_tag(tag: String) {
     }
 }
 
+#[cfg(feature = "js")]
+fn set_session_tag_str(tag: &str) {
+    set_session_tag(tag.to_string());
+}
+
 pub(crate) fn session_tag() -> Option<String> {
     session_tag_cell().lock().ok().and_then(|g| g.clone())
 }
@@ -3267,7 +3296,7 @@ fn xphfbw_status(sim: &remote::Systems) -> xphfbw_datarefs::Status {
             },
             systems_late_ticks: r.stats.late.min(u32::MAX as u64) as u32,
         },
-        remote::Systems::Local(_) => xphfbw_datarefs::Status::default(),
+        _ => xphfbw_datarefs::Status { app_running: session_tag().is_some(), ..Default::default() },
     }
 }
 
@@ -3492,9 +3521,41 @@ fn start_systems(start_state: StartState, vars: &mut Vars) -> remote::Systems {
     const SERVER_EXE: &str = "fbw_a380_systems_server.exe";
     let env_in_process = std::env::var("FBW_SYSTEMS_IN_PROCESS").is_ok_and(|v| v == "1");
     let out_of_process = app_settings::systems_out_of_process() && !env_in_process;
+    #[cfg(feature = "js")]
+    let browser = browser_screens::enabled();
+    #[cfg(feature = "js")]
+    if browser {
+        set_session_tag(format!("browser_{}", std::process::id()));
+    }
+    #[cfg(feature = "js")]
+    if browser && std::env::var("FBW_SYSTEMS_IN_PROCESS").map_or(true, |v| v != "0") {
+        match remote::client::RemoteSystems::on_thread(start_state, vars, set_session_tag_str) {
+            Ok(r) => {
+                log(&format!("systems: running on a thread of the plugin, {} variables shared, in lockstep with the frame", r.variable_count()));
+                return remote::Systems::Remote(r);
+            }
+            Err(e) => {
+                log(&format!("systems: {e}; running them on the main thread"));
+                return remote::Systems::local(start_state, vars);
+            }
+        }
+    }
     if out_of_process {
         #[cfg(feature = "js")]
         if let Some(dir) = js_bridge::plugin_dir() {
+            if browser {
+                let exe = dir.join("64").join(SERVER_EXE);
+                match start_headless_systems(&exe, start_state, vars) {
+                    Ok(r) => {
+                        log(&format!("systems process: running, {} variables shared, for screens in X-Plane's browser", r.variable_count()));
+                        return remote::Systems::Remote(r);
+                    }
+                    Err(e) => {
+                        log(&format!("systems process: {e}; running the systems in the plugin"));
+                        return remote::Systems::local(start_state, vars);
+                    }
+                }
+            }
             let xphfbw_exe = dir.join("XPHFBW").join("XPHFBW.exe");
             let aircraft_dir = dir.parent().and_then(|p| p.parent()).map(|p| p.to_path_buf());
             if !app_settings::native_mode::cef_wanted(aircraft_dir.as_deref()) {
@@ -3520,7 +3581,7 @@ fn start_systems(start_state: StartState, vars: &mut Vars) -> remote::Systems {
             }
         }
     }
-    remote::Systems::Local(Box::new(Simulation::new(start_state, A380::new, vars)))
+    remote::Systems::local(start_state, vars)
 }
 
 /// Start XPHFBW.exe (`XPHFBW.exe <tag> <X-Plane pid> --xp-root=<X-Plane
@@ -3530,11 +3591,11 @@ fn start_systems(start_state: StartState, vars: &mut Vars) -> remote::Systems {
 /// session with it.
 #[cfg(feature = "js")]
 #[cfg(not(windows))]
-fn set_gpu_preference(_exe: &std::path::Path, _integrated: bool) {}
+pub(crate) fn set_gpu_preference(_exe: &std::path::Path, _integrated: bool) {}
 
 #[cfg(feature = "js")]
 #[cfg(windows)]
-fn set_gpu_preference(exe: &std::path::Path, integrated: bool) {
+pub(crate) fn set_gpu_preference(exe: &std::path::Path, integrated: bool) {
     use std::os::windows::process::CommandExt;
     const KEY: &str = r"HKCU\Software\Microsoft\DirectX\UserGpuPreferences";
     let path = exe.to_string_lossy().replace('/', "\\");
@@ -3548,6 +3609,23 @@ fn set_gpu_preference(exe: &std::path::Path, integrated: bool) {
     if integrated || ok {
         log(&format!("XPHFBW: screens drawn on the {} ({})", if integrated { "integrated graphics" } else { "graphics card" }, if ok { "set" } else { "could not set" }));
     }
+}
+
+#[cfg(feature = "js")]
+#[cfg(feature = "js")]
+fn start_headless_systems<V: VariableRegistry + SimulatorReaderWriter>(exe: &std::path::Path, state: StartState, vars: &mut V) -> Result<remote::client::RemoteSystems, String> {
+    let exe = exe.to_path_buf();
+    remote::client::RemoteSystems::connect(state, vars, move |tag| {
+        set_session_tag(tag.to_string());
+        let mut cmd = std::process::Command::new(&exe);
+        cmd.arg(tag).arg(std::process::id().to_string());
+        #[cfg(windows)]
+        {
+            use std::os::windows::process::CommandExt;
+            cmd.creation_flags(0x0800_0000);
+        }
+        cmd.spawn().map(Some).map_err(|e| format!("cannot start {}: {e}", exe.display()))
+    })
 }
 
 #[cfg(feature = "js")]
@@ -3784,8 +3862,11 @@ pub unsafe extern "C" fn XPluginStart(
     let Some(xplm) = Xplm::load() else { return 0 };
     let xplm_ref = &raw mut XPLM;
     *xplm_ref = Some(xplm);
+    #[cfg(not(windows))]
+    xp::use_native_paths();
     diag::start();
-    log("starting");
+    log(&format!("starting on {} {}, X-Plane at {:?}", std::env::consts::OS, std::env::consts::ARCH, xp::system_path()));
+    browser_screens::prepare_chromium();
     if let Some(dir) = diag::dir() {
         log(&format!("diagnostics capture is on: {}", dir.display()));
     }
@@ -3799,6 +3880,7 @@ pub unsafe extern "C" fn XPluginEnable() -> c_int {
     let xplm = &raw const XPLM;
     let Some(xplm) = (*xplm).as_ref() else { return 0 };
     flight_deck_view::register();
+    light_spills::register();
     // On a large stack: the systems no longer fit X-Plane's main-thread
     // stack while they are built (big_stack.rs). Boxed, so the finished
     // aircraft is not copied back across stack frames.
@@ -3840,6 +3922,7 @@ pub unsafe extern "C" fn XPluginDisable() {
     panel::stop();
     xp::unregister_owned();
     flight_deck_view::forget();
+    light_spills::forget();
     let xplm = &raw const XPLM;
     if let Some(xplm) = (*xplm).as_ref() {
         xplm.unregister_loop(flight_loop);
@@ -3862,7 +3945,6 @@ pub unsafe extern "C" fn XPluginDisable() {
             // (`radios::Radios::release`, `override_autotune`).
             plugin.radios.release(xplm);
             // [slot release: extra_backend]
-            plugin.extra_backend.release();
             // [slot release: sound] Stops whatever is still looping.
             plugin.sound.release();
             plugin.sound_levels.release();

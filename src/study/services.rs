@@ -5,7 +5,7 @@
 //!   the breaker is closed; a red mark shows a closed breaker whose circuit
 //!   has no power.
 //! - **Ground Services:** the flyPad ground services (efb.rs commands), the
-//!   tug, and consumables servicing (oxygen, oxygen.rs), with the live
+//!   consumables servicing (oxygen, oxygen.rs), with the live
 //!   quantities: oxygen, fuel temperatures, jettison.
 
 use std::collections::BTreeMap;
@@ -101,19 +101,6 @@ pub fn ground(cv: &mut Canvas) {
     cv.text_px(l + 10, y - lh, p::INK, FONT_BASIC, &format!("GPU connected: {}", on_off(gpu)));
     y -= lh + 14;
 
-    cv.text_px(l + 10, y - lh, p::INK, FONT_BASIC, "Pushback");
-    y -= lh + 8;
-    let tug: [(&str, Action); 3] = [
-        ("Call tug", Action::Command("fbw/efb/pushback/call_tug")),
-        ("Release tug", Action::Command("fbw/efb/pushback/release_tug")),
-        ("Stop", Action::Command("fbw/efb/pushback/stop")),
-    ];
-    for (i, (label, action)) in tug.iter().enumerate() {
-        let x = l + 10 + i as c_int * (w + 8);
-        cv.button_px(x, y, x + w, y - row_h + 4, label, false, *action);
-    }
-    y -= row_h + 10;
-
     cv.text_px(l + 10, y - lh, p::INK, FONT_BASIC, "Servicing");
     y -= lh + 8;
     cv.button_px(l + 10, y, l + 10 + w, y - row_h + 4, "Service oxygen", false, Action::ServiceOxygen);
@@ -172,11 +159,6 @@ pub(super) fn door_tiles() -> Vec<(String, String, String)> {
             (label, format!("fbw/door/{name}/toggle"), format!("INTERACTIVE POINT OPEN:{i}"))
         })
         .collect()
-}
-
-/// The pushback buttons.
-pub(super) fn tug_buttons() -> Vec<(&'static str, &'static str)> {
-    vec![("Call tug", "fbw/efb/pushback/call_tug"), ("Release tug", "fbw/efb/pushback/release_tug"), ("Stop", "fbw/efb/pushback/stop")]
 }
 
 /// The live quantities the ground services page shows below its buttons.

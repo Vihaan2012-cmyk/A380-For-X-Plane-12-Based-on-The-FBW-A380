@@ -1,0 +1,19 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><style>
+html,body{margin:0;padding:0;width:100%;height:100%;overflow:hidden;background:#000}
+svg{position:absolute;left:0;top:0}
+text{font:22px monospace;fill:#0f0}
+</style></head><body><svg id="s" width="768" height="1024" viewBox="0 0 768 1024"></svg>
+<script>
+const NS='http://www.w3.org/2000/svg';
+const s=document.getElementById('s');
+const g=document.createElementNS(NS,'g');s.appendChild(g);
+for(let i=0;i<40;i++){for(let j=0;j<10;j++){
+ const t=document.createElementNS(NS,'text');t.setAttribute('x',-300+j*90);t.setAttribute('y',-500+i*28);t.textContent=(i*j+100)+'';g.appendChild(t);
+}}
+const p=document.createElementNS(NS,'path');p.setAttribute('d','M-800 0 L800 0 L800 900 L-800 900 Z');p.setAttribute('fill','#553311');g.insertBefore(p,g.firstChild);
+const st=document.createElementNS(NS,'g');s.appendChild(st);st.innerHTML='<rect x="0" y="0" width="420" height="96" fill="#000"/><text x="8" y="26" style="font:bold 20px sans-serif;fill:#0f0">FL 340 HDG 157 SPD 250 ILS</text><text x="8" y="52" style="font:14px sans-serif;fill:#fff">The quick brown fox 0123456789</text><path d="M8 66 H400 M8 76 H400" stroke="#0ff" stroke-width="1"/>';
+let a=0;
+function f(){a=(a+0.7)%360;g.setAttribute('transform','translate(384 512) rotate('+a.toFixed(1)+')');requestAnimationFrame(f);}
+f();
+</script></body></html>

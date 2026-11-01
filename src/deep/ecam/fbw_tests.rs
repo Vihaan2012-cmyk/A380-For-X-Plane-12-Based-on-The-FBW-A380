@@ -1265,3 +1265,27 @@ fn flaps_and_slats_locked_fire_once_the_wingtip_brake_actually_engages() {
     let cold = run(Truth { dt_s: 0.1, ..Truth::default() }, &Faults::from_pairs([(flap_l_runaway, 1.0)]), 150);
     assert!(!holds(&flaps_locked.trigger, &cold), "F/CTL FLAPS LOCKED must stay quiet cold and dark");
 }
+
+/// Which wired alerts a saved `/vars` reply from a flight would raise, with the phase
+/// lists left out: FBW_ALERT_SNAPSHOT is the file.
+#[test]
+#[ignore]
+fn alerts_in_a_saved_flight_snapshot() {
+    let path = std::env::var("FBW_ALERT_SNAPSHOT").expect("FBW_ALERT_SNAPSHOT");
+    let reply: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(path).unwrap()).unwrap();
+    let vars = reply["vars"].as_object().unwrap();
+    let read = |name: &str| -> f64 {
+        let name = name.strip_prefix("L:").unwrap_or(name);
+        vars.get(name).or_else(|| vars.get(&format!("A32NX_{name}"))).and_then(|v| v.as_f64()).unwrap_or(0.)
+    };
+    for p in fbw::wirings() {
+        if p.trigger.eval(&read) {
+            println!("fbw {} {} inhibit {:?} confirm {}", p.id, p.title, p.inhibit, p.confirm_s);
+        }
+    }
+    for a in crate::deep::registry().alerts {
+        if a.trigger.eval(&read) {
+            println!("registry {} {:?}", a.key, a.title);
+        }
+    }
+}

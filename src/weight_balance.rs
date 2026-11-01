@@ -66,12 +66,25 @@ pub struct WeightBalance {
     gross_kg: Value,
     /// Last CG offset handed to X-Plane, so the log speaks on a real move.
     last_offset_m: f64,
+    /// What X-Plane has been given so far: these follow the loadsheet at a rate.
+    applied_payload_kg: Option<f64>,
+    applied_offset_m: Option<f64>,
     /// Last total weight reported, so the log speaks when the load changes.
     last_total_lb: f64,
     /// Whether FlyByWire has ever published a payload, so its silent zero is
     /// never mistaken for an empty aircraft.
     payload_reported: bool,
     cg_z_ft: Value,
+}
+
+/// How fast X-Plane's masses and balance point follow a change, per tank or for the payload.
+/// An instant load arriving in one frame rocks the aircraft on its gear: 66 t of fuel leaving
+/// at once pushed it past 1 kt on its chocks.
+pub const MASS_SLEW_KG_S: f64 = 3000.;
+const CG_SLEW_M_S: f64 = 0.1;
+
+pub fn slew_toward(from: f64, target: f64, max_step: f64) -> f64 {
+    from + (target - from).clamp(-max_step, max_step)
 }
 
 impl WeightBalance {
@@ -116,6 +129,8 @@ impl WeightBalance {
             gross_kg,
             cg_z_ft,
             last_offset_m: f64::NEG_INFINITY,
+            applied_payload_kg: None,
+            applied_offset_m: None,
             last_total_lb: f64::NEG_INFINITY,
             payload_reported: false,
         }
@@ -123,7 +138,7 @@ impl WeightBalance {
 
     /// After the systems, the aspects and the fuel have written this tick's
     /// weights.
-    pub fn update(&mut self, vars: &mut Vars, xplm: &Xplm) {
+    pub fn update(&mut self, vars: &mut Vars, xplm: &Xplm, delta: f64) {
         let b = &self.balance;
         // See `corrected_empty`'s doc comment: anchor the empty mass on the
         // .acf's own declared reference point, not the cfg's raw (and on
@@ -230,7 +245,12 @@ impl WeightBalance {
                 }
                 xplm.set_vf(d, &kg);
             }
-            (_, _, Some(d)) => xplm.set_f(d, payload_kg as f32),
+            (_, _, Some(d)) => {
+                let was = *self.applied_payload_kg.get_or_insert_with(|| xplm.get_f(d) as f64);
+                let now = slew_toward(was, payload_kg, MASS_SLEW_KG_S * delta);
+                self.applied_payload_kg = Some(now);
+                xplm.set_f(d, now as f32);
+            }
             _ => {}
         }
         if let (Some(d), Some(reference), true) = (self.cg_offset_z.filter(|_| !skip_cg), reference_ft, total_lb > 0.) {
@@ -251,7 +271,9 @@ impl WeightBalance {
                     stations_lb.iter().map(|v| v.round() as i64).collect::<Vec<_>>()
                 ));
             }
-            xplm.set_f(d, offset as f32);
+            let applied = self.applied_offset_m.map_or(offset, |was| slew_toward(was, offset, CG_SLEW_M_S * delta));
+            self.applied_offset_m = Some(applied);
+            xplm.set_f(d, applied as f32);
         }
         published::set(self.payload_kg, payload_kg);
         published::set(self.gross_kg, total_lb * LB_TO_KG);
@@ -262,6 +284,14 @@ impl WeightBalance {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_load_reaches_xplane_at_a_rate() {
+        assert_eq!(slew_toward(100., 40., 25.), 75.);
+        assert_eq!(slew_toward(100., 140., 25.), 125.);
+        assert_eq!(slew_toward(100., 110., 25.), 110.);
+        assert_eq!(slew_toward(100., 40., 0.), 100., "paused");
+    }
 
     #[test]
     fn the_cfg_balance_is_read_whole() {

@@ -25,6 +25,7 @@ const SYSTEMS_HOST: &str = "/Pages/VCockpit/Instruments/A380X/SystemsHost/System
 const MFD: &str = "/Pages/VCockpit/Instruments/A380X/MFD/mfd.js";
 const PFD: &str = "/Pages/VCockpit/Instruments/A380X/PFD/pfd.js";
 const EWD: &str = "/Pages/VCockpit/Instruments/A380X/EWD/ewd.js";
+const ND: &str = "/Pages/VCockpit/Instruments/A380X/ND/nd.js";
 
 pub fn source_patches() -> Vec<SourcePatch> {
     let mut patches = vec![
@@ -36,14 +37,127 @@ pub fn source_patches() -> Vec<SourcePatch> {
         ecam_003_pack_fault_door_and_ground(),
         ecam_011_012_elec_galley_pax_sys_off(),
         ecam_015_rudder_fault(),
+        arpt_nav_needs_an_aligned_ir(),
+        no_fws_fault_while_it_boots(),
+        log_presented_alerts(),
         door_main_1l_latch_sensor(),
         ecam_014_engines_off_and_on_ground_uses_core_speed(),
         inst_009_pfd_spoiler_indication_max_of_all_panels(),
         inst_010_ewd_egt_not_clamped_to_850(),
         inst_010_ewd_egt_digits_not_clamped_to_850(),
+        ewd_letter_width(),
+        ewd_title_box_around_its_text(),
+        ewd_underline_ends_with_its_text(),
+        ewd_long_title_condensed(),
+        ewd_title_line_width(),
+        ewd_long_line_kept_on_one_row(),
+        ewd_long_line_text_whole(),
+        ewd_generated_line_text_whole(),
+        ewd_fallback_line_kept_on_one_row(),
+        oans_fms_button_label("origin", "ORIGIN"),
+        oans_fms_button_label("destination", "DEST"),
+        oans_fms_button_label("alternate", "ALTN"),
     ];
     patches.extend(ecl::source_patches());
     patches
+}
+
+/// EWD text advances 16.797 px a letter: the font's 15.047 at 24 px plus the
+/// stylesheet's 1.75 px letter-spacing.
+fn ewd_letter_width() -> SourcePatch {
+    SourcePatch {
+        path: EWD.to_string(),
+        find: "const LETTER_WIDTH = 16;".to_string(),
+        replace: r#"const LETTER_WIDTH = Math.min(16.797, 690 / Math.max(1, ...message.replace(/\x1B[^m]*m/g, "").split("\r").map((l) => l.length)));"#.to_string(),
+        reason: "FormattedFwcText places boxes and underlines at 16 px a letter, so boxed titles \
+                 such as ENG TWO ENG OUT ON SAME SIDE ran through the right side of their box"
+            .to_string(),
+    }
+}
+
+fn ewd_title_box_around_its_text() -> SourcePatch {
+    SourcePatch {
+        path: EWD.to_string(),
+        find: "`M ${this.props.x + startCol * LETTER_WIDTH}\n                                ${this.props.y + yOffset - 22} h ${(col - startCol) * LETTER_WIDTH + 12} v 27 h ${-((col - startCol) * LETTER_WIDTH + 12)} v -27`".to_string(),
+        replace: "`M ${this.props.x + startCol * LETTER_WIDTH - 4} ${this.props.y + yOffset - 22} h ${(col - startCol) * LETTER_WIDTH + 6} v 27 h ${-((col - startCol) * LETTER_WIDTH + 6)} v -27`".to_string(),
+        reason: "with the true letter width the box needs the same margin either side of its text".to_string(),
+    }
+}
+
+fn ewd_underline_ends_with_its_text() -> SourcePatch {
+    SourcePatch {
+        path: EWD.to_string(),
+        find: "h ${(col - startCol) * LETTER_WIDTH + 5}`".to_string(),
+        replace: "h ${(col - startCol) * LETTER_WIDTH + 2}`".to_string(),
+        reason: "keeps underlines the length they were on short words with the true letter width".to_string(),
+    }
+}
+
+/// A title too long for the line: letters closer together, so it still fits.
+fn ewd_long_title_condensed() -> SourcePatch {
+    SourcePatch {
+        path: EWD.to_string(),
+        find: "            UI.mount(s, e);\n          });\n          this.linesRef.target.appendChild(e);\n          yOffset += LINE_SPACING;\n        }\n      }, true);".to_string(),
+        replace: "            UI.mount(s, e);\n          });\n          if (LETTER_WIDTH < 16.797) e.querySelectorAll(\"tspan\").forEach((t) => { t.style.letterSpacing = (LETTER_WIDTH - 15.047) + \"px\"; });\n          this.linesRef.target.appendChild(e);\n          yOffset += LINE_SPACING;\n        }\n      }, true);".to_string(),
+        reason: "20 of FlyByWire's titles are longer than the line and ran off its right side".to_string(),
+    }
+}
+
+fn ewd_title_line_width() -> SourcePatch {
+    SourcePatch {
+        path: EWD.to_string(),
+        find: "width: \"680\",\n            height: \"33\",\n            style: {\n              display: this.props.data.derive(".to_string(),
+        replace: "width: \"705\",\n            height: \"33\",\n            style: {\n              display: this.props.data.derive(".to_string(),
+        reason: "a title's line was 680 px wide in a row of 706".to_string(),
+    }
+}
+
+/// A procedure line longer than the row: smaller, on its one row.
+fn ewd_long_line_kept_on_one_row() -> SourcePatch {
+    SourcePatch {
+        path: EWD.to_string(),
+        find: "class: \"EclLineText\",\n            style: {\n              display:".to_string(),
+        replace: "class: \"EclLineText\",\n            style: {\n              \"white-space\": \"nowrap\",\n              \"font-size\": this.props.data.derive((d) => d.text.length > 40 ? (26 * 40 / d.text.length).toFixed(1) + \"px\" : \"26px\"),\n              display:".to_string(),
+        reason: "lines longer than the row were cut off, some losing the end of their instruction".to_string(),
+    }
+}
+
+fn ewd_long_line_text_whole() -> SourcePatch {
+    SourcePatch {
+        path: EWD.to_string(),
+        find: "this.props.data.derive((d) => d.text.substring(0, 39))".to_string(),
+        replace: "this.props.data.derive((d) => d.text)".to_string(),
+        reason: "the whole line, now that a long one shrinks to fit".to_string(),
+    }
+}
+
+fn ewd_generated_line_text_whole() -> SourcePatch {
+    SourcePatch {
+        path: EWD.to_string(),
+        find: "text: text.substring(0, WD_LINE_CHARACTERS - 1),".to_string(),
+        replace: "text,".to_string(),
+        reason: "the whole line, now that a long one shrinks to fit".to_string(),
+    }
+}
+
+/// With no flight plan the store holds an empty string, not null, so FlyByWire's
+/// `??` left the OANS airport buttons blank.
+fn oans_fms_button_label(field: &str, label: &str) -> SourcePatch {
+    SourcePatch {
+        path: ND.to_string(),
+        find: format!("this.fmsDataStore.{field}.derive((it) => it != null ? it : \"{label}\")"),
+        replace: format!("this.fmsDataStore.{field}.derive((it) => it ? it : \"{label}\")"),
+        reason: format!("the OANS {label} button was blank with no flight plan"),
+    }
+}
+
+fn ewd_fallback_line_kept_on_one_row() -> SourcePatch {
+    SourcePatch {
+        path: EWD.to_string(),
+        find: "UI.node(\"span\", { class: \"EclLineText smaller\" }, this.props.text)".to_string(),
+        replace: "UI.node(\"span\", { class: \"EclLineText smaller\", style: \"white-space:nowrap;letter-spacing:-0.6px\" }, this.props.text)".to_string(),
+        reason: "the FWS fault checklist's long lines wrapped onto the line below".to_string(),
+    }
 }
 
 /// #9 / INST-005 (FmcAircraftInterface.ts:635): the FMS's own V-speeds-too-low
@@ -277,6 +391,36 @@ fn door_main_1l_latch_sensor() -> SourcePatch {
     }
 }
 
+fn no_fws_fault_while_it_boots() -> SourcePatch {
+    SourcePatch {
+        path: "/Pages/VCockpit/Instruments/A380X/EWD/ewd.js".to_string(),
+        find: "if (!(this.onGround.get() && this.groundspeed.get() >= 50)) {".to_string(),
+        replace: "if (!(this.onGround.get() && this.groundspeed.get() >= 50) && Vars.read(\"L:A380X_FWS_CORE_STARTUP_COMPLETED\", \"bool\")) {".to_string(),
+        reason: "FWS 1+2 FAULT filled the EWD for the minute the FWS takes to start on a cold aircraft; that is not a fault".to_string(),
+    }
+}
+
+fn arpt_nav_needs_an_aligned_ir() -> SourcePatch {
+    SourcePatch {
+        path: SYSTEMS_HOST.to_string(),
+        find: "      this.oansPposLost.set(this.oansPposLostSimVar.get());".to_string(),
+        replace: "      this.oansPposLost.set(this.oansPposLostSimVar.get() && [1, 2, 3].some((n) => Vars.read(`L:A32NX_ADIRS_ADIRU_${n}_STATE`, \"number\") === 2));".to_string(),
+        reason: "ARPT NAV FAULT came up on every cold start: the OANS has no position until an IR has aligned, and that is not a fault".to_string(),
+    }
+}
+
+fn log_presented_alerts() -> SourcePatch {
+    SourcePatch {
+        path: SYSTEMS_HOST.to_string(),
+        find: "      this.presentedFailures.push(...failureKeys);".to_string(),
+        replace: "      this.presentedFailures.push(...failureKeys);\n      \
+                  { const keys = failureKeys.join(\",\"); if (keys !== this.loggedFailureKeys) { this.loggedFailureKeys = keys; \
+                  if (globalThis.__xphfbw && globalThis.__xphfbw.log) globalThis.__xphfbw.log(0, \"ecam shows: \" + \
+                  (failureKeys.map((k) => k + \" \" + ((EcamAbnormalProcedures[k] && EcamAbnormalProcedures[k].title) || \"\").replace(/\\x1b<?\\d*m/g, \"\")).join(\"; \") || \"nothing\")); } }".to_string(),
+        reason: "the log says which alerts the crew saw and when, for every flight".to_string(),
+    }
+}
+
 fn ecam_015_rudder_fault() -> SourcePatch {
     SourcePatch {
         path: SYSTEMS_HOST.to_string(),
@@ -288,12 +432,15 @@ fn ecam_015_rudder_fault() -> SourcePatch {
                   Vars.read(\"L:A32NX_UPPER_RUDDER_YELLOW_EBHA_ELECTRIC_MODE_SOLENOID_ENERGIZED\", \"bool\") === 1 || \
                   Vars.read(\"L:A32NX_UPPER_RUDDER_GREEN_EBHA_HYDRAULIC_MODE_SOLENOID_ENERGIZED\", \"bool\") === 1 || \
                   Vars.read(\"L:A32NX_UPPER_RUDDER_GREEN_EBHA_ELECTRIC_MODE_SOLENOID_ENERGIZED\", \"bool\") === 1;\n      \
-                  this.upperRudderFault.set(!upperRudderActive);\n      \
+                  const rudderHydAvail = !this.aircraftOnGround.get() || \
+                  (Vars.read(\"L:A32NX_HYD_GREEN_SYSTEM_1_SECTION_PRESSURE_SWITCH\", \"bool\") === 1 && \
+                  Vars.read(\"L:A32NX_HYD_YELLOW_SYSTEM_1_SECTION_PRESSURE_SWITCH\", \"bool\") === 1);\n      \
+                  this.upperRudderFault.set(rudderHydAvail && !upperRudderActive);\n      \
                   const lowerRudderActive = Vars.read(\"L:A32NX_LOWER_RUDDER_GREEN_EBHA_HYDRAULIC_MODE_SOLENOID_ENERGIZED\", \"bool\") === 1 || \
                   Vars.read(\"L:A32NX_LOWER_RUDDER_GREEN_EBHA_ELECTRIC_MODE_SOLENOID_ENERGIZED\", \"bool\") === 1 || \
                   Vars.read(\"L:A32NX_LOWER_RUDDER_YELLOW_EBHA_HYDRAULIC_MODE_SOLENOID_ENERGIZED\", \"bool\") === 1 || \
                   Vars.read(\"L:A32NX_LOWER_RUDDER_YELLOW_EBHA_ELECTRIC_MODE_SOLENOID_ENERGIZED\", \"bool\") === 1;\n      \
-                  this.lowerRudderFault.set(!lowerRudderActive);\n      \
+                  this.lowerRudderFault.set(rudderHydAvail && !lowerRudderActive);\n      \
                   this.flapsLeverNotZero.set("
             .to_string(),
         reason: "lowerRudderFault/upperRudderFault were dead code (`// this.lowerRudderFault.set();`, \

@@ -227,7 +227,8 @@ const NO_EXCEEDANCES: Exceedances = Exceedances {
 };
 
 /// Bleed flows below this are the pneumatic model settling, not a draw.
-const BLEED_NOISE_KG_S: f64 = 0.01;
+/// Oil pressure lags the core through a start and a shutdown.
+const LOW_OIL_HOLD_S: f64 = 10.0;
 
 /// EASA.E.012 Note 16's TGT trim: the EEC shows the measured TGT less a
 /// pre-determined amount. The data sheet gives that amount only through its
@@ -259,7 +260,8 @@ pub struct Exceedances {
     pub hp_overspeed: u32,
     pub ip_overspeed: u32,
     pub lp_overspeed: u32,
-    /// Customer bleed above section 10's maximum for the port and T41.
+    /// No longer counted: at idle the packs draw about the data sheet's
+    /// limit for the core flow there, which is not something a crew did.
     pub customer_bleed: u32,
 }
 
@@ -279,6 +281,16 @@ pub struct EngineWear {
     in_exceedance: [bool; 10],
     #[serde(skip)]
     seconds_ip_overspeed: f64,
+    #[serde(skip)]
+    seconds_low_oil: f64,
+    #[serde(skip)]
+    seconds_hp_overspeed: f64,
+    #[serde(skip)]
+    seconds_lp_overspeed: f64,
+    /// Saved counters came from these limits as they are now. Older ones
+    /// counted every flicker at idle and every start, so they are dropped once.
+    #[serde(default)]
+    exceedances_audited: bool,
     /// Derived, saturating function of `creep_life_fraction` (1.0 once
     /// [`Self::fod_ingested`]), shown on the Study engine pages. Display
     /// only: the engine model's gas path does not read this number; its
@@ -375,6 +387,10 @@ impl EngineWear {
     /// triggered it, so *why* it accumulated stays visible instead of
     /// silently vanishing.
     fn plausibility_checked(mut self, engine: usize) -> (Self, Option<String>) {
+        if !self.exceedances_audited {
+            self.exceedances = NO_EXCEEDANCES;
+            self.exceedances_audited = true;
+        }
         if !(self.creep_life_fraction > 0.0) {
             return (self, None);
         }
@@ -438,6 +454,10 @@ impl Default for EngineWear {
             exceedances: NO_EXCEEDANCES,
             in_exceedance: [false; 10],
             seconds_ip_overspeed: 0.0,
+            seconds_low_oil: 0.0,
+            seconds_hp_overspeed: 0.0,
+            seconds_lp_overspeed: 0.0,
+            exceedances_audited: true,
         }
     }
 }
@@ -449,8 +469,6 @@ pub struct Damage {
     /// Displayed (trimmed) TGT, `ENGINE_EGT:n`, held to the limits the
     /// data sheet states only on that scale (start, relight).
     egt_displayed: [VariableIdentifier; 4],
-    bleed_flow: [VariableIdentifier; 4],
-    bleed_limit: [VariableIdentifier; 4],
     tla: [VariableIdentifier; 4],
     n1: [VariableIdentifier; 4],
     n2: [VariableIdentifier; 4],
@@ -577,8 +595,6 @@ impl Damage {
         Self {
             egt: std::array::from_fn(|i| vars.get(format!("ENGINE_EGT_UNTRIMMED:{}", i + 1))),
             egt_displayed: std::array::from_fn(|i| vars.get(format!("ENGINE_EGT:{}", i + 1))),
-            bleed_flow: std::array::from_fn(|i| vars.get(format!("ENGINE_BLEED_EXTRACTION_KG_S:{}", i + 1))),
-            bleed_limit: std::array::from_fn(|i| vars.get(format!("ENGINE_BLEED_LIMIT_KG_S:{}", i + 1))),
             tla: std::array::from_fn(|i| vars.get(format!("A32NX_AUTOTHRUST_TLA:{}", i + 1))),
             n1: std::array::from_fn(|i| vars.get(format!("ENGINE_N1:{}", i + 1))),
             n2: std::array::from_fn(|i| vars.get(format!("ENGINE_N2:{}", i + 1))),
@@ -863,8 +879,6 @@ impl Damage {
                 continue;
             }
             let egt = vars.read(&self.egt_displayed[n]);
-            let bleed = vars.read(&self.bleed_flow[n]);
-            let bleed_limit = vars.read(&self.bleed_limit[n]);
             let (n1, n2, n3) = (
                 vars.read(&self.n1[n]),
                 crate::engine_commands::real_core_pct(vars.read(&self.n2[n])),
@@ -883,26 +897,23 @@ impl Damage {
             } else {
                 e.seconds_ip_overspeed = 0.0;
             }
+            let low_oil = running
+                && ((n3 < trent900::OIL_PRESS_LOW_BAND_HP_PCT && oil_press < trent900::OIL_PRESS_MIN_LOW_PSI)
+                    || (n3 > trent900::OIL_PRESS_HIGH_BAND_HP_PCT && oil_press < trent900::OIL_PRESS_MIN_HIGH_PSI));
+            let low_oil = sustained(&mut e.seconds_low_oil, low_oil, delta, LOW_OIL_HOLD_S);
+            let hp_over = sustained(&mut e.seconds_hp_overspeed, n3 > trent900::HP_TAKEOFF_MAX_PCT, delta, OVERSPEED_HOLD_S);
+            let lp_over = sustained(&mut e.seconds_lp_overspeed, n1 > trent900::LP_TAKEOFF_MAX_PCT, delta, OVERSPEED_HOLD_S);
             let data = crate::physics::engine::engine_data::EngineData::current();
             let conditions = [
                 (on_ground && starting && n3 < data.start_limit_hp_pct && egt > data.ground_start_limit_physical_c(), "ground start EGT above the start limit"),
                 (!on_ground && starting && egt > data.relight_limit_physical_c(), "in-flight relight EGT above the relight limit"),
-                (
-                    running
-                        && ((n3 < trent900::OIL_PRESS_LOW_BAND_HP_PCT && oil_press < trent900::OIL_PRESS_MIN_LOW_PSI)
-                            || (n3 > trent900::OIL_PRESS_HIGH_BAND_HP_PCT && oil_press < trent900::OIL_PRESS_MIN_HIGH_PSI)),
-                    "oil pressure below minimum",
-                ),
+                (low_oil, "oil pressure below minimum"),
                 (starting && oil_temp < trent900::OIL_TEMP_MIN_START_C, "start with oil below -30 C (Special Starting procedure required; -40 C is the absolute minimum)"),
                 (running && on_ground && n1 > 80.0 && oil_temp < trent900::OIL_TEMP_MIN_TAKEOFF_C, "take-off power with oil below 40 C"),
                 (oil_temp > trent900::OIL_TEMP_MAX_C, "oil temperature above 196 C"),
-                (n3 > trent900::HP_TAKEOFF_MAX_PCT, "HP speed above 97.8%"),
+                (hp_over, "HP speed above 97.8%"),
                 (e.seconds_ip_overspeed > trent900::IP_OVERSPEED_LIMIT_S, "IP over-speed above 99.5% for more than 20 s"),
-                (n1 > trent900::LP_TAKEOFF_MAX_PCT, "LP speed above 97.2%"),
-                (
-                    running && bleed > BLEED_NOISE_KG_S && bleed > bleed_limit,
-                    "customer bleed above the data sheet's maximum for its port and turbine entry temperature",
-                ),
+                (lp_over, "LP speed above 97.2%"),
             ];
             for (k, (holds, what)) in conditions.into_iter().enumerate() {
                 if holds && !e.in_exceedance[k] {
@@ -917,9 +928,8 @@ impl Damage {
                         &mut x.hp_overspeed,
                         &mut x.ip_overspeed,
                         &mut x.lp_overspeed,
-                        &mut x.customer_bleed,
                     ];
-                    *counter.into_iter().nth(k).expect("ten counters") += 1;
+                    *counter.into_iter().nth(k).expect("nine counters") += 1;
                     self.events.push(format!("engine {} exceedance: {what}", n + 1));
                 }
                 e.in_exceedance[k] = holds;
@@ -1324,6 +1334,10 @@ static LATEST_WEAR: std::sync::Mutex<[EngineWear; 4]> = std::sync::Mutex::new([E
     exceedances: NO_EXCEEDANCES,
     in_exceedance: [false; 10],
     seconds_ip_overspeed: 0.0,
+    seconds_low_oil: 0.0,
+    seconds_hp_overspeed: 0.0,
+    seconds_lp_overspeed: 0.0,
+    exceedances_audited: true,
 }; 4]);
 
 pub fn publish(engines: [EngineWear; 4]) {
@@ -1488,8 +1502,27 @@ mod tests {
         }
         d.update_engine_limits(&mut vars, true, 0.05);
         assert_eq!(d.engines[0].exceedances.low_oil_pressure, 0);
-        d.update_engine_limits(&mut vars, true, 0.05);
-        assert_eq!(d.engines[0].exceedances.low_oil_pressure, 1, "still no oil pressure a tick later is real");
+        for _ in 0..100 {
+            d.update_engine_limits(&mut vars, true, 0.05);
+        }
+        assert_eq!(d.engines[0].exceedances.low_oil_pressure, 0, "pressure still building after a start is not an exceedance");
+        for _ in 0..120 {
+            d.update_engine_limits(&mut vars, true, 0.05);
+        }
+        assert_eq!(d.engines[0].exceedances.low_oil_pressure, 1, "no oil pressure past the hold is real");
+    }
+
+    #[test]
+    fn counters_saved_before_the_limits_were_corrected_are_dropped_once() {
+        let mut wear = LATEST_WEAR.lock().unwrap()[0];
+        wear.exceedances.customer_bleed = 81;
+        wear.exceedances_audited = false;
+        let (once, _) = wear.plausibility_checked(0);
+        assert_eq!(once.exceedances.customer_bleed, 0);
+        let mut later = once;
+        later.exceedances.hp_overspeed = 1;
+        let (twice, _) = later.plausibility_checked(0);
+        assert_eq!(twice.exceedances.hp_overspeed, 1, "counted since then, so it stays");
     }
 
     /// CONF 3's VFE is 196 kt, so its ultimate is 196 x sqrt(1.5) = 240 kt.

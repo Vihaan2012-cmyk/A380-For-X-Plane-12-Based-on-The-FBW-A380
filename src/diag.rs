@@ -343,7 +343,7 @@ fn environment(started: SystemTime) -> String {
         line("aircraft", a.display().to_string());
         line("installed version", std::fs::read_to_string(a.join("fbw_xp_installed_version.txt")).unwrap_or_else(|_| "(none: not installed by the installer)".into()).trim().to_string());
         line("sasl", std::fs::read_to_string(a.join("plugins/sasl/version.txt")).unwrap_or_default().lines().find(|l| l.starts_with("Version")).unwrap_or("(missing)").to_string());
-        for f in ["plugins/fbw_a380_systems/64/win.xpl", "plugins/sasl/data/modules/main.lua", "objects/a380_cockpit_click.obj", "A380.acf"] {
+        for f in [if cfg!(windows) { "plugins/fbw_a380_systems/64/win.xpl" } else if cfg!(target_os = "macos") { "plugins/fbw_a380_systems/64/mac.xpl" } else { "plugins/fbw_a380_systems/64/lin.xpl" }, "plugins/sasl/data/modules/main.lua", "objects/a380_cockpit_click.obj", "A380.acf"] {
             let p = a.join(f);
             let meta = std::fs::metadata(&p).ok();
             line(f, meta.map_or("(missing)".into(), |m| format!("{} bytes, modified {}", m.len(), m.modified().map(stamp).unwrap_or_default())));
@@ -453,6 +453,12 @@ struct MemoryCounters {
     peak_pagefile: usize,
 }
 
+#[cfg(not(windows))]
+pub(crate) fn process_stats(names: &[&str]) -> Vec<(String, u32, u64, u64, u64)> {
+    names.iter().map(|n| (n.to_string(), 0, 0, 0, 0)).collect()
+}
+
+#[cfg(windows)]
 #[link(name = "kernel32")]
 extern "system" {
     fn CreateToolhelp32Snapshot(flags: u32, pid: u32) -> *mut c_void;
@@ -464,6 +470,7 @@ extern "system" {
     fn CloseHandle(handle: *mut c_void) -> i32;
 }
 
+#[cfg(windows)]
 pub(crate) fn process_stats(names: &[&str]) -> Vec<(String, u32, u64, u64, u64)> {
     let mut totals: Vec<(String, u32, u64, u64, u64)> = names.iter().map(|n| (n.to_string(), 0, 0, 0, 0)).collect();
     unsafe {
@@ -1312,14 +1319,16 @@ pub fn save_bundle(compress: bool) {
         let source = s.dir.display().to_string();
         let zip = format!("{source}.zip");
         let script = format!("Start-Sleep -Seconds 4; Compress-Archive -Path '{source}\\*' -DestinationPath '{zip}' -Force");
-        let mut command = std::process::Command::new("powershell");
-        command.args(["-NoProfile", "-WindowStyle", "Hidden", "-Command", &script]);
+        #[cfg(not(windows))]
+        let _ = (&zip, &script, std::process::Command::new("tar").args(["-czf", &format!("{source}.tar.gz"), "-C", &source, "."]).spawn());
         #[cfg(windows)]
         {
+            let mut command = std::process::Command::new("powershell");
+            command.args(["-NoProfile", "-WindowStyle", "Hidden", "-Command", &script]);
             use std::os::windows::process::CommandExt;
             command.creation_flags(0x0800_0000 | 0x0000_0008);
+            let _ = command.spawn();
         }
-        let _ = command.spawn();
     }
 }
 
@@ -1437,6 +1446,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(windows)]
     fn process_stats_finds_the_running_test_process_by_name() {
         let exe = std::env::current_exe().unwrap();
         let name = exe.file_name().unwrap().to_string_lossy().into_owned();

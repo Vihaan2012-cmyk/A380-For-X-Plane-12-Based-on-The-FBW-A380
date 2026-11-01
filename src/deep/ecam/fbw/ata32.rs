@@ -114,7 +114,7 @@ fn altn_steer_available() -> Cond {
 /// Any leg currently sensing ground contact -- this port's only published
 /// "is the aircraft on the ground" reading (no area publishes one directly),
 /// reused for `320800025`/`320800026`'s own on-ground gate.
-fn any_leg_on_ground() -> Cond {
+pub(super) fn any_leg_on_ground() -> Cond {
     any(LEGS.iter().map(|n| var(&format!("SENSED_ON_GROUND:{n}")).on()).collect())
 }
 
@@ -468,6 +468,9 @@ pub fn wire(v: &mut Vec<FbwProc>) {
             all(vec![
                 var("BRAKE_PEDAL_COMMANDED_FRACTION").gt(0.1),
                 all((1..=16).map(|n| var(&format!("BRAKE_APPLIED_FRACTION:{n}")).lt(0.05)).collect()),
+                // That fraction is the brake force sent to X-Plane, and a set parking brake
+                // sends one with the hydraulics cold.
+                var("PARK_BRAKE_SET").off(),
                 any_leg_on_ground(),
                 network_alive(),
             ]),
@@ -486,6 +489,7 @@ pub fn wire(v: &mut Vec<FbwProc>) {
             all(vec![
                 var("BRAKE_PEDAL_COMMANDED_FRACTION").lt(0.05),
                 any((1..=16).map(|n| var(&format!("BRAKE_APPLIED_FRACTION:{n}")).gt(0.3)).collect()),
+                var("PARK_BRAKE_SET").off(),
                 any_leg_on_ground(),
                 network_alive(),
             ]),
@@ -1002,6 +1006,7 @@ mod tests {
         // braking force despite the full pedal demand.
         let mut starved = t.clone();
         starved.controls.brake_pedal_pos = [1.0, 1.0];
+        starved.controls.parking_brake_on = false;
         starved.hydraulic_pressure_pa = [0.0, 0.0];
         let released = run(starved, &Faults::default(), 5);
         assert!(holds(&wiring(320_800_025).trigger, &released), "commanded braking with both hydraulic sources dead must show BRAKES RELEASED");
@@ -1010,6 +1015,7 @@ mod tests {
         let dragging = gear_fail_on("32_gear.wheel_1_brake", "dragging");
         let mut released_pedals = flying();
         released_pedals.controls.brake_pedal_pos = [0.0, 0.0];
+        released_pedals.controls.parking_brake_on = false;
         released_pedals.dt_s = 0.1;
         let dragging_out = run(released_pedals, &Faults::from_pairs([(dragging, 1.0)]), 600);
         assert!(holds(&wiring(320_800_026).trigger, &dragging_out), "a dragging wheel with the pedals released must show BRAKES RESIDUAL BRAKING");

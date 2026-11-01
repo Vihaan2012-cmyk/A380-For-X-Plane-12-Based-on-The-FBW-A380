@@ -68,7 +68,7 @@ pub fn sim_frame(xplm: &crate::xp::Xplm) {
 }
 
 #[cfg(windows)]
-const CPU_PROCESSES: [&str; 2] = ["X-Plane.exe", "XPHFBW.exe"];
+const CPU_PROCESSES: [&str; 3] = ["X-Plane.exe", "XPHFBW.exe", "cefclient.exe"];
 
 fn sim_report() -> String {
     SIM.with(|s| {
@@ -112,6 +112,11 @@ fn add(totals: &mut Vec<(&'static str, Duration)>, label: &'static str, d: Durat
     }
 }
 
+/// A part of another section's time, listed on its own.
+pub fn note(label: &'static str, d: Duration) {
+    LAPS.with(|l| add(&mut l.borrow_mut().totals, label, d));
+}
+
 /// Ends the section before this point and starts `label`'s.
 /// The section the frame is in now (the last [`lap`] label), for tracing.
 pub fn current_section() -> &'static str {
@@ -141,9 +146,9 @@ pub fn end_frame() {
             let frames = l.frames.max(1) as f64;
             let mut totals = std::mem::take(&mut l.totals);
             totals.sort_by(|a, b| b.1.cmp(&a.1));
-            let sum: f64 = totals.iter().map(|(_, d)| d.as_secs_f64()).sum::<f64>() * 1000. / frames;
+            let sum: f64 = totals.iter().filter(|(label, _)| !label.starts_with("of the ")).map(|(_, d)| d.as_secs_f64()).sum::<f64>() * 1000. / frames;
             let top: Vec<String> =
-                totals.iter().take(12).map(|(label, d)| format!("{label} {:.2}", d.as_secs_f64() * 1000. / frames)).collect();
+                totals.iter().filter(|(_, d)| d.as_secs_f64() * 1000. / frames >= 0.02).map(|(label, d)| format!("{label} {:.2}", d.as_secs_f64() * 1000. / frames)).collect();
             let fps = frames / l.since.elapsed().as_secs_f64();
             let mb = UPLOADED_BYTES.swap(0, std::sync::atomic::Ordering::Relaxed) as f64 / frames / 1_048_576.;
             let mut screens = SCREEN_BYTES.with(|s| std::mem::take(&mut *s.borrow_mut()));

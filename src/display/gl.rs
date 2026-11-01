@@ -60,6 +60,7 @@ const GL_COLOR_ARRAY: c_uint = 0x8076;
 const GL_TEXTURE_COORD_ARRAY: c_uint = 0x8078;
 const GL_FLOAT: c_uint = 0x1406;
 const GL_UNSIGNED_BYTE: c_uint = 0x1401;
+const GL_UNSIGNED_INT_8_8_8_8_REV: c_uint = 0x8367;
 const GL_ARRAY_BUFFER: c_uint = 0x8892;
 const GL_DYNAMIC_DRAW: c_uint = 0x88E8;
 const GL_TEXTURE_2D: c_uint = 0x0DE1;
@@ -141,11 +142,14 @@ fn check_upload_errors(gl: &Fns, warned: &mut std::collections::HashSet<&'static
     }
 }
 
+#[cfg(windows)]
 #[link(name = "kernel32")]
 extern "system" {
     fn LoadLibraryA(name: *const c_char) -> *mut c_void;
     fn GetProcAddress(module: *mut c_void, name: *const c_char) -> *mut c_void;
 }
+#[cfg(not(windows))]
+use crate::xp::{GetProcAddress, LoadLibraryA};
 
 const GL_HANDLE_TYPE_D3D11_IMAGE_EXT: c_uint = 0x958B;
 const GL_DEDICATED_MEMORY_OBJECT_EXT: c_uint = 0x9581;
@@ -1294,6 +1298,7 @@ impl Renderer {
                 return;
             }
             (gl.pixel_store)(GL_UNPACK_ROW_LENGTH, width as c_int);
+            let upload_started = std::time::Instant::now();
             let mut updated = false;
             for &[x, y, w, h] in rects {
                 if w == 0 || h == 0 || x + w > width || y + h > height {
@@ -1301,17 +1306,20 @@ impl Renderer {
                 }
                 let offset = (y as usize * width as usize + x as usize) * 4;
                 crate::perf::UPLOADED_BYTES.fetch_add(w as u64 * h as u64 * 4, std::sync::atomic::Ordering::Relaxed);
-                (gl.tex_sub_image)(GL_TEXTURE_2D, 0, x as c_int, y as c_int, w as c_int, h as c_int, GL_BGRA, GL_UNSIGNED_BYTE, pixels[offset..].as_ptr().cast());
+                (gl.tex_sub_image)(GL_TEXTURE_2D, 0, x as c_int, y as c_int, w as c_int, h as c_int, GL_BGRA, GL_UNSIGNED_INT_8_8_8_8_REV, pixels[offset..].as_ptr().cast());
                 updated = true;
             }
             (gl.pixel_store)(GL_UNPACK_ROW_LENGTH, 0);
+            crate::perf::note("of the draw callbacks: uploads", upload_started.elapsed());
             // Sub-image writes don't touch the mip levels above 0 by
             // themselves (unlike glTexImage2D, which reallocates and leaves
             // them stale); regenerate only when a rect actually landed, so a
             // due-but-empty call (all rects clipped away by the bounds check
             // above) doesn't pay for a no-op rebuild.
             if updated {
+                let mips_started = std::time::Instant::now();
                 (gl.generate_mipmap)(GL_TEXTURE_2D);
+                crate::perf::note("of the draw callbacks: mipmaps", mips_started.elapsed());
             }
         }
     }
@@ -1415,6 +1423,26 @@ impl Renderer {
             lod: uniform(c"lod"),
             pixel: uniform(c"pixel"),
         })
+    }
+
+    /// A popped up screen is drawn over the scene with the alpha left in its target, which
+    /// the cockpit never looks at. The glass is opaque.
+    pub fn make_opaque(&mut self, target: Target) {
+        unsafe {
+            let gl = &self.gl;
+            let scissor_was_on = (gl.is_enabled)(GL_SCISSOR_TEST) != 0;
+            let [x, y, w, h] = target.viewport;
+            (gl.bind_framebuffer)(GL_FRAMEBUFFER, target.framebuffer);
+            (gl.enable)(GL_SCISSOR_TEST);
+            (gl.scissor)(x, y, w, h);
+            (gl.color_mask)(0, 0, 0, 1);
+            (gl.clear_color)(0., 0., 0., 1.);
+            (gl.clear)(GL_COLOR_BUFFER_BIT);
+            (gl.color_mask)(1, 1, 1, 1);
+            if !scissor_was_on {
+                (gl.disable)(GL_SCISSOR_TEST);
+            }
+        }
     }
 
     pub fn draw_bridge(&mut self, screen_id: &'static str, gpu: &mut BridgeGpu, underlay: Option<&BridgeGpu>, width: u32, height: u32, crop: Option<[f32; 4]>, target: Target, brightness: &[f32], dimming: &[[f32; 4]], cursor: Option<Cursor>) {

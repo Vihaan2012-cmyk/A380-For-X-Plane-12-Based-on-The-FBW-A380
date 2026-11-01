@@ -33,9 +33,14 @@ fn usage() -> ! {
     std::process::exit(2);
 }
 
+/// Lines for the installer's window, or plain text for a person (`FBW_XP_PLAIN`).
+fn ctx() -> Ctx {
+    Ctx { json: std::env::var_os("FBW_XP_PLAIN").is_none() }
+}
+
 fn finish(result: Result<String, String>) {
     let ok = result.is_ok();
-    Ctx { json: true }.send(install::Msg::Done(result));
+    ctx().send(install::Msg::Done(result));
     if !ok {
         std::process::exit(1);
     }
@@ -110,13 +115,13 @@ fn main() {
                 textures: arg(&args, "--textures").and_then(|c| c.parse().ok()),
                 clean: args.iter().any(|a| a == "--clean"),
             };
-            if !install::run(answers, &Ctx { json: true }) {
+            if !install::run(answers, &ctx()) {
                 std::process::exit(1);
             }
         }
         Some("uninstall") => {
             let Some(xplane) = arg(&args, "--xplane").map(PathBuf::from) else { usage() };
-            finish(install::uninstall(&xplane, &Ctx { json: true }));
+            finish(install::uninstall(&xplane, &ctx()));
         }
         Some("liveries") => {
             let found = xplane(&args);
@@ -133,9 +138,20 @@ fn main() {
             let folders = dir.as_deref().map(liveries::installed_folders).unwrap_or_default();
             println!("{}", serde_json::json!({ "xplane": found, "liveries": list, "installedFolders": folders, "error": error }));
         }
+        Some("liveries-list") => match liveries::available(&repo(&args)) {
+            Ok(list) => {
+                for l in list {
+                    println!("{}\t{}\t{}\t{}\t{}", l.id, l.airline, l.name, l.engines, l.editions.keys().cloned().collect::<Vec<_>>().join("/"));
+                }
+            }
+            Err(e) => {
+                eprintln!("{e}");
+                std::process::exit(1);
+            }
+        },
         Some("livery-install") => {
             let (Some(xplane), Some(id), Some(edition)) = (arg(&args, "--xplane").map(PathBuf::from), arg(&args, "--id"), arg(&args, "--edition")) else { usage() };
-            finish(liveries::install(&xplane, &repo(&args), &id, &edition, &Ctx { json: true }));
+            finish(liveries::install(&xplane, &repo(&args), &id, &edition, &ctx()));
         }
         Some("livery-remove") => {
             let (Some(xplane), Some(folder)) = (arg(&args, "--xplane").map(PathBuf::from), arg(&args, "--folder")) else { usage() };

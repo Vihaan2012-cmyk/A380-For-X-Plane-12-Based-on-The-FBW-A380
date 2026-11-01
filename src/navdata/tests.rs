@@ -15,6 +15,7 @@ use super::NavData;
 const XPLANE: &str = r"D:\Steam Games\steamapps\common\X-Plane 12";
 const SDK_TYPES: &str = r"E:\fbw-build\sdk\package\msfssdk.d.ts";
 
+#[cfg(windows)]
 #[link(name = "psapi")]
 extern "system" {
     fn GetCurrentProcess() -> *mut std::ffi::c_void;
@@ -36,7 +37,13 @@ struct MemoryCounters {
     peak_pagefile_usage: usize,
 }
 
+#[cfg(not(windows))]
+fn private_bytes() -> usize {
+    0
+}
+
 /// Private bytes of this process.
+#[cfg(windows)]
 fn private_bytes() -> usize {
     let mut c = MemoryCounters { cb: std::mem::size_of::<MemoryCounters>() as u32, ..Default::default() };
     unsafe { GetProcessMemoryInfo(GetCurrentProcess(), &mut c, c.cb) };

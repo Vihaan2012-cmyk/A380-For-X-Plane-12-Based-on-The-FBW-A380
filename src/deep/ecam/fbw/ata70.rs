@@ -817,7 +817,14 @@ pub fn wire(v: &mut Vec<FbwProc>) {
             Level::Caution,
             sd_page::ENG,
             any((1..=4u32)
-                .map(|eng| all(vec![not(core_running(eng)), var(&format!("A32NX_ENG_{eng}_HP_SOV_POSITION")).gt(0.05)]))
+                .map(|eng| {
+                    all(vec![
+                        not(core_running(eng)),
+                        var(&format!("A32NX_ENG_{eng}_HP_SOV_POSITION")).gt(0.05),
+                        // The valve opens with the master lever, long before a start reaches 50% N3.
+                        var(&format!("A32NX_ENG_{eng}_HP_SOV_DISAGREE")).on(),
+                    ])
+                })
                 .collect()),
             "the core has stopped turning (shutdown) while this engine's own HP fuel shut-off valve still reads substantially open -- unmetered fuel continuing to reach the hot section after the master lever was turned off, the FCOM's own recognition criterion (PRO-ABN-ECAM p.5853, 'the EGT may fail to decrease after the MASTER LEVER is turned off')",
         )

@@ -180,6 +180,7 @@ struct Screen {
     window: popout::Watch,
     window_viewport_logged: bool,
     toggled_at: Option<std::time::Instant>,
+    right_press: Option<RightPress>,
 }
 
 impl Screen {
@@ -678,6 +679,7 @@ impl Displays {
                 window: popout::Watch::default(),
                 window_viewport_logged: false,
                 toggled_at: None,
+                right_press: None,
             })
             .collect();
         Self {
@@ -841,6 +843,11 @@ impl Displays {
             let natives: Vec<_> =
                 s.mesh.natives.iter().map(|id| crate::mapdata::plugin::native_image(id)).collect();
             renderer.draw(&mut s.gpu, s.stream, &s.mesh, &s.steps, region, target, &s.brightness, &natives, &mut self.res);
+        }
+        if windowed {
+            if let Some(Ok(renderer)) = self.renderer.as_mut() {
+                renderer.make_opaque(target);
+            }
         }
         self.grab_device(index, target);
     }
@@ -1701,6 +1708,12 @@ impl Displays {
                 let powered = d.buses.iter().any(|bus| read(bus).is_some_and(|v| v != 0.));
                 *value = screens::brightness(read(&format!("LIGHT POTENTIOMETER:{}", d.potentiometer)), powered) * auto;
             }
+            if !s.brightness.is_empty() && crate::browser_screens::shows(s.def.id) {
+                if screen_breaker_open(s.def.id) {
+                    s.brightness.iter_mut().for_each(|v| *v = 0.);
+                }
+                crate::browser_screens::publish_dimming(s.def.id, &s.brightness);
+            }
         }
         self.request_redraws();
     }
@@ -1821,6 +1834,9 @@ impl Displays {
             .iter()
             .map(|def| {
                 let (dw, dh) = crate::xphfbw_bridge_views::device_size(def.id, def.width, def.height);
+                if crate::browser_screens::shows(def.id) {
+                    return None;
+                }
                 let block = ScreenBlock::create(tag, def.id, dw, dh);
                 if block.is_none() {
                     log(&format!("could not create the XPHFBW ScreenBlock for {}", def.id));
@@ -2098,6 +2114,23 @@ pub fn request_device_grabs(dir: PathBuf) {
     }
 }
 
+/// `FBW_DEVICE_GRABS=<folder>`: what every device holds, once a minute, in a folder named by Unix
+/// time, to compare with `screen_grabs.ps1`'s pictures of the same moments.
+pub fn device_grabs_on_request() {
+    use std::sync::OnceLock;
+    static FOLDER: OnceLock<Option<PathBuf>> = OnceLock::new();
+    static NEXT: Mutex<Option<Instant>> = Mutex::new(None);
+    let Some(folder) = FOLDER.get_or_init(|| std::env::var_os("FBW_DEVICE_GRABS").map(PathBuf::from)) else { return };
+    let Ok(mut next) = NEXT.lock() else { return };
+    let now = Instant::now();
+    if next.is_some_and(|due| now < due) {
+        return;
+    }
+    *next = Some(now + std::time::Duration::from_secs(60));
+    let stamp = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_secs());
+    request_device_grabs(folder.join(stamp.to_string()));
+}
+
 pub fn snapshot_screens() -> Vec<(String, u32, u32, Vec<u8>)> {
     let Ok(guard) = DISPLAYS.lock() else { return Vec::new() };
     let Some(bridge) = guard.as_ref().and_then(|d| d.bridge.as_ref()) else { return Vec::new() };
@@ -2139,9 +2172,18 @@ pub fn start(xplm: &'static Xplm) {
         }
         *guard = Some(displays);
     }
+    crate::browser_screens::note_avionics(&api);
     // Made without holding the lock: X-Plane may call back straight away.
     let mut handles = Vec::new();
     for (index, def) in SCREENS.iter().enumerate() {
+        if crate::browser_screens::shows(def.id) {
+            let handle = crate::browser_screens::create_device(&api, def, index as *mut c_void);
+            if handle.is_null() {
+                log(&format!("X-Plane refused the browser device {}", def.id));
+            }
+            handles.push(handle);
+            continue;
+        }
         let id = CString::new(def.id).expect("no nul");
         let title = CString::new(def.title).expect("no nul");
         let (dw, dh) = crate::xphfbw_bridge_views::device_size(def.id, def.width, def.height);
@@ -2227,6 +2269,7 @@ unsafe extern "C" fn popout_menu(_: *mut c_void, item: *mut c_void) {
 
 /// Destroy the devices and free what was made on the GPU.
 pub fn stop(xplm: &'static Xplm) {
+    crate::browser_screens::stop(xplm.avionics().as_ref());
     xplm.unregister_key_sniffer(key_sniffer, false, std::ptr::null_mut());
     release_keyboard("the displays are shutting down");
     let taken = DISPLAYS.lock().ok().and_then(|mut g| g.take());
@@ -2284,6 +2327,14 @@ pub fn set_mfd_text_focus(focused: bool) {
     }
 }
 
+pub(crate) fn efb_text_focus() -> bool {
+    EFB_TEXT_FOCUS.load(Ordering::Relaxed)
+}
+
+pub(crate) fn mfd_text_focus() -> bool {
+    MFD_TEXT_FOCUS.load(Ordering::Relaxed)
+}
+
 fn screen_ignores_keys(screen: isize) -> bool {
     let Some(def) = (screen >= 0).then(|| SCREENS.get(screen as usize)).flatten() else { return false };
     match def.id {
@@ -2309,7 +2360,7 @@ fn release_keyboard(why: &str) {
 /// else -- the function keys, the arrows, anything with Ctrl or Alt held --
 /// is left to X-Plane, so the views, the pause key and the developer
 /// shortcuts keep working with a scratchpad focused.
-fn typed_into_cockpit(ch: u32, vkey: u32, flags: c_int) -> bool {
+pub(crate) fn typed_into_cockpit(ch: u32, vkey: u32, flags: c_int) -> bool {
     if flags & (xp::CONTROL_FLAG | xp::ALT_FLAG) != 0 {
         return false;
     }
@@ -2325,6 +2376,9 @@ fn typed_into_cockpit(ch: u32, vkey: u32, flags: c_int) -> bool {
 unsafe extern "C" fn key_sniffer(key: c_char, flags: c_int, vkey: c_char, _refcon: *mut c_void) -> c_int {
     const PASS_ON: c_int = 1;
     const SWALLOW: c_int = 0;
+    if let Some(taken) = crate::browser_screens::sniff_key(key as u8 as u32, vkey as u8 as u32, flags) {
+        return if taken { SWALLOW } else { PASS_ON };
+    }
     let screen = COCKPIT_KEYBOARD.load(Ordering::Relaxed);
     if screen < 0 {
         return PASS_ON;
@@ -2383,14 +2437,47 @@ unsafe extern "C" fn right_touch_callback(x: c_int, y: c_int, status: c_int, ref
         return 0;
     }
     // The keyboard gesture (toggle_keyboard's doc comment): only a screen
-    // that takes keystrokes, only on the initial press, and it does not also
-    // forward as a click.
-    if status == xp::MOUSE_DOWN {
-        let _ = std::panic::catch_unwind(|| with_from_callback(|d| d.toggle_keyboard(index)));
-        return 1;
-    }
-    let _ = std::panic::catch_unwind(|| with_from_callback(|d| d.mouse(index, x, y, status, 2)));
+    // that takes keystrokes, and it does not also forward as a click. Right
+    // dragging is how X-Plane looks around, so only a press that came straight
+    // back counts.
+    let _ = std::panic::catch_unwind(|| {
+        with_from_callback(|d| {
+            let press = &mut d.screens[index].right_press;
+            if status == xp::MOUSE_DOWN {
+                *press = Some(RightPress::new(x, y, std::time::Instant::now()));
+            } else if status == xp::MOUSE_DRAG {
+                if let Some(p) = press {
+                    p.moved_to(x, y);
+                }
+            } else if status == xp::MOUSE_UP && press.take().is_some_and(|p| p.is_click(std::time::Instant::now())) {
+                d.toggle_keyboard(index);
+            }
+        })
+    });
     1
+}
+
+/// A right button press on a keyboard screen, until it comes back up.
+#[derive(Clone, Copy)]
+pub(crate) struct RightPress {
+    at: std::time::Instant,
+    x: c_int,
+    y: c_int,
+    dragged: bool,
+}
+
+impl RightPress {
+    pub(crate) fn new(x: c_int, y: c_int, at: std::time::Instant) -> Self {
+        Self { at, x, y, dragged: false }
+    }
+
+    pub(crate) fn moved_to(&mut self, x: c_int, y: c_int) {
+        self.dragged |= (x - self.x).abs() + (y - self.y).abs() > 8;
+    }
+
+    pub(crate) fn is_click(&self, now: std::time::Instant) -> bool {
+        !self.dragged && now.duration_since(self.at) < std::time::Duration::from_millis(400)
+    }
 }
 
 pub(crate) fn bridge_wheel_clicks(dom_delta_y: f64) -> f64 {

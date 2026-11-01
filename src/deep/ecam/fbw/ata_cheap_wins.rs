@@ -67,7 +67,11 @@
 //!   withdrawn or given a suppression hook, as the doc already says.
 
 use super::{phase, proc, sd_page, FbwProc};
-use crate::deep::api::{var, Level};
+use crate::deep::api::{all, var, Level};
+
+/// Thick oil opens the bypass on a healthy filter (below about 33 C at design flow, by
+/// `physics::engine::oil`), and every cold start would call that clogged.
+const OIL_FILTER_LOCKOUT_C: f64 = 40.0;
 
 pub fn wire(v: &mut Vec<FbwProc>) {
     for eng in 1..=4u32 {
@@ -79,12 +83,12 @@ pub fn wire(v: &mut Vec<FbwProc>) {
                 // Amber in FlyByWire's own title (`\x1b<4m`).
                 Level::Caution,
                 sd_page::ENG,
-                var(&format!("A32NX_ENG_{eng}_OIL_FILTER_BYPASSED")).on(),
+                all(vec![
+                    var(&format!("A32NX_ENG_{eng}_OIL_FILTER_BYPASSED")).on(),
+                    var(&format!("DEEP_ENG_{eng}_OIL_TEMP_SENSED_C")).gt(OIL_FILTER_LOCKOUT_C),
+                ]),
                 "the oil filter's own bypass valve has cracked, which physics::engine::oil only does once filter_clog has raised the element's viscous drop past FILTER_BYPASS_PSI -- a clogged filter, not an approximation of one",
             )
-            // 5 s: long enough that a single frame of a cold, thick-oil
-            // start (which also opens the bypass, briefly, on a healthy
-            // filter) is not a caution.
             .confirm(5.0)
             .inhibit(phase::ENG_56),
         );
@@ -115,8 +119,11 @@ mod tests {
         assert!(!eval(&proc.trigger, &clean), "must not be armed on a clean engine");
 
         truth.engine_oil_filter_bypassed[0] = true;
-        let clogged = tick(&mut *area, &truth);
+        let mut clogged = tick(&mut *area, &truth);
         assert_eq!(clogged.get("A32NX_ENG_1_OIL_FILTER_BYPASSED"), Some(&1.0), "the bypass bit must reach the published var");
+        clogged.insert("DEEP_ENG_1_OIL_TEMP_SENSED_C".to_string(), 25.0);
+        assert!(!eval(&proc.trigger, &clogged), "thick oil on a start opens the bypass on a healthy filter");
+        clogged.insert("DEEP_ENG_1_OIL_TEMP_SENSED_C".to_string(), 90.0);
         assert!(eval(&proc.trigger, &clogged), "the procedure's own trigger must flip once the published bit is set");
         // Engine 2 was never armed: its own bit, and its own procedure,
         // must stay clear.

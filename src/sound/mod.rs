@@ -562,6 +562,7 @@ pub struct Sound {
     /// it is available even before (or without) the sound package loading.
     anim_triggers: Vec<AnimTrigger>,
     anim_trigger_states: anim_triggers::States,
+    click_datarefs: ClickDatarefs,
     /// Every event fired since `fired_since`, with what fired it, logged in
     /// one line every 10 s: a sound that keeps repeating (a trigger variable
     /// chattering across its bound) names itself with a count.
@@ -608,8 +609,9 @@ impl Sound {
         }
         crate::log(&format!("sound: {} cockpit click/switch sound triggers (sound_triggers.txt)", anim_triggers.len()));
         let anim_trigger_states = anim_triggers::fresh_states(&anim_triggers);
+        let click_datarefs = ClickDatarefs::new(&anim_triggers);
         let sound_nodes = load_sound_nodes();
-        let mut sound = Self { load_rx, state: None, pending: Vec::new(), rng_state: seed | 1, logged_no_audio: false, anim_triggers, anim_trigger_states, fired: std::collections::BTreeMap::new(), fired_since: None, view: ViewMix::default(), handoffs: Vec::new(), voices: Vec::new(), inputs: None, pending_stops: HashMap::new(), last_voice_tick: None, door_ids: Vec::new(), xp_muted: Vec::new(), xplm: None, sound_nodes: HashMap::new(), pose_refs: None, plans: HashMap::new(), stats_since: None, stats_frames: 0, voice_pack: voice_pack::VoicePack::default() };
+        let mut sound = Self { load_rx, state: None, pending: Vec::new(), rng_state: seed | 1, logged_no_audio: false, anim_triggers, anim_trigger_states, click_datarefs, fired: std::collections::BTreeMap::new(), fired_since: None, view: ViewMix::default(), handoffs: Vec::new(), voices: Vec::new(), inputs: None, pending_stops: HashMap::new(), last_voice_tick: None, door_ids: Vec::new(), xp_muted: Vec::new(), xplm: None, sound_nodes: HashMap::new(), pose_refs: None, plans: HashMap::new(), stats_since: None, stats_frames: 0, voice_pack: voice_pack::VoicePack::default() };
         sound.sound_nodes = sound_nodes;
         if let Some(dir) = crate::sound_pack::plugin_dir().map(|d| d.join("sound").join("voices")) {
             sound.voice_pack = voice_pack::VoicePack::load(&dir);
@@ -992,12 +994,17 @@ impl Sound {
         if self.state.is_none() && !pack {
             return;
         }
+        self.click_datarefs.read(vars);
         let mut fired = Vec::new();
         for i in 0..self.anim_triggers.len() {
-            let value = read_named(vars, &self.anim_triggers[i].dataref);
+            let Some(value) = self.click_datarefs.value(i) else { continue };
             if self.anim_trigger_states[i].step(&self.anim_triggers[i], value) {
                 fired.push((self.anim_triggers[i].event.clone(), self.anim_triggers[i].dataref.clone()));
             }
+        }
+        // A start state or a preset setting the cockpit moves a hundred switches in a tick.
+        if fired.len() > MAX_CLICKS_IN_A_TICK {
+            fired.clear();
         }
         for (event, dataref) in fired {
             *self.fired.entry(format!("{event} <- {dataref}")).or_insert(0) += 1;
@@ -1229,6 +1236,61 @@ impl Default for Sound {
 /// plugin tracks (an unmapped MSFS simulator variable, or an `L:` var no
 /// system writes) stays at 0, its real (absent) value, rather than a
 /// fabricated one.
+/// More switches than a crew can move at once.
+const MAX_CLICKS_IN_A_TICK: usize = 6;
+const CLICK_DATAREF_RETRY_TICKS: u32 = 300;
+
+/// The cockpit's switch positions, each read once a tick however many clicks hang off it.
+/// They are the cockpit script's datarefs, not this plugin's variables.
+struct ClickDatarefs {
+    names: Vec<String>,
+    refs: Vec<Option<crate::xp::DataRef>>,
+    values: Vec<Option<f64>>,
+    of_trigger: Vec<usize>,
+    retry_in: u32,
+}
+
+impl ClickDatarefs {
+    fn new(triggers: &[AnimTrigger]) -> Self {
+        let mut names: Vec<String> = Vec::new();
+        let mut index: HashMap<&str, usize> = HashMap::new();
+        let of_trigger = triggers
+            .iter()
+            .map(|t| {
+                *index.entry(t.dataref.as_str()).or_insert_with(|| {
+                    names.push(t.dataref.clone());
+                    names.len() - 1
+                })
+            })
+            .collect();
+        let n = names.len();
+        Self { names, refs: vec![None; n], values: vec![None; n], of_trigger, retry_in: 0 }
+    }
+
+    fn read(&mut self, vars: &mut Vars) {
+        let xplm = vars.xplm;
+        if self.retry_in == 0 {
+            self.retry_in = CLICK_DATAREF_RETRY_TICKS;
+            for (r, name) in self.refs.iter_mut().zip(&self.names) {
+                if r.is_none() {
+                    *r = xplm.find(name);
+                }
+            }
+        }
+        self.retry_in -= 1;
+        for i in 0..self.names.len() {
+            self.values[i] = match self.refs[i] {
+                Some(d) => Some(xplm.get_f(d) as f64),
+                None => vars.ids.get(&self.names[i]).copied().map(|id| vars.read(&id)),
+            };
+        }
+    }
+
+    fn value(&self, trigger: usize) -> Option<f64> {
+        self.values[self.of_trigger[trigger]]
+    }
+}
+
 fn read_named(vars: &mut Vars, name: &str) -> f64 {
     match vars.ids.get(name).copied() {
         Some(id) => vars.read(&id),
@@ -1239,6 +1301,17 @@ fn read_named(vars: &mut Vars, name: &str) -> f64 {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_click_dataref_is_read_once_for_all_its_clicks() {
+        let triggers = anim_triggers::parse("fbw/cockpit/X	Forward	0.1	on	
+fbw/cockpit/X	Backward	0.5	off	
+fbw/cockpit/Y	Both	0.1	b	
+");
+        let c = ClickDatarefs::new(&triggers);
+        assert_eq!(c.names, vec!["fbw/cockpit/X", "fbw/cockpit/Y"]);
+        assert_eq!(c.of_trigger, vec![0, 0, 1]);
+    }
 
     #[test]
     fn clicks_missing_from_the_banks_fall_back_to_flybywires_own() {
@@ -1353,7 +1426,7 @@ mod tests {
             return None;
         }
         let loaded = load(dir).expect("package loads");
-        let mut sound = Sound { load_rx: None, state: None, pending: Vec::new(), rng_state: 0xDEAD_BEEF_1234_5678, logged_no_audio: false, anim_triggers: Vec::new(), anim_trigger_states: Vec::new(), fired: std::collections::BTreeMap::new(), fired_since: None, view: ViewMix::default(), handoffs: Vec::new(), voices: Vec::new(), inputs: None, pending_stops: HashMap::new(), last_voice_tick: None, door_ids: Vec::new(), xp_muted: Vec::new(), xplm: None, sound_nodes: HashMap::new(), pose_refs: None, plans: HashMap::new(), stats_since: None, stats_frames: 0, voice_pack: voice_pack::VoicePack::default() };
+        let mut sound = Sound { load_rx: None, state: None, pending: Vec::new(), rng_state: 0xDEAD_BEEF_1234_5678, logged_no_audio: false, anim_triggers: Vec::new(), anim_trigger_states: Vec::new(), click_datarefs: ClickDatarefs::new(&[]), fired: std::collections::BTreeMap::new(), fired_since: None, view: ViewMix::default(), handoffs: Vec::new(), voices: Vec::new(), inputs: None, pending_stops: HashMap::new(), last_voice_tick: None, door_ids: Vec::new(), xp_muted: Vec::new(), xplm: None, sound_nodes: HashMap::new(), pose_refs: None, plans: HashMap::new(), stats_since: None, stats_frames: 0, voice_pack: voice_pack::VoicePack::default() };
         sound.install(loaded);
         Some(sound)
     }
@@ -1504,7 +1577,7 @@ mod tests {
             event: "new_retard".into(),
         };
         let states = anim_triggers::fresh_states(&[trigger.clone()]);
-        let mut sound = Sound { load_rx: None, state: None, pending: Vec::new(), rng_state: 0xDEAD_BEEF_1234_5678, logged_no_audio: false, anim_triggers: vec![trigger], anim_trigger_states: states, fired: std::collections::BTreeMap::new(), fired_since: None, view: ViewMix::default(), handoffs: Vec::new(), voices: Vec::new(), inputs: None, pending_stops: HashMap::new(), last_voice_tick: None, door_ids: Vec::new(), xp_muted: Vec::new(), xplm: None, sound_nodes: HashMap::new(), pose_refs: None, plans: HashMap::new(), stats_since: None, stats_frames: 0, voice_pack: voice_pack::VoicePack::default() };
+        let mut sound = Sound { load_rx: None, state: None, pending: Vec::new(), rng_state: 0xDEAD_BEEF_1234_5678, logged_no_audio: false, click_datarefs: ClickDatarefs::new(std::slice::from_ref(&trigger)), anim_triggers: vec![trigger], anim_trigger_states: states, fired: std::collections::BTreeMap::new(), fired_since: None, view: ViewMix::default(), handoffs: Vec::new(), voices: Vec::new(), inputs: None, pending_stops: HashMap::new(), last_voice_tick: None, door_ids: Vec::new(), xp_muted: Vec::new(), xplm: None, sound_nodes: HashMap::new(), pose_refs: None, plans: HashMap::new(), stats_since: None, stats_frames: 0, voice_pack: voice_pack::VoicePack::default() };
 
         // No package loaded (`state` stays `None` throughout). A real
         // click happens: the dataref crosses 0.1 moving up.

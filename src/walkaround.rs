@@ -146,14 +146,28 @@ fn aoa_fail_id(n: usize) -> u64 {
 /// an exhaust plug out.
 const ENGINE_ROTATING_N2_PERCENT: f64 = 20.0;
 
-/// A wheel chock is a static wedge with no positive lock to the tyre;
-/// generic, not a cited AMM figure (this crate's convention for an uncited
-/// threshold, matching e.g. `physics/damage.rs`'s `FUSE_PLUG_MELT_C`) -- any
-/// sustained rolling groundspeed above a walking pace means the tyre has
-/// already climbed over it. Kept small so a chocked, parked aircraft
-/// (groundspeed reads ~0) never trips this from sensor noise, matching the
-/// forgiving-failure rule: nothing here triggers on normal operation.
-const CHOCK_OVERRUN_SPEED_MS: f64 = 0.5; // ~1 kt
+/// A wheel chock is a static wedge: a jolt, or the aircraft rocking on its
+/// gear as its weight changes, leaves it in place. Only really rolling this
+/// far from where the aircraft last stood still climbs it.
+const CHOCK_OVERRUN_ROLL_M: f64 = 1.5;
+const AT_REST_MS: f64 = 0.05;
+
+/// How far the aircraft has rolled since it last stood still.
+#[derive(Default)]
+struct RollWatch {
+    rest: Option<[f64; 2]>,
+}
+
+impl RollWatch {
+    fn rolled_m(&mut self, at: [f64; 2], groundspeed_ms: f64) -> f64 {
+        if groundspeed_ms.abs() < AT_REST_MS {
+            self.rest = Some(at);
+            return 0.0;
+        }
+        let rest = *self.rest.get_or_insert(at);
+        (at[0] - rest[0]).hypot(at[1] - rest[1])
+    }
+}
 
 /// The start-state rule (brief item 1), as a pure function: cold and dark
 /// restores the saved map if it has anything in it (a missing key inside a
@@ -211,22 +225,17 @@ fn ingest_and_blow_out(installed: &mut [bool; N], n2_percent: [f64; 4]) -> (Vec<
     (fod, lines)
 }
 
-/// Chock overrun, as a pure function: any installed chock is removed the
-/// moment groundspeed exceeds [`CHOCK_OVERRUN_SPEED_MS`], each producing a
-/// log line.
-fn chock_overrun(installed: &mut [bool; N], groundspeed_ms: f64) -> Vec<String> {
+/// Chock overrun, as a pure function: any installed chock is removed once the
+/// aircraft has rolled [`CHOCK_OVERRUN_ROLL_M`], each producing a log line.
+fn chock_overrun(installed: &mut [bool; N], rolled_m: f64) -> Vec<String> {
     let mut lines = Vec::new();
-    if groundspeed_ms.abs() <= CHOCK_OVERRUN_SPEED_MS {
+    if rolled_m <= CHOCK_OVERRUN_ROLL_M {
         return lines;
     }
     for &idx in &CHOCKS {
         if installed[idx] {
             installed[idx] = false;
-            lines.push(format!(
-                "walkaround: {} overrun at {:.1} kt groundspeed",
-                ITEMS[idx],
-                groundspeed_ms * 1.943_844
-            ));
+            lines.push(format!("walkaround: {} overrun after rolling {rolled_m:.1} m", ITEMS[idx]));
         }
     }
     lines
@@ -304,6 +313,9 @@ pub struct Walkaround {
     mirror: [VariableIdentifier; N],
     wheel_chocks: VariableIdentifier,
     groundspeed_ms: Option<DataRef>,
+    local_x: Option<DataRef>,
+    local_z: Option<DataRef>,
+    roll: RollWatch,
     /// Log lines from this tick's automatic changes (ingestion, blow-out,
     /// chock overrun), drained by the caller.
     pub events: Vec<String>,
@@ -345,6 +357,9 @@ impl Walkaround {
             mirror: std::array::from_fn(|i| vars.get(mirror_name(ITEMS[i]))),
             wheel_chocks: vars.get("MODEL_WHEELCHOCKS_ENABLED".to_string()),
             groundspeed_ms: xplm.find("sim/flightmodel/position/groundspeed"),
+            local_x: xplm.find("sim/flightmodel/position/local_x"),
+            local_z: xplm.find("sim/flightmodel/position/local_z"),
+            roll: RollWatch::default(),
             events: Vec::new(),
             fod_events: Vec::new(),
         }
@@ -419,7 +434,9 @@ impl Walkaround {
         self.events.extend(lines);
 
         let groundspeed_ms = self.groundspeed_ms.map_or(0.0, |d| xplm.get_f(d) as f64);
-        self.events.extend(chock_overrun(&mut self.installed, groundspeed_ms));
+        let at = [self.local_x, self.local_z].map(|d| d.map_or(0.0, |d| xplm.get_d(d)));
+        let rolled_m = self.roll.rolled_m(at, groundspeed_ms);
+        self.events.extend(chock_overrun(&mut self.installed, rolled_m));
 
         for i in 0..N {
             published::set(self.values[i], self.installed[i] as i32 as f64);
@@ -542,7 +559,17 @@ mod tests {
     }
 
     #[test]
-    fn chocks_overrun_above_walking_pace_and_never_below_it() {
+    fn rocking_on_the_gear_is_not_rolling() {
+        let mut roll = RollWatch::default();
+        assert_eq!(roll.rolled_m([0., 0.], 0.), 0.);
+        assert!(roll.rolled_m([0.3, 0.], 0.6) < CHOCK_OVERRUN_ROLL_M, "a 1 kt surge as 60 t of fuel leaves");
+        assert_eq!(roll.rolled_m([0.3, 0.], 0.), 0., "it stops at the end of the rock");
+        assert!(roll.rolled_m([0.1, 0.], 0.6) < CHOCK_OVERRUN_ROLL_M, "and comes back");
+        assert!(roll.rolled_m([0.1, 2.5], 1.0) > CHOCK_OVERRUN_ROLL_M, "really rolling");
+    }
+
+    #[test]
+    fn chocks_overrun_after_rolling_and_never_before() {
         let mut installed = [true; N];
         let lines = chock_overrun(&mut installed, 0.1);
         assert!(lines.is_empty(), "a stationary, chocked aircraft must never trip this");

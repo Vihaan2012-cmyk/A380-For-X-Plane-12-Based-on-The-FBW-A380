@@ -2,7 +2,8 @@
 //! emitters per bogie show while any wheel brake on that bogie is on fire
 //! (`deep::gear_structure`'s `BRAKE_FIRE:1..16`, grouped by
 //! `LEG_WHEEL_INDICES`) and the leg is extended; inside a closed gear bay
-//! nothing is visible from outside.
+//! nothing is visible from outside. An APU fire smokes from the tail cone
+//! until it is extinguished.
 
 use systems::simulation::{SimulatorReaderWriter, VariableIdentifier, VariableRegistry};
 
@@ -24,6 +25,8 @@ pub fn bogie_burning(fires: &[bool; 16], wheels: [usize; 4], deploy_ratio: f32) 
 pub struct BrakeFireFx {
     _published: Published,
     out: [Value; 4],
+    apu: Value,
+    apu_on_fire: VariableIdentifier,
     fires: [VariableIdentifier; 16],
     deploy: Option<DataRef>,
 }
@@ -32,9 +35,12 @@ impl BrakeFireFx {
     pub fn new(vars: &mut Vars, xplm: &Xplm) -> Self {
         let mut p = Published::default();
         let out = BOGIES.map(|(name, _, _)| p.number(&format!("fbw/damage/brake_fire_{name}"), 0., false));
+        let apu = p.number("fbw/damage/apu_fire", 0., false);
         Self {
             _published: p,
             out,
+            apu,
+            apu_on_fire: vars.get("APU_ON_FIRE".to_owned()),
             fires: std::array::from_fn(|i| vars.get(format!("BRAKE_FIRE:{}", i + 1))),
             deploy: xplm.find("sim/flightmodel2/gear/deploy_ratio"),
         }
@@ -49,6 +55,7 @@ impl BrakeFireFx {
         for (k, (_, wheels, gear)) in BOGIES.iter().enumerate() {
             published::set(self.out[k], if bogie_burning(&fires, *wheels, deploy[*gear]) { 1. } else { 0. });
         }
+        published::set(self.apu, if vars.read(&self.apu_on_fire) > 0.5 { 1. } else { 0. });
     }
 }
 

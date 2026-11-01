@@ -217,6 +217,11 @@ pub fn a380_failures() -> Vec<(u64, FailureType)> {
 /// through extra_backend_fcdc.rs), 2374 (Fcu1/Fcu2, through prim.rs),
 /// 1711 (Prim1..3, through prim.rs), 2200 (Sec1..3, through prim.rs) and
 /// 2299 (Fcdc1/Fcdc2, through extra_backend_fcdc.rs).
+/// The deep thermal model's nacelle and APU compartment fires only heat their
+/// zones. FlyByWire's fire detection, warnings and fire pushbuttons answer its
+/// own `SetOnFire` failures, so these raise them too.
+const FIRE_ALIASES: [(u64, u64); 5] = [(11_026_004, 26_001), (11_026_005, 26_002), (11_026_006, 26_003), (11_026_007, 26_004), (11_026_008, 26_005)];
+
 pub const COMPUTER_FAILURES: &[(u64, &str)] = &[
     (22_001, "ROLLOUT"),
     (22_002, "FCU 1"),
@@ -1957,7 +1962,7 @@ impl Failures {
         let set = self
             .types
             .iter()
-            .filter(|(id, _)| active.contains(id))
+            .filter(|(id, _)| active.contains(id) || FIRE_ALIASES.iter().any(|(deep, fbw)| fbw == id && active.contains(deep)))
             .map(|(_, t)| *t)
             .collect();
         simulation.update_active_failures(set);
@@ -1977,19 +1982,8 @@ extern "system" {
     fn GetProcAddress(module: *mut c_void, name: *const c_char) -> *mut c_void;
 }
 
-/// Not Windows -- the MSFS wasm build compiles this file. There is no
-/// XPLM_64.dll in that process, and these answer as the real calls do for
-/// a DLL that is not there: a null module, so `xplm_symbol` returns `None`.
 #[cfg(not(windows))]
-#[allow(non_snake_case)]
-unsafe fn LoadLibraryA(_name: *const c_char) -> *mut c_void {
-    std::ptr::null_mut()
-}
-#[cfg(not(windows))]
-#[allow(non_snake_case)]
-unsafe fn GetProcAddress(_module: *mut c_void, _name: *const c_char) -> *mut c_void {
-    std::ptr::null_mut()
-}
+use crate::xp::{GetProcAddress, LoadLibraryA};
 
 fn xplm_symbol(name: &str) -> Option<*mut c_void> {
     unsafe {
@@ -2367,6 +2361,25 @@ pub(crate) mod tests {
         for i in 0..n {
             sim.tick(Duration::from_millis(50), 100. + i as f64 * 0.05, vars);
         }
+    }
+
+    #[test]
+    fn a_deep_compartment_fire_sets_the_zone_on_fire_in_the_systems() {
+        let _g = serial();
+        let mut vars = TestVars::default();
+        let mut sim = Simulation::new(StartState::Cruise, A380::new, &mut vars);
+        let mut failures = Failures::new();
+        failures.apply(&mut sim, &mut vars, None);
+        tick(&mut sim, &mut vars, 3);
+        assert_eq!(vars.value("A32NX_APU_ON_FIRE"), 0.);
+        set_active(11_026_008, true);
+        failures.apply(&mut sim, &mut vars, None);
+        tick(&mut sim, &mut vars, 3);
+        assert_eq!(vars.value("A32NX_APU_ON_FIRE"), 1.);
+        set_active(11_026_008, false);
+        failures.apply(&mut sim, &mut vars, None);
+        tick(&mut sim, &mut vars, 3);
+        assert_eq!(vars.value("A32NX_APU_ON_FIRE"), 0.);
     }
 
     #[test]

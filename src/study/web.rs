@@ -304,7 +304,6 @@ fn page_json(index: usize, title: &str, kind: PageKind) -> Value {
         PageKind::GroundServices => {
             map.insert("kind".into(), json!("groundServices"));
             map.insert("buttons".into(), buttons_json(&services::ground_buttons()));
-            map.insert("tug".into(), buttons_json(&services::tug_buttons()));
             map.insert(
                 "doors".into(),
                 Value::Array(services::door_tiles().into_iter().map(|(label, command, var)| json!({ "label": label, "command": command, "var": var })).collect()),
@@ -1161,13 +1160,6 @@ pub(crate) fn apply_action(body: &str) -> Result<(), String> {
             let calibration = v.get("calibration").ok_or("missing \"calibration\"")?;
             crate::throttle::save_calibration(calibration)?;
         }
-        "pushback" => {
-            let f = |k: &str| v.get(k).and_then(Value::as_f64).filter(|x| x.is_finite()).map(|x| x.clamp(-1., 1.)).ok_or(format!("missing \"{k}\""));
-            let (speed, heading) = (f("speed")?, f("heading")?);
-            queue_write("PUSHBACK_SYSTEM_ENABLED", 1.);
-            queue_write("PUSHBACK_SPD_FACTOR", speed);
-            queue_write("PUSHBACK_HDG_FACTOR", heading);
-        }
         "copilotSay" => {
             let keys: Vec<&str> = match v.get("keys").and_then(Value::as_array) {
                 Some(list) => list.iter().filter_map(Value::as_str).collect(),
@@ -1525,8 +1517,6 @@ mod tests {
         assert!(apply_action(r#"{"kind":"setFailureMagnitude","id":21000,"magnitude":0.4}"#).is_ok());
         assert!(apply_action(r#"{"kind":"toggleBreaker","id":1}"#).is_ok());
         assert!(apply_action(r#"{"kind":"command","command":"fbw/efb/ground/gpu"}"#).is_ok());
-        assert!(apply_action(r#"{"kind":"pushback","speed":-3,"heading":0.5}"#).is_ok());
-        assert!(apply_action(r#"{"kind":"pushback","speed":-0.4}"#).is_err(), "missing heading");
         assert!(apply_action(r#"{"kind":"copilotSay","keys":["title_before_start","c_parking_brake"],"interrupt":true}"#).is_ok());
         assert!(apply_action(r#"{"kind":"copilotSay","key":"../evil"}"#).is_err());
         assert!(apply_action(r#"{"kind":"copilotHush"}"#).is_ok());

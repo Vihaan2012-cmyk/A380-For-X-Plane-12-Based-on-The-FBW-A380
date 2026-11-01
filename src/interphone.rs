@@ -5,12 +5,9 @@
 
 use crate::published::{self, Command, Published, Value};
 
-pub const REQUESTS: [(&str, &str); 10] = [
+pub const REQUESTS: [(&str, &str); 7] = [
     ("call", "Interphone: ground, cockpit (call the ground engineer)"),
-    ("push", "Interphone: ready for pushback"),
     ("start", "Interphone: request engine start"),
-    ("stop", "Interphone: stop the pushback"),
-    ("disconnect", "Interphone: parking brake set, disconnect the tug"),
     ("chocks", "Interphone: chocks in or out"),
     ("covers", "Interphone: remove covers and pins"),
     ("gpu", "Interphone: connect or remove ground power"),

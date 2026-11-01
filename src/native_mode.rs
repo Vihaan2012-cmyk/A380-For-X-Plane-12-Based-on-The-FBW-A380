@@ -124,6 +124,17 @@ fn installed_plugin_dir() -> Option<PathBuf> {
 }
 
 /// False only when the plugin folder is known and holds no XPHFBW.exe.
+pub fn work_wanted(modes: &Modes, comparisons_asked: bool) -> bool {
+    comparisons_asked || (!modes.off && (modes.native_all || !modes.authoritative.is_empty()))
+}
+
+/// The native modules run each frame only when one drives something or `FBW_NATIVE_SHADOW=1`
+/// asks for their comparisons against the pages.
+pub fn any_native_work() -> bool {
+    static WORK: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    *WORK.get_or_init(|| work_wanted(&current(), std::env::var("FBW_NATIVE_SHADOW").is_ok_and(|v| v == "1")))
+}
+
 pub fn cef_installed(plugin_dir: Option<&Path>) -> bool {
     plugin_dir.is_none_or(|d| d.join(XPHFBW_EXE).is_file())
 }
@@ -248,6 +259,15 @@ pub fn show_notices() {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn native_work_runs_only_when_something_uses_it() {
+        assert!(!super::work_wanted(&super::Modes::parse("", ""), false));
+        assert!(super::work_wanted(&super::Modes::parse("", ""), true));
+        assert!(super::work_wanted(&super::Modes::parse("all", ""), false));
+        assert!(super::work_wanted(&super::Modes::parse("", "fms"), false));
+        assert!(!super::work_wanted(&super::Modes::parse("", "off,fms"), false));
+    }
+
     use super::*;
     use crate::xphfbw_bridge_views::{page_stop_mask, view_list, PAGE_STOPS_WHEN_NATIVE};
 
