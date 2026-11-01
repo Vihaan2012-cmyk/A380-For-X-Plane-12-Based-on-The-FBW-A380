@@ -54,9 +54,7 @@ use crate::published::{self, Command, Published, Value};
 use crate::xp::{DataRef, Xplm};
 use crate::Vars;
 
-const FLIGHT_MODEL_CFG: &str = include_str!(
-    "../../fbw-aircraft/fbw-a380x/src/base/flybywire-aircraft-a380-842/SimObjects/AirPlanes/FlyByWire_A380X/common/config/flight_model.cfg"
-);
+const FLIGHT_MODEL_CFG: &str = include_str!(concat!(env!("FBW_TREE"), "/fbw-a380x/src/base/flybywire-aircraft-a380-842/SimObjects/AirPlanes/FlyByWire_A380X/common/config/flight_model.cfg"));
 
 /// The points' names: the door template's DOOR_ID for 0-15
 /// (Anims_Door.xml:37-148), the cfg's comments for the rest (flight_model.cfg

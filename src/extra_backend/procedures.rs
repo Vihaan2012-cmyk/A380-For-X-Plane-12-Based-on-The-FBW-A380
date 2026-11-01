@@ -9,9 +9,7 @@
 //! the plugin instead when one is there (see `AircraftPresets`).
 
 /// The file FlyByWire ships, as built into the plugin.
-pub const PROCEDURES_XML: &str = include_str!(
-    "../../../fbw-aircraft/fbw-a380x/src/base/flybywire-aircraft-a380-842/config/a380x/a380-842/aircraft_preset_procedures.xml"
-);
+pub const PROCEDURES_XML: &str = include_str!(concat!(env!("FBW_TREE"), "/fbw-a380x/src/base/flybywire-aircraft-a380-842/config/a380x/a380-842/aircraft_preset_procedures.xml"));
 
 /// StepType flags (ProcedureStep.hpp:31-48).
 pub const ACTION: u32 = 0b00001;

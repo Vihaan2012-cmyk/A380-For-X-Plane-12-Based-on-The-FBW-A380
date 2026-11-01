@@ -59,33 +59,15 @@ use crate::fuel_transfer::{apu_fuel_demand_gph, ApuFuelAspect, FuelVars, LegacyF
 use crate::xp::{CommandRef, DataRef, Xplm};
 use crate::Vars;
 
-const FLIGHT_MODEL_CFG: &str = include_str!(
-    "../../fbw-aircraft/fbw-a380x/src/base/flybywire-aircraft-a380-842/SimObjects/AirPlanes/FlyByWire_A380X/common/config/flight_model.cfg"
-);
-const APRON_FLT: &str = include_str!(
-    "../../fbw-aircraft/fbw-a380x/src/base/flybywire-aircraft-a380-842/SimObjects/AirPlanes/FlyByWire_A380X/common/flt/apron.FLT"
-);
-const RUNWAY_FLT: &str = include_str!(
-    "../../fbw-aircraft/fbw-a380x/src/base/flybywire-aircraft-a380-842/SimObjects/AirPlanes/FlyByWire_A380X/common/flt/runway.FLT"
-);
-const CRUISE_FLT: &str = include_str!(
-    "../../fbw-aircraft/fbw-a380x/src/base/flybywire-aircraft-a380-842/SimObjects/AirPlanes/FlyByWire_A380X/common/flt/cruise.FLT"
-);
-const HANGAR_FLT: &str = include_str!(
-    "../../fbw-aircraft/fbw-a380x/src/base/flybywire-aircraft-a380-842/SimObjects/AirPlanes/FlyByWire_A380X/common/flt/hangar.flt"
-);
-const TAXI_FLT: &str = include_str!(
-    "../../fbw-aircraft/fbw-a380x/src/base/flybywire-aircraft-a380-842/SimObjects/AirPlanes/FlyByWire_A380X/common/flt/taxi.flt"
-);
-const CLIMB_FLT: &str = include_str!(
-    "../../fbw-aircraft/fbw-a380x/src/base/flybywire-aircraft-a380-842/SimObjects/AirPlanes/FlyByWire_A380X/common/flt/Climb.flt"
-);
-const APPROACH_FLT: &str = include_str!(
-    "../../fbw-aircraft/fbw-a380x/src/base/flybywire-aircraft-a380-842/SimObjects/AirPlanes/FlyByWire_A380X/common/flt/approach.FLT"
-);
-const FINAL_FLT: &str = include_str!(
-    "../../fbw-aircraft/fbw-a380x/src/base/flybywire-aircraft-a380-842/SimObjects/AirPlanes/FlyByWire_A380X/common/flt/final.FLT"
-);
+const FLIGHT_MODEL_CFG: &str = include_str!(concat!(env!("FBW_TREE"), "/fbw-a380x/src/base/flybywire-aircraft-a380-842/SimObjects/AirPlanes/FlyByWire_A380X/common/config/flight_model.cfg"));
+const APRON_FLT: &str = include_str!(concat!(env!("FBW_TREE"), "/fbw-a380x/src/base/flybywire-aircraft-a380-842/SimObjects/AirPlanes/FlyByWire_A380X/common/flt/apron.FLT"));
+const RUNWAY_FLT: &str = include_str!(concat!(env!("FBW_TREE"), "/fbw-a380x/src/base/flybywire-aircraft-a380-842/SimObjects/AirPlanes/FlyByWire_A380X/common/flt/runway.FLT"));
+const CRUISE_FLT: &str = include_str!(concat!(env!("FBW_TREE"), "/fbw-a380x/src/base/flybywire-aircraft-a380-842/SimObjects/AirPlanes/FlyByWire_A380X/common/flt/cruise.FLT"));
+const HANGAR_FLT: &str = include_str!(concat!(env!("FBW_TREE"), "/fbw-a380x/src/base/flybywire-aircraft-a380-842/SimObjects/AirPlanes/FlyByWire_A380X/common/flt/hangar.flt"));
+const TAXI_FLT: &str = include_str!(concat!(env!("FBW_TREE"), "/fbw-a380x/src/base/flybywire-aircraft-a380-842/SimObjects/AirPlanes/FlyByWire_A380X/common/flt/taxi.flt"));
+const CLIMB_FLT: &str = include_str!(concat!(env!("FBW_TREE"), "/fbw-a380x/src/base/flybywire-aircraft-a380-842/SimObjects/AirPlanes/FlyByWire_A380X/common/flt/Climb.flt"));
+const APPROACH_FLT: &str = include_str!(concat!(env!("FBW_TREE"), "/fbw-a380x/src/base/flybywire-aircraft-a380-842/SimObjects/AirPlanes/FlyByWire_A380X/common/flt/approach.FLT"));
+const FINAL_FLT: &str = include_str!(concat!(env!("FBW_TREE"), "/fbw-a380x/src/base/flybywire-aircraft-a380-842/SimObjects/AirPlanes/FlyByWire_A380X/common/flt/final.FLT"));
 
 /// The flight file for a start state number (StartState, systems
 /// simulation/mod.rs:79-106), or `None` outside 1-8.

@@ -3,9 +3,7 @@
 //! X-Plane and what the deep fuel area reads, with nothing host-specific,
 //! so the MSFS systems module compiles the same file.
 
-pub const FLIGHT_MODEL_CFG: &str = include_str!(
-    "../../fbw-aircraft/fbw-a380x/src/base/flybywire-aircraft-a380-842/SimObjects/AirPlanes/FlyByWire_A380X/common/config/flight_model.cfg"
-);
+pub const FLIGHT_MODEL_CFG: &str = include_str!(concat!(env!("FBW_TREE"), "/fbw-a380x/src/base/flybywire-aircraft-a380-842/SimObjects/AirPlanes/FlyByWire_A380X/common/config/flight_model.cfg"));
 
 pub const LB_TO_KG: f64 = 0.453_592_37;
 const FT_TO_M: f64 = 0.3048;

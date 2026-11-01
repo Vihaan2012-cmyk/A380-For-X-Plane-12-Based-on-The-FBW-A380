@@ -43,9 +43,7 @@ use systems::simulation::{SimulatorReaderWriter, VariableIdentifier, VariableReg
 
 /// The same embedded file `fuel.rs`'s fuel circuits come from; the
 /// `[ELECTRICAL]` section covers every circuit, not just fuel's own.
-pub const SYSTEMS_CFG: &str = include_str!(
-    "../../fbw-aircraft/fbw-a380x/src/base/flybywire-aircraft-a380-842/SimObjects/AirPlanes/FlyByWire_A380X/attachments/flybywire/Part_Interior_Cockpit/config/systems.cfg"
-);
+pub const SYSTEMS_CFG: &str = include_str!(concat!(env!("FBW_TREE"), "/fbw-a380x/src/base/flybywire-aircraft-a380-842/SimObjects/AirPlanes/FlyByWire_A380X/attachments/flybywire/Part_Interior_Cockpit/config/systems.cfg"));
 
 /// FlyByWire's MSFS bus numbers and the buses they follow
 /// (a380_systems_wasm lib.rs:66-83), with the systems.cfg names
