@@ -10,6 +10,8 @@ import { fileURLToPath } from 'node:url';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const fork = path.resolve(here, '..');
+// FlyByWire's sources look for their packages from the tree's root.
+if (!fs.existsSync(path.join(fork, 'node_modules'))) fs.symlinkSync(path.join(here, 'node_modules'), path.join(fork, 'node_modules'), 'junction');
 const require = createRequire(path.join(here, 'package.json'));
 const args = process.argv.slice(2);
 const opt = (n, d) => (args.includes('--' + n) ? args[args.indexOf('--' + n) + 1] : d);
