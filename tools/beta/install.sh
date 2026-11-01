@@ -203,7 +203,7 @@ else
     rm -rf "$SRC"
     git clone --no-checkout "$SOURCE_INPUT" "$SRC" >> "$LOG" 2>&1 || stop "could not pull the source from $SOURCE_INPUT. Do you have access to it? See $LOG"
   fi
-  branches="$(git -C "$SRC" for-each-ref --format='%(refname:short)' refs/remotes/origin | sed 's#^origin/##' | grep -v '^HEAD$')"
+  branches="$(git -C "$SRC" for-each-ref --format='%(refname:lstrip=3)' refs/remotes/origin | grep -v '^HEAD$')"
   [ -n "$branches" ] || stop "that source has no branches."
   case "$OS" in
     mac) wanted=mac-test ;;
@@ -227,8 +227,7 @@ else
     [ "$n" = "$ANSWER" ] && BRANCH="$b"
   done
   [ -n "$BRANCH" ] || stop "there is no branch $ANSWER."
-  git -C "$SRC" checkout -q -B "$BRANCH" "origin/$BRANCH" >> "$LOG" 2>&1 || stop "could not check out $BRANCH. See $LOG"
-  git -C "$SRC" reset -q --hard "origin/$BRANCH" >> "$LOG" 2>&1
+  git -C "$SRC" checkout -q -f -B "$BRANCH" "origin/$BRANCH" >> "$LOG" 2>&1 || stop "could not check out $BRANCH. See $LOG"
 fi
 [ -f "$SRC/Cargo.toml" ] && [ -d "$SRC/installer/engine" ] || stop "$SRC is not the aircraft's source."
 say ""

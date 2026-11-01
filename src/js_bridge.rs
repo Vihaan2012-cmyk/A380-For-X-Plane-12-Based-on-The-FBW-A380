@@ -803,6 +803,8 @@ extern "system" {
 #[cfg(unix)]
 pub(crate) fn plugin_dir() -> Option<PathBuf> {
     let file = crate::xp::file_of(plugin_dir as *const () as *const c_void)?;
+    // The loader reports the path it was given, which can be relative to X-Plane's folder.
+    let file = if file.is_absolute() { file } else { crate::xp::system_path().unwrap_or_default().join(file) };
     Some(file.parent()?.parent()?.to_path_buf())
 }
 
