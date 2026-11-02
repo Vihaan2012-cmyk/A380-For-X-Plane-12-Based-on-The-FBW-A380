@@ -146,6 +146,13 @@ impl GatedSwitch {
         self.commanded = commanded;
     }
 
+    /// Off, and the off this module wrote, so the next tick does not adopt
+    /// whatever X-Plane's switch held before.
+    fn reset_off(&mut self) {
+        self.commanded = 0.;
+        self.last_applied = Some(0.);
+    }
+
     /// `raw` is the dataref's current value; `powered` is whether the
     /// circuit feeding it is live right now. Returns the value to write back.
     pub fn step(&mut self, raw: f64, powered: bool) -> f64 {
@@ -575,6 +582,37 @@ impl Lights {
         strobe_switch_at_auto(switch).then_some(airborne)
     }
 
+    /// A cold and dark start: every exterior light off. X-Plane loads a gate
+    /// with its engines running and its beacon and nav lights on, and the
+    /// gates would otherwise adopt that as the crew's switch.
+    pub fn cold_start(&mut self, xplm: &Xplm) {
+        for (group, dataref) in [
+            (&mut self.beacon, self.beacon_on),
+            (&mut self.nav, self.navigation_lights_on),
+            (&mut self.strobe, self.strobe_lights_on),
+            (&mut self.taxi_nose, self.taxi_light_on),
+        ] {
+            group.gate.reset_off();
+            if let Some(d) = dataref {
+                xplm.set_i(d, 0);
+            }
+        }
+        for (group, dataref) in [
+            (&mut self.logo, self.generic_lights_switch),
+            (&mut self.wing, self.generic_lights_switch),
+            (&mut self.taxi_turnoff, self.generic_lights_switch),
+            (&mut self.landing_nose, self.landing_lights_switch),
+            (&mut self.landing_main, self.landing_lights_switch),
+        ] {
+            group.gate.reset_off();
+            if let Some(d) = dataref {
+                for &i in group.xp_indices {
+                    xplm.set_vf_at(d, i, 0.);
+                }
+            }
+        }
+    }
+
     /// After the systems tick, so `ELEC_*_BUS_IS_POWERED` is this tick's.
     pub fn update(&mut self, vars: &mut Vars, xplm: &Xplm, circuits: &Circuits, delta: f64) {
         self.cockpit_tests.update(vars, xplm, delta);
@@ -777,6 +815,15 @@ mod tests {
         assert_eq!(gate.step_auto(false, true), 0., "AUTO airborne, no power");
         assert_eq!(gate.step_auto(true, false), 0., "AUTO after landing");
         assert_eq!(gate.step_adopting(1., true, true), 1., "switched to ON on the ground");
+    }
+
+    #[test]
+    fn a_cold_start_does_not_keep_the_beacon_x_plane_loaded_with() {
+        let mut gate = GatedSwitch::default();
+        assert_eq!(gate.step(1., false), 0., "X-Plane loaded the gate with its beacon on, no power yet");
+        gate.reset_off();
+        assert_eq!(gate.step(0., true), 0., "ground power arrives: the beacon stays off");
+        assert_eq!(gate.step_adopting(1., true, true), 1., "the crew switches it on");
     }
 
     #[test]

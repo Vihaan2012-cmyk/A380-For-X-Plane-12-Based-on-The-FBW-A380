@@ -2283,6 +2283,7 @@ impl Plugin {
             self.engine_commands.spawn_at_idle();
         } else {
             self.engine_commands.spawn_stopped();
+            self.lights.cold_start(xplm);
         }
         self.start_state_built = state;
         self.cold_and_dark = (if start_state::engines_running_state(state) { 0. } else { 1. }, COLD_AND_DARK_HOLD_S);
