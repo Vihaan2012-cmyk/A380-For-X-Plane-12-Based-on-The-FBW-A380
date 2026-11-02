@@ -8,7 +8,7 @@ set -u
 RUST_VERSION=1.97.1
 NODE_VERSION=22.23.1
 AIRCRAFT_NAME="A380 for X-Plane 12"
-SOURCE_REPO="https://github.com/Vihaan2012-cmyk/A380-XP12-Beta.git"
+SOURCE_REPO="https://github.com/Vihaan2012-cmyk/A380-For-X-Plane-12-Based-on-The-FBW-A380.git"
 
 say() { printf '%s\n' "$*"; }
 line() { say "------------------------------------------------------------"; }
@@ -168,7 +168,6 @@ say ""
 # ---- source and branch -------------------------------------------------------
 
 say "3. Where to pull the source from. Press Return for the project's GitHub."
-say "   If GitHub asks for a password, use a personal access token from github.com/settings/tokens."
 ask "   Source" "$SOURCE_REPO"
 [ -n "$ANSWER" ] || stop "no source given."
 SOURCE_INPUT="$ANSWER"
@@ -197,11 +196,11 @@ else
   if [ -d "$SRC/.git" ]; then
     git -C "$SRC" remote set-url origin "$SOURCE_INPUT" >> "$LOG" 2>&1
     say "   Pulling the latest source..."
-    git -C "$SRC" fetch --prune origin '+refs/heads/*:refs/remotes/origin/*' >> "$LOG" 2>&1 || stop "could not pull from $SOURCE_INPUT. Do you have access to it? See $LOG"
+    git -C "$SRC" fetch --prune origin '+refs/heads/*:refs/remotes/origin/*' >> "$LOG" 2>&1 || stop "could not pull from $SOURCE_INPUT. Check your connection. See $LOG"
   else
     say "   Pulling the source. This is a few hundred MB the first time..."
     rm -rf "$SRC"
-    git clone --no-checkout "$SOURCE_INPUT" "$SRC" >> "$LOG" 2>&1 || stop "could not pull the source from $SOURCE_INPUT. Do you have access to it? See $LOG"
+    git clone --no-checkout "$SOURCE_INPUT" "$SRC" >> "$LOG" 2>&1 || stop "could not pull the source from $SOURCE_INPUT. Check your connection. See $LOG"
   fi
   branches="$(git -C "$SRC" for-each-ref --format='%(refname:lstrip=3)' refs/remotes/origin | grep -v '^HEAD$')"
   [ -n "$branches" ] || stop "that source has no branches."
@@ -228,6 +227,7 @@ else
   done
   [ -n "$BRANCH" ] || stop "there is no branch $ANSWER."
   git -C "$SRC" checkout -q -f -B "$BRANCH" "origin/$BRANCH" >> "$LOG" 2>&1 || stop "could not check out $BRANCH. See $LOG"
+  [ -f "$SRC/tools/beta/install.sh" ] || stop "branch $BRANCH is older than this script and does not build from source. Run this again and pick another branch."
 fi
 [ -f "$SRC/Cargo.toml" ] && [ -d "$SRC/installer/engine" ] || stop "$SRC is not the aircraft's source."
 say ""

@@ -47,7 +47,7 @@ pub fn mfd_dialog_height_patch() -> SourcePatch {
     }
 }
 
-/// A handler's error stays with that handler, as in msfs-sdk's EventBus. Without this an
+/// A handler's error stays with that handler. Without this an
 /// error in a page listening to a flight plan event reached `FlightPlanManager.reset`, which
 /// never recreated its plans: a cold and dark start with F-PLN open left the FMS without any,
 /// and every MFD page after it black.
