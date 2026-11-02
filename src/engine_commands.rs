@@ -849,7 +849,7 @@ impl EngineCommands {
             vars.write(&e.net_thrust, phys.net_thrust_n);
             self.last_out[i] = phys;
             let starting = matches!(state, fadec::EngineState::Starting | fadec::EngineState::Restarting);
-            if starting || (master && !self.physics[i].start_complete()) {
+            if starting || (master && state != fadec::EngineState::Off && !self.physics[i].start_complete()) {
                 let now = std::time::Instant::now();
                 if !self.start_trace_at[i].is_some_and(|t| now - t < std::time::Duration::from_secs(1)) {
                     self.start_trace_at[i] = Some(now);

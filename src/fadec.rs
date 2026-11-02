@@ -673,6 +673,17 @@ pub fn next_state(state: EngineState, igniter: i32, starter: bool, sim_n3: f64, 
     }
 }
 
+/// A cold flight's engine reaches On only through a start. X-Plane can load the
+/// flight with its engines turning, and a master already on (a hardware switch)
+/// must not read that as a running engine.
+fn held_off_when_cold(cold_spawned: bool, before: EngineState, next: EngineState) -> EngineState {
+    if cold_spawned && before == EngineState::Off && next == EngineState::On {
+        EngineState::Off
+    } else {
+        next
+    }
+}
+
 /// A pack is drawing bleed air -- and so costs the FADEC's packs-bleed
 /// thrust-limit correction (`thrust_limits::limit_n1`'s `packs` flag) --
 /// whenever either of its two flow valves is open. Combines both packs into
@@ -820,6 +831,7 @@ pub struct Fadec {
     flight_phase: VariableIdentifier,
 
     initialized: bool,
+    cold_spawned: [bool; 4],
     prev_sim_n3: [f64; 4],
     thermal_energy: [f64; 4],
 
@@ -931,6 +943,7 @@ impl Fadec {
             clb_derate_level: vars.get("FM_CLB_DERATE_LEVEL".into()),
             flight_phase: vars.get("FMGC_FLIGHT_PHASE".into()),
             initialized: false,
+            cold_spawned: [false; 4],
             prev_sim_n3: [0.; 4],
             thermal_energy: [0.; 4],
             is_transition_active: false,
@@ -1044,6 +1057,8 @@ impl Fadec {
             let egt = vars.read(&self.engines[i].egt);
             let (state, reset_timer) =
                 next_state(state_now, igniter[i], starter[i], self.prev_sim_n3[i], idle_n3, egt, ambient_temperature);
+            let state = held_off_when_cold(self.cold_spawned[i], state_now, state);
+            self.cold_spawned[i] &= state == EngineState::Off;
             let (id_state, id_timer) = (self.engines[i].state, self.engines[i].timer);
             vars.write(&id_state, state as i32 as f64);
             if reset_timer {
@@ -1164,6 +1179,7 @@ impl Fadec {
             let (master, ignition) = (self.engines[i].master, self.engines[i].ignition);
             vars.write(&master, running as i32 as f64);
             vars.write(&ignition, 1.);
+            self.cold_spawned[i] = cold;
         }
         // The original seeds C's rand with the time; any varying seed does.
         let mut seed = std::time::SystemTime::now()
@@ -1594,6 +1610,17 @@ mod tests {
         assert_eq!(next_state(Shutting, 1, false, 0.01, idle, 15., 15.), (Off, true));
         assert_eq!(next_state(Shutting, 1, false, 0.0, idle, 220., 30.), (Off, true), "a stopped engine is off while its turbine is still hot");
         assert_eq!(next_state(Shutting, 1, false, 3.4, idle, 30., 30.), (Shutting, false));
+    }
+
+    #[test]
+    fn a_cold_engine_under_a_master_already_on_stays_off_until_it_is_started() {
+        use EngineState::*;
+        let (next, _) = next_state(Off, 1, true, 63., 63., 15., 15.);
+        assert_eq!(held_off_when_cold(true, Off, next), Off, "X-Plane's own spin at load is not a running engine");
+        let (next, _) = next_state(Off, 2, true, 0., 63., 15., 15.);
+        assert_eq!(held_off_when_cold(true, Off, next), Starting, "IGN START still starts it");
+        assert_eq!(held_off_when_cold(true, Starting, On), On, "a real start ends on");
+        assert_eq!(held_off_when_cold(false, Off, On), On, "a hot spawn is on without a start");
     }
 
     #[test]
