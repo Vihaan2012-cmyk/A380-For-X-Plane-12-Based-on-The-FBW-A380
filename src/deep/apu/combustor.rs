@@ -15,7 +15,7 @@
 //! product.
 
 use super::gas::CP_AIR_J_KG_K;
-use super::params::{COMBUSTOR_EFFICIENCY, COMBUSTOR_PRESSURE_LOSS_FRAC, LHV_JET_A_J_KG};
+use super::params::{COMBUSTOR_EFFICIENCY, COMBUSTOR_PRESSURE_LOSS_FRAC, LHV_JET_A_J_KG, STOICHIOMETRIC_FUEL_AIR_RATIO};
 
 #[derive(Clone, Copy, Debug, Default)]
 pub struct Combustion {
@@ -37,8 +37,10 @@ pub fn burn(mdot_air_kg_s: f64, mdot_fuel_kg_s: f64, tt3_k: f64, pt3_pa: f64) ->
     let tt4 = if mdot_gas <= 1e-6 {
         tt3_k
     } else {
-        let heat_released = mdot_fuel * LHV_JET_A_J_KG * COMBUSTOR_EFFICIENCY;
-        let heat_in_air = mdot_air * CP_AIR_J_KG_K * tt3_k;
+        // Only the fuel the air has oxygen for burns; the rest leaves unburnt.
+        let burned = mdot_fuel.min(mdot_air * STOICHIOMETRIC_FUEL_AIR_RATIO);
+        let heat_released = burned * LHV_JET_A_J_KG * COMBUSTOR_EFFICIENCY;
+        let heat_in_air = (mdot_air + mdot_fuel - burned) * CP_AIR_J_KG_K * tt3_k;
         (heat_released + heat_in_air) / (mdot_gas * CP_AIR_J_KG_K)
     };
     Combustion {
@@ -113,6 +115,21 @@ mod tests {
         let fuel = fuel_flow_for_target_tt4_kg_s(mdot_air, tt3, target);
         let c = burn(mdot_air, fuel, tt3, 400_000.0);
         assert!((c.tt4_k - target).abs() < 1e-6, "{}", c.tt4_k);
+    }
+
+    #[test]
+    fn fuel_with_no_air_releases_no_heat() {
+        let c = burn(0.0, 0.03, 300.0, 100_000.0);
+        assert!((c.tt4_k - 300.0).abs() < 1e-6, "{}", c.tt4_k);
+    }
+
+    #[test]
+    fn a_rich_mixture_is_no_hotter_than_a_stoichiometric_one() {
+        let air = 0.05;
+        let stoichiometric = burn(air, air * STOICHIOMETRIC_FUEL_AIR_RATIO, 300.0, 100_000.0);
+        let rich = burn(air, 0.03, 300.0, 100_000.0);
+        assert!(rich.tt4_k <= stoichiometric.tt4_k, "{} > {}", rich.tt4_k, stoichiometric.tt4_k);
+        assert!(stoichiometric.tt4_k < 3500.0, "{}", stoichiometric.tt4_k);
     }
 
     #[test]

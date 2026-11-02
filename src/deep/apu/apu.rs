@@ -88,6 +88,9 @@ pub struct Outputs {
     pub turbine_wear_frac: f64,
     pub starter_duty_heat_frac: f64,
     pub available: bool,
+    pub fuel_flow_kg_s: f64,
+    pub core_air_kg_s: f64,
+    pub starter_engaged: bool,
 }
 
 pub struct Apu {
@@ -395,6 +398,9 @@ impl Apu {
             turbine_wear_frac: self.core_life.turbine_wear_frac(),
             starter_duty_heat_frac: self.starter_duty.heat_fraction(),
             available,
+            fuel_flow_kg_s: actual_fuel,
+            core_air_kg_s: ps_out.core_mdot_kg_s,
+            starter_engaged: starter_out.starter_engaged,
         }
     }
 }
@@ -754,5 +760,42 @@ mod tests {
             }
         }
         assert!(tripped_at.is_some(), "a full leak never tripped the APU within an hour");
+    }
+
+    #[test]
+    #[ignore]
+    fn trace_a_ground_start() {
+        for (label, t, p, dt, volts) in [("isa", 288.15, 101_325.0, 0.5, None), ("sim", 283.4, 90_800.0, 1.0 / 45.0, Some(28.0))] {
+            let mut apu = Apu::new(t);
+            let faults = ApuFaults::default();
+            let mut inputs = base_inputs();
+            inputs.ambient_temperature_k = t;
+            inputs.compartment_temperature_k = t;
+            inputs.ambient_pressure_pa = p;
+            inputs.dt_s = dt;
+            if let Some(v) = volts {
+                inputs.battery = BatteryInput { open_circuit_v: v, ..BatteryInput::healthy() };
+            }
+            let mut time = 0.0;
+            while time < 20.0 {
+                apu.step(&inputs, &faults);
+                time += dt;
+            }
+            inputs.start_selected = true;
+            let (mut peak, mut next) = (f64::MIN, 20.0);
+            while time < 90.0 {
+                let out = apu.step(&inputs, &faults);
+                time += dt;
+                peak = peak.max(out.egt_true_c);
+                if time >= next {
+                    println!(
+                        "{label} t {:5.1} N {:5.1} EGT {:8.0} ind {:8.0} wear {:.4} creep-hours {:.5} trip {} hard {} avail {} {:?}",
+                        time - 20.0, out.n_percent, out.egt_true_c, out.egt_indicated_c, out.turbine_wear_frac, out.operating_hours, out.ecb_any_trip, out.egt_hard_tripped, out.available, out.start_phase
+                    );
+                    next += 0.5;
+                }
+            }
+            println!("{label} peak EGT {peak:.0}");
+        }
     }
 }

@@ -160,6 +160,9 @@ pub const COMBUSTOR_PRESSURE_LOSS_FRAC: f64 = 0.04;
 /// *Handbook of Aviation Fuel Properties*): 42.8-43.5 MJ/kg typical; the
 /// mid-range figure most gas turbine texts quote.
 pub const LHV_JET_A_J_KG: f64 = 43.1e6;
+/// Jet A stoichiometric fuel/air mass ratio (about 1:14.7): the most fuel a
+/// kilogram of air can burn.
+pub const STOICHIOMETRIC_FUEL_AIR_RATIO: f64 = 0.0676;
 
 /// GENERIC: design turbine-inlet (combustor exit) temperature. Public
 /// comparators of this small-APU class typically quote turbine inlet

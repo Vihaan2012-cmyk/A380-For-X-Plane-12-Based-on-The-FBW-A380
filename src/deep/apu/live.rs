@@ -125,6 +125,8 @@ pub struct LiveApu {
     start_latched: bool,
     fbw_available_s: f64,
     followed: bool,
+    trace_s: f64,
+    was_tripped: bool,
 }
 
 impl Default for LiveApu {
@@ -145,6 +147,8 @@ impl LiveApu {
             start_latched: false,
             fbw_available_s: 0.0,
             followed: false,
+            trace_s: 0.0,
+            was_tripped: false,
         }
     }
 
@@ -350,6 +354,35 @@ impl Area for LiveApu {
                 self.out = self.apu.step(&forward, &apu_faults);
                 elapsed_s += FOLLOW_STEP_S;
             }
+        }
+
+        let o = &self.out;
+        let tripped_now = o.ecb_any_trip && !self.was_tripped;
+        self.was_tripped = o.ecb_any_trip;
+        self.trace_s += truth.dt_s.max(0.0);
+        if tripped_now || (master && self.start_latched && !o.available && self.trace_s >= 1.0) {
+            self.trace_s = 0.0;
+            crate::log(&format!(
+                "apu {}: N {:.1}% EGT {:.0} C (shown {:.0}) {:?} fuel {:.4} kg/s air {:.3} kg/s starter {} {:.1} V (bus {:.1} V) dt {:.3} s bleed demand {:.2} kg/s FlyByWire AVAIL {:.1} s followed {} trips: EGT {} overspeed {} oil {} wear {:.3}",
+                if tripped_now { "TRIP" } else { "start trace" },
+                o.n_percent,
+                o.egt_true_c,
+                o.egt_indicated_c,
+                o.start_phase,
+                o.fuel_flow_kg_s,
+                o.core_air_kg_s,
+                o.starter_engaged as u8,
+                o.battery_terminal_v,
+                inputs.battery.open_circuit_v,
+                truth.dt_s,
+                inputs.bleed_demand_kg_s,
+                self.fbw_available_s,
+                self.followed as u8,
+                o.egt_hard_tripped as u8,
+                o.overspeed_tripped as u8,
+                o.oil_low_pressure_tripped as u8,
+                o.turbine_wear_frac,
+            ));
         }
     }
 
