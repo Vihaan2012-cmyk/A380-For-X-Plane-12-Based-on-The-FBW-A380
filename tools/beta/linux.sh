@@ -1,6 +1,6 @@
 #!/bin/bash
 # A380 for X-Plane 12: beta install, built from source on this computer.
-# Run it with: bash install.sh
+# Run it with: bash mac.sh or bash linux.sh (the same script)
 # Asks for what it needs, builds, and installs into your X-Plane. Close X-Plane first.
 
 set -u
@@ -215,7 +215,7 @@ for b in $branches; do
 done
 [ -n "$BRANCH" ] || stop "there is no branch $ANSWER."
 git -C "$SRC" checkout -q -f -B "$BRANCH" "origin/$BRANCH" >> "$LOG" 2>&1 || stop "could not check out $BRANCH. See $LOG"
-[ -f "$SRC/tools/beta/install.sh" ] || stop "branch $BRANCH is older than this script and does not build from source. Run this again and pick another branch."
+[ -f "$SRC/tools/beta/mac.sh" ] || stop "branch $BRANCH is older than this script and does not build from source. Run this again and pick another branch."
 [ -f "$SRC/Cargo.toml" ] && [ -d "$SRC/installer/engine" ] || stop "$SRC is not the aircraft's source."
 say ""
 

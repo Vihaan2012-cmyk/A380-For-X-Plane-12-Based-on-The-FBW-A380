@@ -44,7 +44,8 @@ if ! gh release view "v$VERSION" --repo "$REPO" >/dev/null 2>&1; then
   gh release create "v$VERSION" "$DIST/tree.json" --repo "$REPO" $PRE \
     --title "A380 for X-Plane 12 (Ported from FBW A380) $VERSION" --notes "${NOTES:-Release $VERSION}"
 fi
-set -- "$DIST"/*.zip "$DIST/tree.json" $INSTALLER
+cmp -s "$ROOT/tools/beta/mac.sh" "$ROOT/tools/beta/linux.sh" || { echo "tools/beta/mac.sh and linux.sh differ" >&2; exit 1; }
+set -- "$DIST"/*.zip "$DIST/tree.json" "$ROOT/tools/beta/mac.sh" "$ROOT/tools/beta/linux.sh" $INSTALLER
 TOTAL=$#
 N=0
 for FILE in "$@"; do

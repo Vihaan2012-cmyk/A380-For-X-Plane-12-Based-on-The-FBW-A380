@@ -2752,6 +2752,7 @@ impl Plugin {
         self.cabin_option.update(xplm, delta);
         self.flight_deck_view.update(xplm);
         self.light_spills.update(xplm);
+        #[cfg(feature = "js")]
         display::device_grabs_on_request();
         #[cfg(feature = "js")]
         browser_screens::note_view(xplm);
@@ -3866,6 +3867,7 @@ pub unsafe extern "C" fn XPluginStart(
     xp::use_native_paths();
     diag::start();
     log(&format!("starting on {} {}, X-Plane at {:?}", std::env::consts::OS, std::env::consts::ARCH, xp::system_path()));
+    #[cfg(feature = "js")]
     browser_screens::prepare_chromium();
     if let Some(dir) = diag::dir() {
         log(&format!("diagnostics capture is on: {}", dir.display()));
