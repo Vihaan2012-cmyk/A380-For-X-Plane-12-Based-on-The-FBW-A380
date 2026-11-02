@@ -491,6 +491,26 @@ pub fn rmp_start_brightness_patch() -> SourcePatch {
     }
 }
 
+/// The OANS clears its BTV layer and its map layers with the transform the last draw left
+/// (translated to the map centre), and a canvas clears through its transform: everything above
+/// and left of the centre stayed, so every redraw of the stop bars added to the old ones.
+pub fn oans_clear_patches() -> Vec<SourcePatch> {
+    const NDJS: &str = "/Pages/VCockpit/Instruments/A380X/ND/nd.js";
+    let patch = |find: &str, replace: &str, why: &str| SourcePatch { path: NDJS.to_string(), find: find.to_string(), replace: replace.to_string(), reason: why.to_string() };
+    vec![
+        patch(
+            "(_b6 = this.canvasRef.target.getContext(\"2d\")) == null ? void 0 : _b6.clearRect(0, 0, this.canvasRef.target.width, this.canvasRef.target.height);",
+            "(_b6 = this.canvasRef.target.getContext(\"2d\")) == null ? void 0 : (_b6.resetTransform(), _b6.clearRect(0, 0, this.canvasRef.target.width, this.canvasRef.target.height));",
+            "OansBrakeToVacateSelection.drawBtvLayer clears the whole BTV layer",
+        ),
+        patch(
+            "        if (ctx) {\n          ctx.clearRect(0, 0, cw, ch);\n        }",
+            "        if (ctx) {\n          ctx.resetTransform();\n          ctx.clearRect(0, 0, cw, ch);\n        }",
+            "Oanc.clearMap clears the whole of every map layer",
+        ),
+    ]
+}
+
 pub fn amdb_fetch_patches() -> Vec<SourcePatch> {
     const OLD_LINE: &str = "const response = await navigraphRequest.get(`https://amdb.api.navigraph.com/v1/${query}`);";
     const NEW_LINE: &str = "const response = { data: await (await fetch(`/__plugin/amdb/v1/${query}`)).json() };";

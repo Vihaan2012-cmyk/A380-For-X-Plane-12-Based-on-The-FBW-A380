@@ -238,6 +238,9 @@ pub fn glide_slope_angle_from_bearing_field(field: f32) -> Option<f64> {
 /// X-Plane's nav receiver behind MSFS's NAV:3, zero-based.
 pub const ILS_RECEIVER: usize = 2;
 
+/// X-Plane's localizer needle stops at 2.5 dots, so beyond it the course offset is unknown.
+const LOC_SATURATED_DOTS: f64 = 2.45;
+
 const MMR_RECEIVERS: std::ops::Range<usize> = 2..4;
 
 fn ils_glide_slope_valid(loc_valid: bool, vertical: bool, expected_but_not_received: bool) -> bool {
@@ -319,6 +322,8 @@ struct Ils {
     elevation: Option<DataRef>,
     /// The frequency last looked up, when, and the glide slope found.
     looked_up: Option<(c_int, f64, Option<GsSite>)>,
+    /// The frequency whose glide slope was last taken from the nav database, logged once.
+    own_gs_noted: Option<c_int>,
 }
 
 /// A glide slope antenna from X-Plane's nav database.
@@ -370,6 +375,7 @@ impl Ils {
             navaid_info: xplm_function("XPLMGetNavAidInfo")
                 .map(|p| unsafe { std::mem::transmute::<*mut c_void, GetNavAidInfoFn>(p) }),
             looked_up: None,
+            own_gs_noted: None,
         }
     }
 
@@ -401,6 +407,7 @@ impl Ils {
         let (horizontal, vertical, gs_flag) = (ints(self.horizontal)[ILS_RECEIVER], ints(self.vertical)[ILS_RECEIVER], ints(self.glideslope_flag)[ILS_RECEIVER]);
         let loc_valid = localizer && horizontal != 0;
         let gs_valid = ils_glide_slope_valid(loc_valid, vertical != 0, gs_flag != 0);
+        let x_plane_gs = gs_valid;
         if crate::diag::active() && time - self.traced_at >= 2. {
             self.traced_at = time;
             crate::diag::state_line(&format!(
@@ -435,6 +442,28 @@ impl Ils {
             }
         }
         crate::false_glideslope::publish(freq, published);
+        // X-Plane can show no glide slope on this receiver at all, on the beam inside 5 NM (VOBL
+        // 09L), while its database has the antenna: then it is received from the antenna itself.
+        let mut own = None;
+        if let (true, false, Some(path), Some(site)) = (loc_valid, x_plane_gs, gs_deg, site.filter(near)) {
+            let height = self.elevation.map_or(0., |d| xplm.get_d(d)) - site.elevation_m;
+            let elevation = crate::false_glideslope::elevation_deg(lat, longitude, site.lat, site.lon, height);
+            let distance = crate::false_glideslope::distance_m(lat, longitude, site.lat, site.lon);
+            let dots = floats(self.hdef)[ILS_RECEIVER] as f64;
+            let lateral = if dots.abs() < LOC_SATURATED_DOTS { dots * LOC_DEG_PER_DOT } else { f64::INFINITY };
+            let shown = crate::false_glideslope::received(elevation, path, distance, lateral);
+            if shown.is_some() && self.own_gs_noted != Some(freq) {
+                self.own_gs_noted = Some(freq);
+                crate::log(&format!(
+                    "ils: X-Plane shows no glide slope on nav 3 at {freq} (vertical {vertical}, flag {gs_flag}); the {path:.2} deg glide slope is received from its antenna, {:.1} NM away",
+                    distance / 1852.
+                ));
+            }
+            gs_valid = shown.is_some();
+            gs_error = shown.unwrap_or(0.);
+            own = Some(shown);
+        }
+        crate::false_glideslope::publish_own(freq, own);
         let values = [
             loc_valid as i32 as f64,
             floats(self.hdef)[ILS_RECEIVER] as f64 * LOC_DEG_PER_DOT,

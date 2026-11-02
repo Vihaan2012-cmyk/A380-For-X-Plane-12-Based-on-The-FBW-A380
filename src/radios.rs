@@ -1329,6 +1329,10 @@ impl Radios {
                     has_gs = shown.is_some();
                     gs_error = shown.unwrap_or(0.);
                 }
+                if let (true, false, Some(Some(shown))) = (localizer, has_gs, crate::false_glideslope::own_for_frequency((nav.active_hz / 10_000.).round() as i32)) {
+                    has_gs = true;
+                    gs_error = shown;
+                }
                 vars.write_from_xplane(&ids.has_localizer[k], localizer as i32 as f64);
                 vars.write_from_xplane(&ids.has_glide_slope[k], has_gs as i32 as f64);
                 vars.write_from_xplane(&ids.glide_slope_error[k], if has_gs { gs_error } else { 0. });

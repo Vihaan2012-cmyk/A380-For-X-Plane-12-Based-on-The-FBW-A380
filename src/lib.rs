@@ -325,6 +325,7 @@ pub fn static_source_patches() -> Vec<source_patch::SourcePatch> {
     patches.extend(source_patch::listener_error_patches());
     patches.push(source_patch::mfd_dialog_height_patch());
     patches.push(source_patch::rmp_start_brightness_patch());
+    patches.extend(source_patch::oans_clear_patches());
     patches.extend(ecam_patches::source_patches());
     patches.extend(cds_reconf::source_patches());
     patches.extend(aircraft_options::source_patches());

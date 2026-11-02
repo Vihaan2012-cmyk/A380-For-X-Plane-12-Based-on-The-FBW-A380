@@ -2081,8 +2081,11 @@ impl Area for ElectricalLive {
         if self.dc_ess_was.is_some_and(|was| was != dc_ess) && self.dc_ess_logged < 40 {
             self.dc_ess_logged += 1;
             let closed = |i: usize| self.net.contactors[i].commanded_closed as u8;
+            let made = |i: usize| self.net.contactors[i].closed as u8;
+            let volts = |b: BusId| format!("{:.1}", self.report.bus_voltage[b.index()]);
+            let open_v = |s: usize| format!("{:.1}", self.net.sources[s].open_circuit_v);
             crate::log(&format!(
-                "deep electrical: DC ESS {} (on ground {}, emergency {}, engines running {:?}, gen line {:?}, TR line {:?}, DC ESS feed {}, bat tie {}, bat direct {:?}, AC buses {:?})",
+                "deep electrical: DC ESS {} (on ground {}, emergency {}, engines running {:?}, gen line {:?}, TR line {:?}, DC ESS feed {}, bat tie {}, bat direct {:?}, AC buses {:?}) dt {:.3} s, made: TR line {:?} DC ESS feed {} bat tie {} bat direct {:?}; V: DC ESS {} DC1 {} DC2 {} DC BAT {} AC1 {} AC ESS {}; TR open V {:?}, BAT open V {:?}",
                 if dc_ess { "powered" } else { "LOST" },
                 truth.on_ground,
                 self.emergency_config,
@@ -2093,6 +2096,19 @@ impl Area for ElectricalLive {
                 closed(self.contactor.dc_bat_tie),
                 self.contactor.bat_direct.map(closed),
                 [BusId::Ac1, BusId::Ac2, BusId::Ac3, BusId::Ac4].map(|b| self.report.bus_powered[b.index()] as u8),
+                dt,
+                self.contactor.tr_line.map(made),
+                made(self.contactor.dc_ess_feed_1),
+                made(self.contactor.dc_bat_tie),
+                self.contactor.bat_direct.map(made),
+                volts(BusId::DcEss),
+                volts(BusId::Dc1),
+                volts(BusId::Dc2),
+                volts(BusId::DcBat),
+                volts(BusId::Ac1),
+                volts(BusId::AcEss),
+                self.src_tr.map(open_v),
+                self.src_bat.map(open_v),
             ));
         }
         self.dc_ess_was = Some(dc_ess);
