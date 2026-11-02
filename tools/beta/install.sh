@@ -167,17 +167,7 @@ say ""
 
 # ---- source and branch -------------------------------------------------------
 
-say "3. Where to pull the source from. Press Return for the project's GitHub."
-ask "   Source" "$SOURCE_REPO"
-[ -n "$ANSWER" ] || stop "no source given."
-SOURCE_INPUT="$ANSWER"
-case "$SOURCE_INPUT" in
-  http*://*|git@*|ssh://*) ;;
-  *) SOURCE_INPUT="$(clean_path "$SOURCE_INPUT")" ;;
-esac
-
 SRC="$WORK/source"
-BRANCH="this copy"
 describe_branch() {
   case "$1" in
     main) say "the source of the last public release" ;;
@@ -190,45 +180,42 @@ describe_branch() {
   esac
 }
 
-if [ -d "$SOURCE_INPUT" ] && [ ! -d "$SOURCE_INPUT/.git" ]; then
-  SRC="$SOURCE_INPUT"
+say "3. The source comes from the project's public GitHub repo."
+if [ -d "$SRC/.git" ]; then
+  git -C "$SRC" remote set-url origin "$SOURCE_REPO" >> "$LOG" 2>&1
+  say "   Pulling the latest source..."
+  git -C "$SRC" fetch --prune origin '+refs/heads/*:refs/remotes/origin/*' >> "$LOG" 2>&1 || stop "could not pull from $SOURCE_REPO. Check your connection. See $LOG"
 else
-  if [ -d "$SRC/.git" ]; then
-    git -C "$SRC" remote set-url origin "$SOURCE_INPUT" >> "$LOG" 2>&1
-    say "   Pulling the latest source..."
-    git -C "$SRC" fetch --prune origin '+refs/heads/*:refs/remotes/origin/*' >> "$LOG" 2>&1 || stop "could not pull from $SOURCE_INPUT. Check your connection. See $LOG"
-  else
-    say "   Pulling the source. This is a few hundred MB the first time..."
-    rm -rf "$SRC"
-    git clone --no-checkout "$SOURCE_INPUT" "$SRC" >> "$LOG" 2>&1 || stop "could not pull the source from $SOURCE_INPUT. Check your connection. See $LOG"
-  fi
-  branches="$(git -C "$SRC" for-each-ref --format='%(refname:lstrip=3)' refs/remotes/origin | grep -v '^HEAD$')"
-  [ -n "$branches" ] || stop "that source has no branches."
-  case "$OS" in
-    mac) wanted=mac-test ;;
-    linux) wanted=linux-test ;;
-    *) wanted=dev ;;
-  esac
-  say ""
-  say "   Branches:"
-  n=0
-  default_number=1
-  for b in $branches; do
-    n=$((n + 1))
-    printf '   %2d - %-16s %s\n' "$n" "$b" "$(describe_branch "$b")"
-    [ "$b" = "$wanted" ] && default_number=$n
-  done
-  ask "   Branch number" "$default_number"
-  n=0
-  BRANCH=""
-  for b in $branches; do
-    n=$((n + 1))
-    [ "$n" = "$ANSWER" ] && BRANCH="$b"
-  done
-  [ -n "$BRANCH" ] || stop "there is no branch $ANSWER."
-  git -C "$SRC" checkout -q -f -B "$BRANCH" "origin/$BRANCH" >> "$LOG" 2>&1 || stop "could not check out $BRANCH. See $LOG"
-  [ -f "$SRC/tools/beta/install.sh" ] || stop "branch $BRANCH is older than this script and does not build from source. Run this again and pick another branch."
+  say "   Pulling the source. This is a few hundred MB the first time..."
+  rm -rf "$SRC"
+  git clone --no-checkout "$SOURCE_REPO" "$SRC" >> "$LOG" 2>&1 || stop "could not pull the source from $SOURCE_REPO. Check your connection. See $LOG"
 fi
+branches="$(git -C "$SRC" for-each-ref --format='%(refname:lstrip=3)' refs/remotes/origin | grep -v '^HEAD$')"
+[ -n "$branches" ] || stop "the repo has no branches."
+case "$OS" in
+  mac) wanted=mac-test ;;
+  linux) wanted=linux-test ;;
+  *) wanted=dev ;;
+esac
+say ""
+say "   Branches:"
+n=0
+default_number=1
+for b in $branches; do
+  n=$((n + 1))
+  printf '   %2d - %-16s %s\n' "$n" "$b" "$(describe_branch "$b")"
+  [ "$b" = "$wanted" ] && default_number=$n
+done
+ask "   Branch number" "$default_number"
+n=0
+BRANCH=""
+for b in $branches; do
+  n=$((n + 1))
+  [ "$n" = "$ANSWER" ] && BRANCH="$b"
+done
+[ -n "$BRANCH" ] || stop "there is no branch $ANSWER."
+git -C "$SRC" checkout -q -f -B "$BRANCH" "origin/$BRANCH" >> "$LOG" 2>&1 || stop "could not check out $BRANCH. See $LOG"
+[ -f "$SRC/tools/beta/install.sh" ] || stop "branch $BRANCH is older than this script and does not build from source. Run this again and pick another branch."
 [ -f "$SRC/Cargo.toml" ] && [ -d "$SRC/installer/engine" ] || stop "$SRC is not the aircraft's source."
 say ""
 
@@ -382,7 +369,6 @@ say ""
 line
 say "About to do this:"
 say "  X-Plane:   $XPLANE"
-say "  Source:    $SOURCE_INPUT"
 say "  Branch:    $BRANCH"
 say "  Textures:  $TEXTURE_NAME"
 case "$RELEASE_MODE" in
