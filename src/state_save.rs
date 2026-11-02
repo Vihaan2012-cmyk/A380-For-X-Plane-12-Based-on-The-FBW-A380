@@ -674,6 +674,10 @@ fn read_settings(path: &Path) -> AutosaveSettings {
 }
 
 impl StateSave {
+    pub fn is_loading(&self) -> bool {
+        self.loading.is_some()
+    }
+
     /// `xplane_root` is the folder `Output/` lives under.
     pub fn new(xplane_root: &Path) -> Self {
         let prefs = xplane_root.join("Output").join("preferences");

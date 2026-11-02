@@ -460,11 +460,69 @@ fn local_vars(flt: &str) -> impl Iterator<Item = (&str, f64)> {
 pub const GEAR_LEVER_VAR: &str = "A32NX_GEAR_LEVER_POSITION_REQUEST";
 
 /// The gear lever position (1 down, 0 up) FlyByWire's flight file for a
-/// spawn selects, if it sets one. Unlike the cockpit controls, MSFS applies
-/// this for every start, cold or hot: nothing else sets the lever (only gear
+/// spawn selects, if it sets one. Nothing else sets the lever (only gear
 /// commands move it), so without it the lever starts selected up.
 pub fn gear_lever_from_flight_file(flt: &str) -> Option<f64> {
     local_vars(flt).find(|(name, _)| *name == GEAR_LEVER_VAR).map(|(_, v)| v)
+}
+
+pub const PARK_BRAKE_VAR: &str = "A32NX_PARK_BRAKE_LEVER_POS";
+
+/// The parking brake lever FlyByWire's flight file for a spawn sets: on for
+/// the ground files, off for cruise, approach and final.
+pub fn park_brake_from_flight_file(flt: &str) -> Option<f64> {
+    local_vars(flt).find(|(name, _)| *name == PARK_BRAKE_VAR).map(|(_, v)| v)
+}
+
+/// Pushbuttons no flight file sets that a new spawn must not keep from the
+/// last flight: the APU's and external power's, all built off.
+const SPAWN_OFF: [&str; 6] = [
+    "OVHD_APU_MASTER_SW_PB_IS_ON",
+    "OVHD_APU_START_PB_IS_ON",
+    "OVHD_ELEC_EXT_PWR_1_PB_IS_ON",
+    "OVHD_ELEC_EXT_PWR_2_PB_IS_ON",
+    "OVHD_ELEC_EXT_PWR_3_PB_IS_ON",
+    "OVHD_ELEC_EXT_PWR_4_PB_IS_ON",
+];
+
+/// The cockpit a spawn in `state` starts with, every variable by its full
+/// name: the pushbuttons FlyByWire builds in a position other than zero
+/// (`crate::OVERHEAD_DEFAULTS_ON`, `crate::OVERHEAD_DEFAULT_VALUES`) and
+/// `SPAWN_OFF`, then what MSFS applies from FlyByWire's flight file for the
+/// state -- its cockpit controls, gear lever and parking brake. The
+/// temperature selectors keep FlyByWire's constructed positions.
+///
+/// Climb.flt sets 44 of cruise.FLT's 96 cockpit controls (no batteries,
+/// signs or ANN LT), so a climb starts from cruise.FLT's cockpit with
+/// Climb.flt's on top; the systems treat the two alike (module doc).
+pub fn spawn_cockpit(state: StartState) -> Vec<(String, f64)> {
+    let prefixed = |name: &str| format!("{}{name}", crate::NAME_PREFIX);
+    let factory_values: Vec<String> = crate::OVERHEAD_DEFAULT_VALUES.iter().map(|(name, _)| prefixed(name)).collect();
+    let mut cockpit: Vec<(String, f64)> = crate::OVERHEAD_DEFAULTS_ON
+        .iter()
+        .map(|name| (prefixed(name), 1.))
+        .chain(crate::OVERHEAD_DEFAULT_VALUES.iter().map(|(name, value)| (prefixed(name), *value)))
+        .chain(SPAWN_OFF.iter().map(|name| (prefixed(name), 0.)))
+        .chain([(PARK_BRAKE_VAR.to_string(), 0.)])
+        .collect();
+    let mut set = |name: &str, value: f64| match cockpit.iter_mut().find(|(n, _)| n == name) {
+        Some(entry) => entry.1 = value,
+        None => cockpit.push((name.to_string(), value)),
+    };
+    let base = (state == StartState::Climb).then(|| crate::fuel::flt_for_start_state(StartState::Cruise.into())).flatten();
+    for flt in base.into_iter().chain(crate::fuel::flt_for_start_state(state.into())) {
+        for (name, value) in cockpit_controls_from_flight_file(flt) {
+            if !factory_values.contains(&name) {
+                set(&name, value);
+            }
+        }
+        for (name, value) in [(GEAR_LEVER_VAR, gear_lever_from_flight_file(flt)), (PARK_BRAKE_VAR, park_brake_from_flight_file(flt))] {
+            if let Some(value) = value {
+                set(name, value);
+            }
+        }
+    }
+    cockpit
 }
 
 /// The `LIGHT POTENTIOMETER` index of every display the plugin draws
@@ -483,8 +541,6 @@ pub const DISPLAY_START_BRIGHTNESS: f64 = 1.0;
 
 /// Whether a start state begins with the engines running (every state but
 /// Hangar and Apron -- see the module doc).
-pub const ANN_LIGHT_BRIGHT: f64 = 1.;
-
 pub fn engines_running_state(state: StartState) -> bool {
     !matches!(state, StartState::Hangar | StartState::Apron)
 }

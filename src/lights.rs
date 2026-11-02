@@ -613,6 +613,25 @@ impl Lights {
         }
     }
 
+    /// The exterior lights whose switch is on, lit or not.
+    pub fn exterior_switched_on(&self) -> Vec<&'static str> {
+        [
+            ("beacon", &self.beacon),
+            ("nav", &self.nav),
+            ("strobe", &self.strobe),
+            ("logo", &self.logo),
+            ("wing", &self.wing),
+            ("taxi", &self.taxi_nose),
+            ("runway turn-off", &self.taxi_turnoff),
+            ("nose landing", &self.landing_nose),
+            ("main landing", &self.landing_main),
+        ]
+        .into_iter()
+        .filter(|(_, group)| group.gate.commanded != 0.)
+        .map(|(name, _)| name)
+        .collect()
+    }
+
     /// After the systems tick, so `ELEC_*_BUS_IS_POWERED` is this tick's.
     pub fn update(&mut self, vars: &mut Vars, xplm: &Xplm, circuits: &Circuits, delta: f64) {
         self.cockpit_tests.update(vars, xplm, delta);

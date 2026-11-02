@@ -173,6 +173,7 @@ mod doors;
 // static/AoA covers, engine inlet/exhaust covers, gear pins and chocks.
 mod walkaround;
 mod parked_roll;
+mod start_check;
 mod cowl_doors;
 mod seat_belt_signs;
 mod overhead_switches;
@@ -1491,6 +1492,7 @@ struct Plugin {
     // [slot fields: walkaround] The exterior preflight walkaround items.
     walkaround: walkaround::Walkaround,
     parked_roll: parked_roll::ParkedRoll,
+    start_check: start_check::StartCheck,
     cowl_doors: cowl_doors::CowlDoors,
     seat_belt_signs: seat_belt_signs::SeatBeltSigns,
     overhead_switches: overhead_switches::OverheadSwitches,
@@ -2166,6 +2168,7 @@ impl Plugin {
             // [slot init: walkaround]
             walkaround,
             parked_roll,
+            start_check: start_check::StartCheck::default(),
             cowl_doors,
             seat_belt_signs,
             overhead_switches,
@@ -2300,39 +2303,32 @@ impl Plugin {
             f64::from(built),
             start_state::name(built)
         ));
-        // Every start, cold or hot: the gear lever the flight file selects
-        // (down on the ground). It is an input only gear commands move, so
-        // without this it starts at 0, selected up, and the gear retracts
-        // on the ground as soon as the hydraulics pressurise.
-        if let Some(lever) = fuel::flt_for_start_state(state.into()).and_then(start_state::gear_lever_from_flight_file) {
-            let id = extra_backend::calculator_variable(&mut self.vars, "L", start_state::GEAR_LEVER_VAR);
-            self.vars.write(&id, lever);
-            log(&format!("start state {}: gear lever {} from FlyByWire's flight file", start_state::name(state), if lever > 0.5 { "down" } else { "up" }));
-        }
-        // Annunciator light switch at BRT, not TEST (only the hangar and taxi flight files set it).
-        let ann = self.vars.get("OVHD_INTLT_ANN".to_owned());
-        if self.vars.read(&ann) == 0. {
-            self.vars.write(&ann, start_state::ANN_LIGHT_BRIGHT);
-            log(&format!("start state {}: annunciator light switch to BRT", start_state::name(state)));
-        }
         // Every display at full brightness, whatever the start.
         for p in start_state::display_potentiometers() {
             let id = self.vars.get(format!("LIGHT POTENTIOMETER:{p}"));
             self.vars.write(&id, start_state::DISPLAY_START_BRIGHTNESS);
         }
-        if start_state::engines_running_state(state) {
-            // The cockpit a spawn in this state has in MSFS: FlyByWire's own
-            // flight file's cockpit controls (IRs in NAV, batteries, packs,
-            // bleeds, pumps), which is what makes it ready to fly.
-            if let Some(flt) = fuel::flt_for_start_state(state.into()) {
-                let controls = start_state::cockpit_controls_from_flight_file(flt);
-                for (name, value) in &controls {
-                    let id = extra_backend::calculator_variable(&mut self.vars, "L", name);
-                    self.vars.write(&id, *value);
-                }
-                log(&format!("start state {}: set {} cockpit controls from FlyByWire's flight file", start_state::name(state), controls.len()));
-            }
+        // The cockpit a spawn in this state has in MSFS, cold or hot, so a
+        // new spawn never keeps the last flight's switches.
+        let loading = self.state_save.is_loading();
+        let cockpit = if loading { Vec::new() } else { start_state::spawn_cockpit(state) };
+        for (name, value) in &cockpit {
+            let id = extra_backend::calculator_variable(&mut self.vars, "L", name);
+            self.vars.write(&id, *value);
         }
+        if !loading {
+            let read = |name: &str| cockpit.iter().find(|(n, _)| n == name).map_or(0., |(_, v)| *v);
+            log(&format!(
+                "start state {}: {} cockpit controls from FlyByWire's flight file, gear lever {}, parking brake {}",
+                start_state::name(state),
+                cockpit.len(),
+                if read(start_state::GEAR_LEVER_VAR) > 0.5 { "down" } else { "up" },
+                if read(start_state::PARK_BRAKE_VAR) > 0.5 { "set" } else { "off" },
+            ));
+        }
+        // A turnaround's Powered preset moves the cockpit on from here.
+        let turnaround = start_state::last_deep_start() == deep::live::DeepStart::Turnaround;
+        self.start_check = start_check::StartCheck::armed(state, if turnaround { &[] } else { &cockpit }, loading);
         #[cfg(feature = "js")]
         if let Some(host) = self.xphfbw.as_mut() {
             host.mark_ready();
@@ -2781,6 +2777,7 @@ impl Plugin {
         // pinned leg down through its own gear-deploy write below.
         self.walkaround.update(&mut self.vars, xplm);
         self.parked_roll.update(&mut self.vars, xplm, delta);
+        self.start_check.update(&mut self.vars, xplm, &self.lights, delta);
         self.cowl_doors.update(&mut self.vars, xplm, delta);
         self.seat_belt_signs.update(&mut self.vars, xplm);
         self.overhead_switches.update(&mut self.vars);
