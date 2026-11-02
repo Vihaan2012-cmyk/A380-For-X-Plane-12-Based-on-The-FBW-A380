@@ -760,6 +760,8 @@ mod tests {
         assert_eq!(vars["APU_GEN_1_OVERLOAD"], 0.0, "nothing published under the load's name must not fabricate a load");
 
         let mut overloaded = LiveApu::new();
+        let started = run(&mut overloaded, &truth, &Faults::default(), 600.0);
+        assert_eq!(started["APU_AVAILABLE"], 1.0, "the generators only take load once the APU is AVAIL");
         let mut published_frame = BTreeMap::new();
         // Comfortably past the generator's own rated real power
         // (`params::GENERATOR_RATED_APPARENT_VA * ..._POWER_FACTOR`, 96 kW).

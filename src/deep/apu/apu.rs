@@ -253,8 +253,9 @@ impl Apu {
         let commanded_fuel = self.governor.step(n_for_governor, running, accel_ceiling, dt);
         let actual_fuel = self.fuel_control.step(commanded_fuel, solenoid_open, &faults.fuel_control, dt);
 
-        let gen1_load = if inputs.gen1_used { inputs.gen1_electrical_load_w } else { 0.0 };
-        let gen2_load = if inputs.gen2_used { inputs.gen2_electrical_load_w } else { 0.0 };
+        // The generator line contactors close only at AVAIL, as the bleed valve below.
+        let gen1_load = if inputs.gen1_used && self.was_available { inputs.gen1_electrical_load_w } else { 0.0 };
+        let gen2_load = if inputs.gen2_used && self.was_available { inputs.gen2_electrical_load_w } else { 0.0 };
         let total_rated = self.generators.gen1.rated_real_power_w() + self.generators.gen2.rated_real_power_w();
         let electrical_load_frac = if total_rated > 1e-6 { (gen1_load + gen2_load) / total_rated } else { 0.0 };
 
@@ -573,6 +574,8 @@ mod tests {
     fn a_generator_carrying_a_real_load_past_its_rating_is_overloaded() {
         let mut apu = Apu::new(288.15);
         let mut inputs = base_inputs();
+        inputs.start_selected = true;
+        started(&mut apu, &inputs, &ApuFaults::default());
         inputs.gen1_used = true;
         // Comfortably past `Generator::rated_real_power_w()`
         // (`params::GENERATOR_RATED_APPARENT_VA * ..._POWER_FACTOR`):
@@ -586,6 +589,8 @@ mod tests {
         // overloaded, so this is a real threshold and not a stuck flag.
         let mut apu2 = Apu::new(288.15);
         let mut light = base_inputs();
+        light.start_selected = true;
+        started(&mut apu2, &light, &ApuFaults::default());
         light.gen1_used = true;
         light.gen1_electrical_load_w = 0.2 * (params::GENERATOR_RATED_APPARENT_VA * params::GENERATOR_RATED_POWER_FACTOR);
         let out2 = apu2.step(&light, &ApuFaults::default());
@@ -760,6 +765,29 @@ mod tests {
             }
         }
         assert!(tripped_at.is_some(), "a full leak never tripped the APU within an hour");
+    }
+
+    #[test]
+    fn the_aircraft_load_waits_for_avail_before_it_reaches_the_generators() {
+        let mut apu = Apu::new(288.15);
+        let faults = ApuFaults::default();
+        let mut inputs = base_inputs();
+        for _ in 0..200 {
+            apu.step(&inputs, &faults);
+        }
+        inputs.start_selected = true;
+        inputs.gen1_used = true;
+        inputs.gen2_used = true;
+        inputs.gen1_electrical_load_w = 100_000.0;
+        inputs.gen2_electrical_load_w = 100_000.0;
+        let mut out = Outputs::default();
+        for _ in 0..4000 {
+            out = apu.step(&inputs, &faults);
+            if out.available || out.ecb_any_trip {
+                break;
+            }
+        }
+        assert!(out.available && !out.ecb_any_trip, "N {:.1}% EGT {:.0} C trip {}", out.n_percent, out.egt_true_c, out.ecb_any_trip);
     }
 
     #[test]
