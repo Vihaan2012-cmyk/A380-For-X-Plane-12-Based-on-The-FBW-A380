@@ -33,6 +33,8 @@ pub struct ParkedRoll {
     refs: Refs,
     chocks: VariableIdentifier,
     park_lever: VariableIdentifier,
+    brake_force: [VariableIdentifier; 2],
+    altn_press: [VariableIdentifier; 2],
     lines_left: u32,
     since_line_s: f64,
 }
@@ -59,6 +61,8 @@ impl ParkedRoll {
             },
             chocks: vars.get("MODEL_WHEELCHOCKS_ENABLED".to_owned()),
             park_lever: vars.get("PARK_BRAKE_LEVER_POS".to_owned()),
+            brake_force: ["BRAKE LEFT FORCE FACTOR", "BRAKE RIGHT FORCE FACTOR"].map(|n| vars.get(n.to_owned())),
+            altn_press: ["HYD_BRAKE_ALTN_LEFT_PRESS", "HYD_BRAKE_ALTN_RIGHT_PRESS"].map(|n| vars.get(n.to_owned())),
             lines_left: LINES_PER_ROLL,
             since_line_s: 1.0,
         }
@@ -86,15 +90,19 @@ impl ParkedRoll {
         }
         let n = |refs: &[Option<DataRef>]| refs.iter().map(|d| format!("{:.0}", r(*d))).collect::<Vec<_>>().join(" ");
         crate::log(&format!(
-            "parked roll: {speed:.2} m/s hdg {:.1} pitch {:.2} roll {:.2} wind {:.1} m/s | park {:.2} (lever {:.0}) brakes {:.2}/{:.2} chocks {:.0} nose steer {:.1} | axial N gear/engines/aero/plugins/total {} | side N gear/plugins/total {} | yaw Nm gear/plugins/total {}",
+            "parked roll: {speed:.2} m/s hdg {:.1} pitch {:.2} roll {:.2} wind {:.1} m/s | park {:.2} (lever {:.0}, ALTN {:.0}/{:.0} psi) brakes {:.2}/{:.2} (FlyByWire {:.2}/{:.2}) chocks {:.0} nose steer {:.1} | axial N gear/engines/aero/plugins/total {} | side N gear/plugins/total {} | yaw Nm gear/plugins/total {}",
             r(self.refs.psi),
             r(self.refs.theta),
             r(self.refs.phi),
             r(self.refs.wind),
             r(self.refs.park),
             vars.read(&self.park_lever),
+            vars.read(&self.altn_press[0]),
+            vars.read(&self.altn_press[1]),
             r(self.refs.left_brake),
             r(self.refs.right_brake),
+            vars.read(&self.brake_force[0]),
+            vars.read(&self.brake_force[1]),
             vars.read(&self.chocks),
             steer[0],
             n(&self.refs.axial),

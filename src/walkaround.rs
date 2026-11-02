@@ -241,6 +241,24 @@ fn chock_overrun(installed: &mut [bool; N], rolled_m: f64) -> Vec<String> {
     lines
 }
 
+/// The beacon coming on is the ground crew's cue to pull the chocks, and
+/// FlyByWire's chocks stop holding at that moment
+/// (`A380BrakingForce::update_chocks_braking`), so they come off here too
+/// rather than stay fitted while nothing holds the wheels.
+fn chocks_pulled_for_beacon(installed: &mut [bool; N], was_on: bool, on: bool) -> Vec<String> {
+    let mut lines = Vec::new();
+    if !on || was_on {
+        return lines;
+    }
+    for &idx in &CHOCKS {
+        if installed[idx] {
+            installed[idx] = false;
+            lines.push(format!("walkaround: {} pulled by the ground crew, beacon on", ITEMS[idx]));
+        }
+    }
+    lines
+}
+
 /// FlyByWire's wheel chocks (`A380BrakingForce::update_chocks_braking`)
 /// brake the wheels fully; here they only hold while these are fitted.
 fn wheel_chocks_from(installed: &[bool; N]) -> bool {
@@ -312,6 +330,8 @@ pub struct Walkaround {
     /// Each item's state as a systems variable ([`mirror_name`]).
     mirror: [VariableIdentifier; N],
     wheel_chocks: VariableIdentifier,
+    beacon: VariableIdentifier,
+    beacon_was_on: bool,
     groundspeed_ms: Option<DataRef>,
     local_x: Option<DataRef>,
     local_z: Option<DataRef>,
@@ -356,6 +376,8 @@ impl Walkaround {
             n2: std::array::from_fn(|i| vars.get(format!("ENGINE_N2:{}", i + 1))),
             mirror: std::array::from_fn(|i| vars.get(mirror_name(ITEMS[i]))),
             wheel_chocks: vars.get("MODEL_WHEELCHOCKS_ENABLED".to_string()),
+            beacon: vars.get("LIGHT BEACON".to_string()),
+            beacon_was_on: false,
             groundspeed_ms: xplm.find("sim/flightmodel/position/groundspeed"),
             local_x: xplm.find("sim/flightmodel/position/local_x"),
             local_z: xplm.find("sim/flightmodel/position/local_z"),
@@ -437,6 +459,9 @@ impl Walkaround {
         let at = [self.local_x, self.local_z].map(|d| d.map_or(0.0, |d| xplm.get_d(d)));
         let rolled_m = self.roll.rolled_m(at, groundspeed_ms);
         self.events.extend(chock_overrun(&mut self.installed, rolled_m));
+        let beacon_on = vars.read(&self.beacon) != 0.0;
+        self.events.extend(chocks_pulled_for_beacon(&mut self.installed, self.beacon_was_on, beacon_on));
+        self.beacon_was_on = beacon_on;
 
         for i in 0..N {
             published::set(self.values[i], self.installed[i] as i32 as f64);
@@ -544,6 +569,23 @@ mod tests {
         let (fod, lines) = ingest_and_blow_out(&mut installed, [50.0; 4]);
         assert!(fod.is_empty(), "nothing to ingest once already removed");
         assert!(lines.is_empty());
+    }
+
+    #[test]
+    fn the_ground_crew_pulls_the_chocks_when_the_beacon_comes_on() {
+        let mut installed = [false; N];
+        for &i in &CHOCKS {
+            installed[i] = true;
+        }
+        installed[0] = true;
+        assert!(chocks_pulled_for_beacon(&mut installed, false, false).is_empty());
+        let lines = chocks_pulled_for_beacon(&mut installed, false, true);
+        assert_eq!(lines.len(), CHOCKS.len());
+        assert!(!wheel_chocks_from(&installed));
+        assert!(installed[0], "only the chocks come off");
+        installed[CHOCKS[0]] = true;
+        assert!(chocks_pulled_for_beacon(&mut installed, true, true).is_empty(), "chocks put back with the beacon still on stay");
+        assert!(installed[CHOCKS[0]]);
     }
 
     #[test]
