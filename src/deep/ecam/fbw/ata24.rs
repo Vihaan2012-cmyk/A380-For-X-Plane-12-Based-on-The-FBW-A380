@@ -511,7 +511,8 @@ pub fn wire(v: &mut Vec<FbwProc>) {
     // its own real number: "lower than 35 PSI," a different physical system
     // from the APU's own 15 PSI oil trip, so the raw pressure is compared
     // directly rather than reading the internally-15-PSI-calibrated
-    // `low_pressure_tripped` boolean.
+    // `low_pressure_tripped` boolean. A drive whose engine is not turning has
+    // no oil pressure and no fault.
     for n in 1..=4u64 {
         let (id, title) = match n {
             1 => (240_800_048, "ELEC DRIVE 1 OIL PRESS LO"),
@@ -520,7 +521,14 @@ pub fn wire(v: &mut Vec<FbwProc>) {
             _ => (240_800_051, "ELEC DRIVE 4 OIL PRESS LO"),
         };
         v.push(
-            proc(id, title, Level::Caution, sd_page::ELEC_AC, var(&format!("ELEC_DRIVE_{n}_OIL_PRESSURE_PSI")).lt(35.0), "FCOM p.4948: the oil pressure is abnormally low (lower than 35 PSI)")
+            proc(
+                id,
+                title,
+                Level::Caution,
+                sd_page::ELEC_AC,
+                all(vec![super::ata70::core_running(n as u32), var(&format!("ELEC_DRIVE_{n}_OIL_PRESSURE_PSI")).lt(35.0)]),
+                "FCOM p.4948: the oil pressure is abnormally low (lower than 35 PSI) while the engine turns the drive",
+            )
                 .confirm(1.0)
                 .inhibit(&[1, 4, 5, 6, 7, 9, 10, 12])
                 .items(2, Vec::new()),

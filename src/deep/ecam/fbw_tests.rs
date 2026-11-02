@@ -1289,3 +1289,22 @@ fn alerts_in_a_saved_flight_snapshot() {
         }
     }
 }
+
+#[test]
+fn starting_one_pair_of_engines_leaves_the_other_pair_quiet() {
+    let half = Truth {
+        dt_s: 0.1,
+        engine_running: [true, true, false, false],
+        engine_n1_frac: [0.2, 0.2, 0.0, 0.0],
+        engine_n2_frac: [0.6, 0.6, 0.0, 0.0],
+        engine_n3_frac: [0.7, 0.7, 0.0, 0.0],
+        ..Truth::default()
+    };
+    let published = run(half, &Faults::default(), 100);
+    for id in [240_800_050, 240_800_051] {
+        assert!(!holds(&wiring(id).trigger, &published), "{id} ELEC DRIVE OIL PRESS LO on an engine not yet started");
+    }
+    for id in [701_800_159, 701_800_160] {
+        assert!(wiring(id).inhibit.contains(&2), "{id} TWO ENG OUT must stay inhibited in phase 2 (first engine started)");
+    }
+}

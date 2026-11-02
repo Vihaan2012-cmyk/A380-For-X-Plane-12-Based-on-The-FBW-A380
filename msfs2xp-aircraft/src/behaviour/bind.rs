@@ -671,7 +671,10 @@ fn look_of(l: &Leaf) -> Option<(String, Look)> {
     match l.template.as_str() {
         "ASOBO_GT_Anim_Code" | "ASOBO_GT_Anim" => {
             let anim = nonempty(l, "ANIM_NAME")?.to_string();
-            let code = anim_code_fed_back(l, nonempty(l, "ANIM_CODE")?);
+            let code = nonempty(l, "ANIM_CODE")?;
+            // Asobo's ASOBO_GT_Anim_Code_Inversion_Test (Generic/Subtemplates/Animations_Subtemplates.xml).
+            let code = if inverted(l) { format!("{} {code} -", nonempty(l, "ANIM_LENGTH").unwrap_or("100")) } else { code.to_string() };
+            let code = anim_code_fed_back(l, &code);
             Some((anim, Look::Code { code, length: num(l, "ANIM_LENGTH").unwrap_or(100.0) }))
         }
         _ => None,

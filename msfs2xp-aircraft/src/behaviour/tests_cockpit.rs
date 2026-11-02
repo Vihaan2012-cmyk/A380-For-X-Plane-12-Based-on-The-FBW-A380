@@ -847,3 +847,67 @@ fn probe_ecam_cp_buttons_on_the_real_cockpit() {
         eprintln!("bound {:?}", b.anim);
     }
 }
+
+/// legacy/Airbus.xml A32NX_GT_Switch_Dummy, its two-state case.
+const A32NX_GT_SWITCH_DUMMY: &str = r###"
+    <Template Name="A32NX_GT_Switch_Dummy">
+        <DefaultTemplateParameters>
+            <SWITCH_POSITION_TYPE>O</SWITCH_POSITION_TYPE>
+            <SWITCH_POSITION_VAR>SwitchState</SWITCH_POSITION_VAR>
+            <LEFT_SINGLE_CODE></LEFT_SINGLE_CODE>
+            <NUM_STATES>2</NUM_STATES>
+            <ANIMREF_ID>0</ANIMREF_ID>
+        </DefaultTemplateParameters>
+        <Component ID="#NODE_ID#" Node="#NODE_ID#">
+            <Switch Param="NUM_STATES">
+                <Case Value="2">
+                    <UseTemplate Name="ASOBO_GT_Anim_Code">
+                        <ANIM_CODE>(#SWITCH_POSITION_TYPE#:#SWITCH_POSITION_VAR#) 100 *</ANIM_CODE>
+                    </UseTemplate>
+                    <UseTemplate Name="ASOBO_GT_Interaction_LeftSingle_Code">
+                        <LEFT_SINGLE_CODE>
+                            (#SWITCH_POSITION_TYPE#:#SWITCH_POSITION_VAR#) !
+                            (&gt;#SWITCH_POSITION_TYPE#:#SWITCH_POSITION_VAR#)
+                            #LEFT_SINGLE_CODE#
+                        </LEFT_SINGLE_CODE>
+                    </UseTemplate>
+                </Case>
+            </Switch>
+        </Component>
+    </Template>
+"###;
+
+#[test]
+fn an_inverted_switch_animation_runs_backwards_as_asobos_anim_code_runs_it() {
+    // glareshield.xml's OIT side switch (INVERT_ANIM 1) and A380_Cockpit_Behavior.xml's laptop power switch.
+    let lib = library(
+        &[A32NX_GT_SWITCH_DUMMY],
+        r###"
+        <Component ID="Switches">
+            <UseTemplate Name="A32NX_GT_Switch_Dummy">
+                <NODE_ID>SWITCH_GLARESHIELD_CS_OIT_SIDE</NODE_ID>
+                <PART_ID>SWITCH_GLARESHIELD_CS_OIT_SIDE</PART_ID>
+                <ANIM_NAME>SWITCH_GLARESHIELD_CS_OIT_SIDE</ANIM_NAME>
+                <NUM_STATES>2</NUM_STATES>
+                <SWITCH_POSITION_TYPE>L</SWITCH_POSITION_TYPE>
+                <SWITCH_POSITION_VAR>A380X_SWITCH_OIT_SIDE_LEFT</SWITCH_POSITION_VAR>
+                <INVERT_ANIM>1</INVERT_ANIM>
+            </UseTemplate>
+            <UseTemplate Name="A32NX_GT_Switch_Dummy">
+                <NODE_ID>SWITCH_LAPTOP_CS_POWER</NODE_ID>
+                <PART_ID>SWITCH_LAPTOP_CS_POWER</PART_ID>
+                <ANIM_NAME>SWITCH_LAPTOP_CS_POWER</ANIM_NAME>
+                <SWITCH_POSITION_TYPE>L</SWITCH_POSITION_TYPE>
+                <SWITCH_POSITION_VAR>A380X_SWITCH_LAPTOP_POWER_LEFT</SWITCH_POSITION_VAR>
+            </UseTemplate>
+        </Component>"###,
+    );
+    let (_, looks) = bind::controls(&expand::expand(&lib).leaves);
+    let at = |anim: &str, var: &str, v: f64| match &looks[anim] {
+        bind::Look::Code { code, .. } => value(code, &[(var, v)]),
+        other => panic!("{other:?}"),
+    };
+    assert_eq!(at("switch_glareshield_cs_oit_side", "L:A380X_SWITCH_OIT_SIDE_LEFT", 1.0), 0.0, "NSS AVNCS (1) is the lever's first frame");
+    assert_eq!(at("switch_glareshield_cs_oit_side", "L:A380X_SWITCH_OIT_SIDE_LEFT", 0.0), 100.0);
+    assert_eq!(at("switch_laptop_cs_power", "L:A380X_SWITCH_LAPTOP_POWER_LEFT", 1.0), 100.0, "a switch without INVERT_ANIM keeps its direction");
+}

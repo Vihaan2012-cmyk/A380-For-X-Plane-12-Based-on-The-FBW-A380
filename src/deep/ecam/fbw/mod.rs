@@ -152,6 +152,11 @@ pub mod phase {
     /// time, because that is the one stretch where a crew must not be
     /// distracted and cannot act.
     pub const ENG_56: &[u32] = &[5, 6];
+
+    /// FlyByWire's own `FwsCore.phase12561112Inhibition`: on the ground before
+    /// take-off power and after landing an engine that is not running is not
+    /// "out" (`FwsCore.ts` `engineShutdownPreCondition`).
+    pub const ENG_OUT: &[u32] = &[1, 2, 5, 6, 11, 12];
 }
 
 /// One of FlyByWire's own checklist items, wired to what this port models.

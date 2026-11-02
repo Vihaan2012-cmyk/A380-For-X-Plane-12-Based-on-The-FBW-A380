@@ -292,7 +292,7 @@ const OIL_TEMP_MAX_C: f64 = 177.0;
 /// offered, so one failed speed pick-up does not silence the oil warning.
 const CORE_RUNNING_FRACTION: f64 = 0.5;
 
-fn core_running(eng: u32) -> Cond {
+pub(super) fn core_running(eng: u32) -> Cond {
     any(vec![
         var(&format!("DEEP_ENG_{eng}_N3_PICKUP_A_FRAC")).gt(CORE_RUNNING_FRACTION),
         var(&format!("DEEP_ENG_{eng}_N3_PICKUP_B_FRAC")).gt(CORE_RUNNING_FRACTION),
@@ -835,9 +835,10 @@ pub fn wire(v: &mut Vec<FbwProc>) {
     // ---- TWO ENG OUT ON SAME/OPPOSITE SIDE (Pattern 17, composed).
     // `core_running(eng)` split left (1, 2) vs. right (3, 4) wing, gated so
     // a fully cold aircraft (every engine's core not running) does not read
-    // as a permanent two-engine-out. FCOM PRO-ABN-ECAM p.5862/5868 confirm
-    // both the level (SC/MASTER CAUT, Caution) and the inhibit ([5, 6],
-    // `phase::ENG_56`) by rendering the page.
+    // as a permanent two-engine-out, and inhibited where FlyByWire counts no
+    // engine as out (`phase::ENG_OUT`), so an engine start one pair at a time
+    // stays quiet. FCOM PRO-ABN-ECAM p.5862/5868 give the level (SC/MASTER
+    // CAUT, Caution).
     let any_running = any(vec![core_running(1), core_running(2), core_running(3), core_running(4)]);
     v.push(
         proc(
@@ -855,7 +856,7 @@ pub fn wire(v: &mut Vec<FbwProc>) {
             "both engines on one wing (1+2 or 3+4) are not running while at least one engine elsewhere is, ruling out a fully cold aircraft",
         )
         .confirm(2.0)
-        .inhibit(phase::ENG_56),
+        .inhibit(phase::ENG_OUT),
     );
     v.push(
         proc(
@@ -875,7 +876,7 @@ pub fn wire(v: &mut Vec<FbwProc>) {
             "one engine on each wing is not running while at least one engine elsewhere is, ruling out a fully cold aircraft",
         )
         .confirm(2.0)
-        .inhibit(phase::ENG_56),
+        .inhibit(phase::ENG_OUT),
     );
 
     // ---- THR LEVERS NOT SET (Pattern 18, now exact on its first clause).
