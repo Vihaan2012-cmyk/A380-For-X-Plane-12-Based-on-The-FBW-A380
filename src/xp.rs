@@ -1271,13 +1271,11 @@ pub fn dont_control_camera() {
     }
 }
 
-/// Run one of X-Plane's commands once, as a key press would. Returns whether
-/// X-Plane knows the command.
+/// Docks or undocks the jet bridges: openSAM's own and the airport's built-in
+/// X-Plane jetways, which openSAM does not move.
 pub fn toggle_jet_bridges() -> bool {
-    if find_command("openSAM/toggle_jwy").is_some() && command_once("openSAM/toggle_jwy") {
-        return true;
-    }
-    command_once("sim/ground_ops/jetway")
+    let sam = find_command("openSAM/toggle_jwy").is_some() && command_once("openSAM/toggle_jwy");
+    command_once("sim/ground_ops/jetway") || sam
 }
 
 /// Runs an X-Plane command: phase 0 once, 1 begin, 2 end.
