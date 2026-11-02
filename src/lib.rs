@@ -172,6 +172,7 @@ mod doors;
 // [slot modules: walkaround] The exterior preflight walkaround: pitot/
 // static/AoA covers, engine inlet/exhaust covers, gear pins and chocks.
 mod walkaround;
+mod parked_roll;
 mod cowl_doors;
 mod seat_belt_signs;
 mod overhead_switches;
@@ -1489,6 +1490,7 @@ struct Plugin {
     doors: doors::Doors,
     // [slot fields: walkaround] The exterior preflight walkaround items.
     walkaround: walkaround::Walkaround,
+    parked_roll: parked_roll::ParkedRoll,
     cowl_doors: cowl_doors::CowlDoors,
     seat_belt_signs: seat_belt_signs::SeatBeltSigns,
     overhead_switches: overhead_switches::OverheadSwitches,
@@ -1987,6 +1989,7 @@ impl Plugin {
         // `walkaround_installed` this reads to restore last session's
         // installed/removed state on a cold-and-dark start.
         let walkaround = walkaround::Walkaround::new(&mut vars, xplm, &persistence.state.walkaround_installed);
+        let parked_roll = parked_roll::ParkedRoll::new(&mut vars, xplm);
         let cowl_doors = cowl_doors::CowlDoors::new(&mut vars, xplm);
         let seat_belt_signs = seat_belt_signs::SeatBeltSigns::new(&mut vars, xplm);
         let overhead_switches = overhead_switches::OverheadSwitches::new(&mut vars);
@@ -2162,6 +2165,7 @@ impl Plugin {
             doors,
             // [slot init: walkaround]
             walkaround,
+            parked_roll,
             cowl_doors,
             seat_belt_signs,
             overhead_switches,
@@ -2776,6 +2780,7 @@ impl Plugin {
         // after_systems`, which needs this frame's gear-pin state to hold a
         // pinned leg down through its own gear-deploy write below.
         self.walkaround.update(&mut self.vars, xplm);
+        self.parked_roll.update(&mut self.vars, xplm, delta);
         self.cowl_doors.update(&mut self.vars, xplm, delta);
         self.seat_belt_signs.update(&mut self.vars, xplm);
         self.overhead_switches.update(&mut self.vars);
