@@ -31,22 +31,10 @@
 //! and take precedence for that tick, one-tick fresher than the polynomial
 //! estimate they overwrite.
 //!
-//! `thrust_trim` below still closes a bounded loop on
-//! `sim/flightmodel/engine/POINT_thrust`, now against the physics model's
-//! own computed thrust rather than the table. No X-Plane 12 mechanism was
-//! found that hands a single engine's thrust to a plugin while leaving
-//! X-Plane's own per-engine position/moment geometry alone:
-//! `override_engines`/`override_engine_forces` replace the *whole
-//! aircraft's* summed propulsive force and moment
-//! (`fside/fnrml/faxil_prop`, `L/M/N_prop`), not one engine's, so taking
-//! them would mean this plugin computing every engine's force and moment
-//! geometry itself from `POINT_XYZ`, with no way to verify the result's
-//! sign conventions without X-Plane running (see the workstream report).
-//! Trimming the throttle X-Plane's own per-engine model receives keeps
-//! X-Plane's already-correct per-engine position and asymmetric yaw, at
-//! the cost of X-Plane's own generic turbine curve still mediating the
-//! last step from throttle fraction to thrust; the trim's job is to make
-//! that step converge on the physics model's number.
+//! `thrust_trim` below closes a bounded loop on `sim/flightmodel/engine/POINT_thrust` against
+//! the physics model's thrust. That loop flies the aircraft only until `engine_forces` has
+//! checked its force and moment sums against X-Plane's own; after that `engine_forces` applies
+//! the physics model's thrust directly through `override_engine_forces`.
 
 use systems::simulation::{SimulatorReaderWriter, VariableIdentifier, VariableRegistry};
 
@@ -322,6 +310,9 @@ pub struct EngineCommands {
     refs: Refs,
     /// The thrust-trim loop's integrator state, per engine.
     thrust_integral: [f64; 4],
+    /// Each engine's thrust for `engine_forces`: the physics model's net thrust, zero while the
+    /// reverser takes it.
+    forward_thrust_n: [f64; 4],
     /// Each engine's damageable components (`components.rs`).
     damage: [DamageHandles; 4],
     /// Frozen/lagged readings for the ATA 73/76/77 component failures
@@ -544,6 +535,7 @@ impl EngineCommands {
                 oil_press: xplm.find("sim/flightmodel/engine/ENGN_oil_press_psi"),
             },
             thrust_integral: [0.; 4],
+            forward_thrust_n: [0.; 4],
             damage: std::array::from_fn(|i| DamageHandles::register(i + 1)),
             tla_resolver_held: [0.; 4],
             n1_tach_held: [0.; 4],
@@ -1019,6 +1011,7 @@ impl EngineCommands {
             // too would double-count the reverse thrust.
             let lever = o.sim_throttle_lever_pos.min(LEVER_MAX);
             let in_reverse = lever < 0.;
+            self.forward_thrust_n[i] = if in_reverse { 0. } else { phys.net_thrust_n };
             if let Some(d) = self.refs.prop_mode {
                 xplm.set_vi_at(d, i, if in_reverse { 3 } else { 1 });
             }
@@ -1063,6 +1056,10 @@ impl EngineCommands {
         }
 
         eec
+    }
+
+    pub fn forward_thrust_n(&self) -> [f64; 4] {
+        self.forward_thrust_n
     }
 
     /// Hand the throttles back to X-Plane.

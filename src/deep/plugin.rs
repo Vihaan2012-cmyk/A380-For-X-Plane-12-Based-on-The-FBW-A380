@@ -88,7 +88,7 @@
 //! | `engine_master_on[i]` | `GENERAL ENG STARTER:n` != 0, the same reading `engine_commands.rs`'s own `master`/`fuel_valve_open` uses |
 //! | `eng_gen_pb_on[i]` | `A32NX_OVHD_ELEC_ENG_GEN_{n}_PB_IS_ON` != 0 |
 //! | `apu_gen_pb_on[i]` | `A32NX_OVHD_ELEC_APU_GEN_{1,2}_PB_IS_ON` != 0 |
-//! | `bat_pb_auto[i]` | `A32NX_OVHD_ELEC_BAT_{1,2}_PB_IS_AUTO` != 0 |
+//! | `bat_pb_auto[i]` | `A32NX_OVHD_ELEC_BAT_{1,2,ESS,APU}_PB_IS_AUTO` != 0 |
 //! | `ext_pwr_pb_on[i]` | `A32NX_OVHD_ELEC_EXT_PWR_{n}_PB_IS_ON` != 0 |
 //! | `ground_spoiler_lever_armed` | `sim/cockpit2/controls/speedbrake_ratio`, through `prim::SimReadings::spoilers_from_xplane` (< -0.25 is armed) -- the exact same function and dataref `Prims::read` already uses, so this can never disagree with what the FCU/PRIMs themselves see |
 //! | *(manual galley-shed pushbutton)* | **not added** -- `deep::electrical`'s own load-management already computes an automatic `galley_shed_commanded` from the power budget; no real *manual* shed switch was found in this port, and duplicating the automatic one under a different name would invite the two to drift |
@@ -363,7 +363,13 @@ struct ControlIds {
     /// `[nose, left body, right body]` steering position over actuator travel.
     steering_position_ratio: [VariableIdentifier; 3],
     apu_gen_pb_on: [VariableIdentifier; 2],
-    bat_pb_auto: [VariableIdentifier; 2],
+    bat_pb_auto: [VariableIdentifier; 4],
+    bus_tie_auto: VariableIdentifier,
+    ac_ess_feed_normal: VariableIdentifier,
+    rat_man_on: VariableIdentifier,
+    galley_pb_auto: VariableIdentifier,
+    commercial_pb_on: VariableIdentifier,
+    drive_disc_pressed: [VariableIdentifier; 4],
     apu_master_sw_on: VariableIdentifier,
     apu_start_pb_on: VariableIdentifier,
     /// `A32NX_EXT_PWR_AVAIL:{1..4}`, for `Truth::gpu_plugged_in`.
@@ -426,7 +432,13 @@ impl ControlIds {
             park_brake_lever_pos: vars.get("PARK_BRAKE_LEVER_POS".to_owned()),
             steering_position_ratio: ["NOSE_WHEEL", "LEFT_BODY_STEERING", "RIGHT_BODY_STEERING"].map(|s| vars.get(format!("{s}_POSITION_RATIO"))),
             apu_gen_pb_on: [1, 2].map(|n| vars.get(format!("OVHD_ELEC_APU_GEN_{n}_PB_IS_ON"))),
-            bat_pb_auto: [1, 2].map(|n| vars.get(format!("OVHD_ELEC_BAT_{n}_PB_IS_AUTO"))),
+            bat_pb_auto: ["1", "2", "ESS", "APU"].map(|n| vars.get(format!("OVHD_ELEC_BAT_{n}_PB_IS_AUTO"))),
+            bus_tie_auto: vars.get("OVHD_ELEC_BUS_TIE_PB_IS_AUTO".to_owned()),
+            ac_ess_feed_normal: vars.get("OVHD_ELEC_AC_ESS_FEED_PB_IS_NORMAL".to_owned()),
+            rat_man_on: vars.get("OVHD_EMER_ELEC_RAT_AND_EMER_GEN_IS_PRESSED".to_owned()),
+            galley_pb_auto: vars.get("OVHD_ELEC_GALY_AND_CAB_PB_IS_AUTO".to_owned()),
+            commercial_pb_on: vars.get("OVHD_ELEC_COMMERCIAL_PB_IS_ON".to_owned()),
+            drive_disc_pressed: [1, 2, 3, 4].map(|n| vars.get(format!("OVHD_ELEC_IDG_{n}_PB_IS_RELEASED"))),
             apu_master_sw_on: vars.get("OVHD_APU_MASTER_SW_PB_IS_ON".to_owned()),
             apu_start_pb_on: vars.get("OVHD_APU_START_PB_IS_ON".to_owned()),
             ext_pwr_avail: [1, 2, 3, 4].map(|n| vars.get(format!("EXT_PWR_AVAIL:{n}"))),
@@ -1038,6 +1050,12 @@ impl DeepLayer {
             controls.brake_pedal_pos = std::array::from_fn(|i| f(self.refs.brake_pedal[i]).unwrap_or(0.0).clamp(0.0, 1.0));
             controls.apu_gen_pb_on = c.apu_gen_pb_on.map(|id| vars.read(&id) != 0.0);
             controls.bat_pb_auto = c.bat_pb_auto.map(|id| vars.read(&id) != 0.0);
+            controls.bus_tie_auto = vars.read(&c.bus_tie_auto) != 0.0;
+            controls.ac_ess_feed_altn = vars.read(&c.ac_ess_feed_normal) == 0.0;
+            controls.rat_man_on = vars.read(&c.rat_man_on) != 0.0;
+            controls.galley_pb_auto = vars.read(&c.galley_pb_auto) != 0.0;
+            controls.commercial_pb_on = vars.read(&c.commercial_pb_on) != 0.0;
+            controls.drive_disc_pressed = c.drive_disc_pressed.map(|id| vars.read(&id) != 0.0);
             controls.ext_pwr_pb_on = c.ext_pwr_pb_on.map(|id| vars.read(&id) != 0.0);
             controls.apu_master_sw_on = vars.read(&c.apu_master_sw_on) != 0.0;
             controls.apu_start_pb_on = vars.read(&c.apu_start_pb_on) != 0.0;

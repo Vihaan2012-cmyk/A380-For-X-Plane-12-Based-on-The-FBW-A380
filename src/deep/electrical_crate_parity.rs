@@ -52,6 +52,12 @@ fn truth_from(i: &deep_electrical::ElectricalInputs, published: PublishedFrame) 
     t.controls.eng_gen_pb_on = c.eng_gen_pb_on;
     t.controls.apu_gen_pb_on = c.apu_gen_pb_on;
     t.controls.bat_pb_auto = c.bat_pb_auto;
+    t.controls.bus_tie_auto = c.bus_tie_auto;
+    t.controls.ac_ess_feed_altn = c.ac_ess_feed_altn;
+    t.controls.rat_man_on = c.rat_man_on;
+    t.controls.galley_pb_auto = c.galley_pb_auto;
+    t.controls.commercial_pb_on = c.commercial_pb_on;
+    t.controls.drive_disc_pressed = c.drive_disc_pressed;
     t.controls.apu_start_pb_on = c.apu_start_pb_on;
     t.published = published;
     t

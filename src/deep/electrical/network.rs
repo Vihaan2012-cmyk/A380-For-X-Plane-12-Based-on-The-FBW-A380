@@ -135,6 +135,9 @@ const UNDERVOLTAGE_RESTART_MARGIN: f64 = 1.05;
 /// genuine recovery -- a generator coming on line, a tie closing -- is
 /// picked up far faster than a crew could act on it.
 const UNDERVOLTAGE_LOCKOUT_S: f64 = 5.0;
+/// How long a running load rides through a dip below its own minimum, s: RTCA DO-160 section 16's
+/// 200 ms power interruption for category Z equipment. Down to half its minimum, below which it drops at once.
+const POWER_INTERRUPT_HOLDUP_S: f64 = 0.2;
 /// A `high_resistance` (overheat) load fault's ceiling: at full severity the
 /// load draws this much *extra* real power on top of its own rated demand
 /// (GENERIC: a badly-degraded but not yet fully shorted winding/connector
@@ -254,11 +257,25 @@ pub enum BusId {
     DcHot2,
     DcApu,
     DcGndFltSvc,
+    /// 247XP: the EHA AC busbar (rudder EHA/EBHAs), from AC 3, or AC ESS in emergency.
+    AcEha,
+    /// 247PP: the EHA DC busbar (PRIM 2, SEC 2), from DC 2, or DC ESS in emergency.
+    DcEha,
+    /// The transfer circuit's left and right bars (BTC 1/2 and APU GEN A, BTC 3/4 and APU GEN B,
+    /// joined by the SIC) and the AC 2 - AC 3 bar between BTC 5 and BTC 6 (A380 TTM ATA 24).
+    AcTransferLeft,
+    AcTransferRight,
+    AcTransferMid,
+    /// GALLEY 1-4 (181XP, 183XP, 282XP, 280XP), one per main AC bus through its GALC.
+    Galley1,
+    Galley2,
+    Galley3,
+    Galley4,
 }
 
 /// [`BusId`] in a fixed order matching [`BusId::index`] -- the network's own
 /// bus array is always built and indexed in this order.
-pub const ALL_BUS_IDS: [BusId; 17] = [
+pub const ALL_BUS_IDS: [BusId; NUM_BUSES] = [
     BusId::Ac1,
     BusId::Ac2,
     BusId::Ac3,
@@ -276,6 +293,15 @@ pub const ALL_BUS_IDS: [BusId; 17] = [
     BusId::DcHot2,
     BusId::DcApu,
     BusId::DcGndFltSvc,
+    BusId::AcEha,
+    BusId::DcEha,
+    BusId::AcTransferLeft,
+    BusId::AcTransferRight,
+    BusId::AcTransferMid,
+    BusId::Galley1,
+    BusId::Galley2,
+    BusId::Galley3,
+    BusId::Galley4,
 ];
 
 impl BusId {
@@ -299,13 +325,22 @@ impl BusId {
             BusId::DcHot2 => 14,
             BusId::DcApu => 15,
             BusId::DcGndFltSvc => 16,
+            BusId::AcEha => 17,
+            BusId::DcEha => 18,
+            BusId::AcTransferLeft => 19,
+            BusId::AcTransferRight => 20,
+            BusId::AcTransferMid => 21,
+            BusId::Galley1 => 22,
+            BusId::Galley2 => 23,
+            BusId::Galley3 => 24,
+            BusId::Galley4 => 25,
         }
     }
 
     pub const fn is_ac(self) -> bool {
         matches!(
             self,
-            BusId::Ac1 | BusId::Ac2 | BusId::Ac3 | BusId::Ac4 | BusId::AcEss | BusId::AcEssShed | BusId::AcEmer | BusId::AcGndFltSvc
+            BusId::Ac1 | BusId::Ac2 | BusId::Ac3 | BusId::Ac4 | BusId::AcEss | BusId::AcEssShed | BusId::AcEmer | BusId::AcGndFltSvc | BusId::AcEha | BusId::AcTransferLeft | BusId::AcTransferRight | BusId::AcTransferMid | BusId::Galley1 | BusId::Galley2 | BusId::Galley3 | BusId::Galley4
         )
     }
 
@@ -339,11 +374,20 @@ impl BusId {
             BusId::DcHot2 => "DC_HOT2",
             BusId::DcApu => "DC_APU",
             BusId::DcGndFltSvc => "DC_GND_FLT_SVC",
+            BusId::AcEha => "AC_EHA",
+            BusId::DcEha => "DC_EHA",
+            BusId::AcTransferLeft => "AC_TRANSFER_L",
+            BusId::AcTransferRight => "AC_TRANSFER_R",
+            BusId::AcTransferMid => "AC_TRANSFER_MID",
+            BusId::Galley1 => "GALLEY_1",
+            BusId::Galley2 => "GALLEY_2",
+            BusId::Galley3 => "GALLEY_3",
+            BusId::Galley4 => "GALLEY_4",
         }
     }
 }
 
-const NUM_BUSES: usize = 17;
+pub const NUM_BUSES: usize = 26;
 
 /// A bus fault: a short from the busbar itself to airframe structure/ground,
 /// independent of any one load on it (`docs/deep/BRIEF.md` backlog item 3,
@@ -754,6 +798,8 @@ pub struct Load {
     /// whenever the load is free to come back the moment a feed clears
     /// [`Load::undervoltage_threshold`].
     undervoltage_lockout_s: f64,
+    /// Ride-through left at the present dip, s ([`POWER_INTERRUPT_HOLDUP_S`]).
+    holdup_s: f64,
 }
 
 impl Load {
@@ -767,7 +813,7 @@ impl Load {
     /// (see [`LoadFeed`]'s own doc) -- every real dual/triple-fed A380 LRU
     /// this catalogue models uses this constructor.
     pub fn new_multi_feed(spec: LoadSpec, feeds: Vec<LoadFeed>) -> Self {
-        Self { spec, feeds, commanded_on: true, faults: LoadFaults::default(), time_energized_s: 0.0, was_on: false, current_a: 0.0, powered: false, active_feed: None, undervoltage_latched: false, undervoltage_lockout_s: 0.0 }
+        Self { spec, feeds, commanded_on: true, faults: LoadFaults::default(), time_energized_s: 0.0, was_on: false, current_a: 0.0, powered: false, active_feed: None, undervoltage_latched: false, undervoltage_lockout_s: 0.0, holdup_s: 0.0 }
     }
 
     fn health(&self) -> f64 {
@@ -857,7 +903,9 @@ impl Load {
     }
 
     fn undervoltage_threshold(&self) -> f64 {
-        if self.undervoltage_latched {
+        if self.was_on && self.holdup_s > 0.0 {
+            self.spec.min_operating_voltage * 0.5
+        } else if self.undervoltage_latched {
             self.spec.min_operating_voltage * UNDERVOLTAGE_RESTART_MARGIN
         } else {
             self.spec.min_operating_voltage
@@ -960,6 +1008,7 @@ impl Load {
                 self.undervoltage_lockout_s = UNDERVOLTAGE_LOCKOUT_S;
             }
             self.was_on = false;
+            self.holdup_s = 0.0;
             self.time_energized_s = 0.0;
             self.powered = false;
             self.current_a = 0.0;
@@ -968,6 +1017,7 @@ impl Load {
         };
         self.active_feed = Some(feed_idx);
         self.undervoltage_latched = false;
+        self.holdup_s = if v >= self.spec.min_operating_voltage { POWER_INTERRUPT_HOLDUP_S } else { (self.holdup_s - dt_s.max(0.0)).max(0.0) };
 
         let freq_hz = frequencies[self.feeds[feed_idx].bus.index()];
         let (p, g) = self.contribution(v, freq_hz, dt_s, tick);
@@ -1800,7 +1850,11 @@ mod tests {
         // Sag the source hard (a failing generator) without killing the bus
         // outright.
         net.set_source(src, 20.0, 0.02, 0.0);
-        for _ in 0..5 {
+        for _ in 0..6 {
+            net.step(1.0 / 60.0);
+        }
+        assert!(net.loads[load].powered, "a 100 ms dip is ridden through");
+        for _ in 0..12 {
             net.step(1.0 / 60.0);
         }
         assert!(net.bus(BusId::Dc1).voltage > 0.0, "bus should still have some voltage");

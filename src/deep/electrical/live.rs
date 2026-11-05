@@ -58,7 +58,7 @@ use super::loads::{self, Catalog};
 use super::network::{BusId, Contactor, ContactorKind, FeedSource, Network, NetworkReport, ALL_BUS_IDS};
 use super::shedding::{power_budget, SheddingRelays, ShedInputs};
 use super::sources::{
-    ApuGeneratorFaults, BatteryFaults, GroundPowerFaults, RatFaults, StaticInverterFaults, TruFaults, VfgFaults, Wiring, WiringInputs,
+    ApuGeneratorFaults, BatteryFaults, GroundPowerFaults, RatFaults, StaticInverterFaults, TruFaults, VfgFaults, Wiring, WiringInputs, TR_AC_INPUT, TR_COUNT, TR_DC_OUTPUT,
 };
 
 // ---------------------------------------------------------------------
@@ -116,11 +116,11 @@ const DC_FEEDER_OHM: f64 = OHM_PER_M_AWG_4 * 15.0;
 const GND_SVC_FEEDER_OHM: f64 = OHM_PER_M_AWG_4 * 25.0;
 
 /// The catalogue's transit-only actuators: an electro-hydraulic gear or
-/// gear-door actuator draws its 2.1 kW only while the gear is actually
+/// gear-door selector valve draws its 50 W only while the gear is actually
 /// travelling, and is dead the rest of the flight. `loads.rs` gives every
 /// entry `commanded_on: true`, which is right for a continuously-running
-/// consumer and wrong for these six -- left on, they sit at 250 A each and
-/// collapse the essential DC bus for the whole flight. `ElectricalLive::new`
+/// consumer and wrong for these six -- left on, they draw for the whole
+/// flight. `ElectricalLive::new`
 /// forces them off as the correct cold-start default; from the second frame
 /// on, [`ElectricalLive::command_transit_loads`] drives them for real off
 /// `Controls::gear_door_commanded_open` (the door and, on this catalogue's
@@ -139,7 +139,7 @@ fn source_rating_a(bus: BusId) -> f64 {
         BusId::Dc1 | BusId::Dc2 | BusId::DcEss | BusId::DcApu => 200.0,
         // `sources::Wiring::build`'s own battery breaker rating,
         // `Battery::RATED_CAPACITY_AH * 4.0`.
-        BusId::DcBat | BusId::DcHot1 => 23.0 * 4.0,
+        BusId::DcBat | BusId::DcHot1 | BusId::DcHot2 => super::sources::Battery::RATED_CAPACITY_AH * 4.0,
         // `sources::Rat::MAX_POWER_W` at 115 V -- the largest source that
         // can ever feed the emergency bus.
         BusId::AcEmer => 70_000.0 / 115.0,
@@ -153,6 +153,27 @@ fn source_rating_a(bus: BusId) -> f64 {
         _ => 0.0,
     }
 }
+
+/// A GGPCU sends Power Ready, and its line contactor may close, at 115 V +/- 5 V (A380 TTM ATA 24).
+const POWER_READY_LOW_V: f64 = 110.0;
+const POWER_READY_HIGH_V: f64 = 120.0;
+/// A BCRU opens its line contactor 3 s after losing its AC input and holds its battery on for 2 s more.
+const BLC_OPEN_DELAY_S: f64 = 3.0;
+const BAT_LC_HOLD_S: f64 = 5.0;
+/// Total engine flame-out: every core below 50 % (A380 TTM ATA 24, N3 < 50 % from each EEC).
+const TEFO_CORE_FRACTION: f64 = 0.5;
+/// A battery above this is in thermal runaway and its BCRU takes it off line (A380 TTM ATA 24).
+const BATTERY_RUNAWAY_C: f64 = 71.0;
+/// Drive oil pressure low: the VFG faults after 30 s and disconnects itself after 5 min; outlet
+/// oil at 200 C faults it, and 5 min there disconnects it (A380 TTM ATA 24).
+const DRIVE_FAULT_AFTER_S: f64 = 30.0;
+const DRIVE_AUTO_DISCONNECT_S: f64 = 300.0;
+const DRIVE_OIL_FAULT_C: f64 = 200.0;
+
+/// APU BAT rejoins its busbar for charge below this (FlyByWire's `needs_charging`).
+const APU_BAT_RECHARGE_BELOW: f64 = 0.95;
+/// FlyByWire's `battery_nearly_empty`, as a charge fraction.
+const BAT_NEARLY_EMPTY: f64 = 0.2;
 
 const TRANSIT_ONLY_ACTUATORS: [&str; 6] =
     ["gear-actuator-nose", "gear-actuator-left", "gear-actuator-right", "gear-door-actuator-nose", "gear-door-actuator-left", "gear-door-actuator-right"];
@@ -246,7 +267,7 @@ pub mod board {
         /// Per bus index: last solved bus voltage, V. Written by
         /// `deep::electrical`, read by `deep::wiring` (a wiring fault's arc
         /// current depends on the voltage behind it).
-        pub bus_voltage: [f64; 17],
+        pub bus_voltage: [f64; super::super::network::NUM_BUSES],
         /// Per load index: severities `deep::wiring` derived for that
         /// load's own feeder from harness damage. Written by
         /// `deep::wiring`, read by `deep::electrical`, which folds them into
@@ -616,6 +637,7 @@ fn route_failures(net: &Network) -> (Vec<(u64, Target)>, Vec<String>) {
                     "24_elec.tr-2" => 1,
                     "24_elec.tr-ess" => 2,
                     "24_elec.tr-apu" => 3,
+                    "24_elec.tr-2-backup" => 4,
                     _ => {
                         unresolved.push(f.component.clone());
                         continue;
@@ -687,6 +709,19 @@ fn welded_channel_pairs() -> Vec<(usize, u64)> {
 /// Var-name tag for one bus, matching the names this area's `registry.rs`
 /// already cites in its ECAM triggers (`ELEC_AC_1_BUS_POTENTIAL`, ...) and
 /// the plugin's own existing `A32NX_ELEC_*` spelling (`src/study/elec.rs`).
+/// The four batteries' variable tags: BAT 1, BAT 2, ESS BAT, APU BAT.
+const BATTERY_TAGS: [&str; 4] = ["1", "2", "ESS", "APU"];
+
+/// One VFG's drive protection this tick: the low-pressure and overheat timers, whether the
+/// drive shows FAULT, and whether its GGPCU disconnects it now.
+fn drive_protection(low_s: f64, hot_s: f64, low_pressure: bool, oil_c: f64, dt: f64) -> (f64, f64, bool, bool) {
+    let low_s = if low_pressure { low_s + dt } else { 0.0 };
+    let hot = oil_c >= DRIVE_OIL_FAULT_C;
+    let hot_s = if hot { hot_s + dt } else { 0.0 };
+    let fault = low_s >= DRIVE_FAULT_AFTER_S || hot;
+    (low_s, hot_s, fault, low_s >= DRIVE_AUTO_DISCONNECT_S || hot_s >= DRIVE_AUTO_DISCONNECT_S)
+}
+
 fn bus_tag(bus: BusId) -> &'static str {
     match bus {
         BusId::Ac1 => "AC_1",
@@ -706,6 +741,15 @@ fn bus_tag(bus: BusId) -> &'static str {
         BusId::DcHot2 => "DC_HOT_2",
         BusId::DcApu => "DC_APU",
         BusId::DcGndFltSvc => "DC_GND_FLT_SVC",
+        BusId::AcEha => "247XP",
+        BusId::DcEha => "247PP",
+        BusId::AcTransferLeft => "AC_TRANSFER_L",
+        BusId::AcTransferRight => "AC_TRANSFER_R",
+        BusId::AcTransferMid => "AC_TRANSFER_MID",
+        BusId::Galley1 => "181XP",
+        BusId::Galley2 => "183XP",
+        BusId::Galley3 => "282XP",
+        BusId::Galley4 => "280XP",
     }
 }
 
@@ -745,7 +789,7 @@ const APU_GEN_COMPONENT: [&str; 2] = ["24_elec.apu-gen-1", "24_elec.apu-gen-2"];
 const TR_COMPONENT: [&str; 4] = ["24_elec.tr-1", "24_elec.tr-2", "24_elec.tr-ess", "24_elec.tr-apu"];
 const STATIC_INVERTER_COMPONENT: &str = "24_elec.static-inv";
 /// `registry.rs`'s own bus component ids, in [`ALL_BUS_IDS`] order.
-const BUS_COMPONENT: [&str; 17] = [
+const BUS_COMPONENT: [&str; super::network::NUM_BUSES] = [
     "24_elec.bus.AC1",
     "24_elec.bus.AC2",
     "24_elec.bus.AC3",
@@ -763,6 +807,15 @@ const BUS_COMPONENT: [&str; 17] = [
     "24_elec.bus.DC_HOT2",
     "24_elec.bus.DC_APU",
     "24_elec.bus.DC_GND_FLT_SVC",
+    "24_elec.bus.AC_EHA",
+    "24_elec.bus.DC_EHA",
+    "24_elec.bus.AC_TRANSFER_L",
+    "24_elec.bus.AC_TRANSFER_R",
+    "24_elec.bus.AC_TRANSFER_MID",
+    "24_elec.bus.GALLEY_1",
+    "24_elec.bus.GALLEY_2",
+    "24_elec.bus.GALLEY_3",
+    "24_elec.bus.GALLEY_4",
 ];
 
 /// The `FailureType::ElectricalBus` id for a deep bus, where FlyByWire
@@ -807,7 +860,13 @@ fn fbw_bus_failure(bus: BusId) -> Option<u64> {
         // same busbar this model calls `DcApu`.
         BusId::DcApu => 24_112,
         BusId::DcGndFltSvc => 24_117,
-        BusId::AcEssShed | BusId::DcEssShed | BusId::DcBat => return None,
+        // HOT BUS ESS, FlyByWire's `DirectCurrentHot(3)`.
+        BusId::DcBat => 24_115,
+        BusId::AcEha => 24_106,
+        BusId::DcEha => 24_111,
+        BusId::AcEssShed | BusId::DcEssShed => return None,
+        BusId::AcTransferLeft | BusId::AcTransferRight | BusId::AcTransferMid => return None,
+        BusId::Galley1 | BusId::Galley2 | BusId::Galley3 | BusId::Galley4 => return None,
     })
 }
 
@@ -834,6 +893,7 @@ const REASON_WINDING_DEGRADED: &str = "stator/winding degraded past half its ran
 const REASON_TRU_DEGRADED: &str = "rectifier winding degraded past half its range toward its own degraded internal resistance";
 const REASON_INVERTER_DEGRADED: &str = "conversion efficiency degraded past half its range toward its own floor";
 const REASON_FEEDER_OPEN: &str = "the feeder breaker protecting this bus has tripped open";
+const REASON_DRIVE_DISCONNECTED: &str = "its drive is disconnected from the engine gearbox";
 /// The healthy case still has to carry a string; nothing reads it, because
 /// a zero-magnitude coupling never leaves `Deep::tick`.
 const REASON_HEALTHY: &str = "healthy";
@@ -929,8 +989,8 @@ pub struct ElectricalLive {
     contactor: ContactorIndices,
     src_gen: [usize; 4],
     src_apu_gen: [usize; 2],
-    src_tr: [usize; 4],
-    src_bat: [usize; 2],
+    src_tr: [usize; TR_COUNT],
+    src_bat: [usize; 4],
     src_gpu: usize,
     src_rat: usize,
 
@@ -963,13 +1023,13 @@ pub struct ElectricalLive {
     /// in a real aircraft a feeder breaker sits in series with the bus's own
     /// supply, so when one opens this layer opens every contactor feeding
     /// that bus.
-    feeder_breaker: [usize; 17],
+    feeder_breaker: [usize; super::network::NUM_BUSES],
 
     // Per-frame state for `publish`.
     report: NetworkReport,
     gen_fault: [bool; 4],
     apu_gen_fault: [bool; 2],
-    tr_fault: [bool; 4],
+    tr_fault: [bool; TR_COUNT],
     /// This frame's level-2 verdicts and the reason behind each
     /// (`docs/deep/authority.md`, [`ElectricalLive::each_coupling`]).
     /// Deliberately *not* the `*_fault` annunciations above: those are
@@ -982,10 +1042,10 @@ pub struct ElectricalLive {
     apu_gen_verdict: [Option<&'static str>; 2],
     tr_verdict: [Option<&'static str>; 4],
     static_inv_verdict: Option<&'static str>,
-    bat_fault: [bool; 2],
-    bat_charge: [f64; 2],
-    bat_temp_c: [f64; 2],
-    bat_resistance_ohm: [f64; 2],
+    bat_fault: [bool; 4],
+    bat_charge: [f64; 4],
+    bat_temp_c: [f64; 4],
+    bat_resistance_ohm: [f64; 4],
     galley_shed: bool,
     commercial_shed: bool,
     galley_shed_commanded: bool,
@@ -1003,9 +1063,8 @@ pub struct ElectricalLive {
     // Measured feedback for the next frame's source models.
     measured_gen_load_w: [f64; 4],
     measured_apu_gen_load_w: [f64; 2],
-    measured_tr_load_w: [f64; 4],
-    measured_battery_current_a: [f64; 2],
-    bat2_charge_limiter: super::sources::ChargeLimiter,
+    measured_tr_load_w: [f64; TR_COUNT],
+    measured_battery_current_a: [f64; 4],
     /// The RAT's own real delivered power this tick, `source_delivered_w`
     /// against `src_rat`/`contactor.rat_line` -- the same technique already
     /// used for `measured_gen_load_w`/`measured_apu_gen_load_w`. Published
@@ -1058,17 +1117,29 @@ pub struct ElectricalLive {
     /// name directly, so this makes the same already-read pushbutton state
     /// a real published boolean instead of only an internal `Truth` field.
     gen_pb_on: [bool; 4],
+    /// Seconds since BCRU 1, BCRU 2 and BCRU ESS last had their AC input.
+    bcru_ac_lost_s: [f64; 3],
+    tefo: bool,
+    drive_low_pressure_s: [f64; 4],
+    drive_hot_s: [f64; 4],
+    drive_fault: [bool; 4],
+    drive_disconnected: [bool; 4],
 }
 
 struct ContactorIndices {
     gen_line: [usize; 4],
     apu_gen_line: [usize; 2],
-    tr_line: [usize; 4],
+    tr_line: [usize; TR_COUNT],
     static_inv_line: usize,
-    bat_direct: [usize; 2],
+    bat_direct: [usize; 4],
     gpu_line: [usize; 4],
     rat_line: usize,
-    ac_tie: [usize; 3],
+    /// BTC 1-6 and the SIC.
+    btc: [usize; 6],
+    sic: usize,
+    /// GALC 1-4 and the galley transfer contactors GALLEY 1 - 3 and GALLEY 2 - 4.
+    galc: [usize; 4],
+    galt: [usize; 2],
     ac_ess_feed_1: usize,
     ac_ess_feed_4: usize,
     ac_ess_shed: usize,
@@ -1076,10 +1147,14 @@ struct ContactorIndices {
     dc_tie_1_2: usize,
     dc_ess_feed_1: usize,
     dc_ess_shed: usize,
-    dc_bat_tie: usize,
-    bat2_charge_tie: usize,
+    /// FlyByWire's 990PB1 (HOT 1 -> DC 1), 990PB2 (HOT 2 -> DC 2) and 6PB3 (HOT ESS -> DC ESS).
+    bat_line: [usize; 3],
+    /// FlyByWire's 6PC1: BAT 1 onto DC ESS in emergency configuration.
+    bat_1_emer: usize,
     ac_gnd_svc_feed: usize,
     dc_gnd_svc_feed: usize,
+    /// FlyByWire's 911XN (AC 3 -> AC EHA), 911XH (AC ESS -> AC EHA), 970PN2 (DC 2 -> DC EHA), 14PH (DC ESS -> DC EHA).
+    eha: [usize; 4],
 }
 
 /// This area's live system, constructed cold.
@@ -1111,7 +1186,7 @@ impl ElectricalLive {
     /// Restores a saved state; returns the saved breakers this build does
     /// not have.
     pub fn restore_state(&mut self, s: &SavedElectrical) -> Result<usize, String> {
-        if s.batteries.len() != self.wiring.battery.len() {
+        if s.batteries.len() > self.wiring.battery.len() {
             return Err(format!("electrical: {} batteries saved", s.batteries.len()));
         }
         for (b, v) in self.wiring.battery.iter_mut().zip(&s.batteries) {
@@ -1169,10 +1244,24 @@ impl ElectricalLive {
         let mut tie = |id: &'static str, kind: ContactorKind, from: BusId, to: BusId, ohm: f64| -> usize {
             net.add_contactor(Contactor::new(id, kind, FeedSource::Bus(from), to, ohm))
         };
-        let ac_tie = [
-            tie("ac-tie-1-2", ContactorKind::BusTie, BusId::Ac1, BusId::Ac2, AC_TIE_OHM),
-            tie("ac-tie-2-3", ContactorKind::BusTie, BusId::Ac2, BusId::Ac3, AC_TIE_OHM),
-            tie("ac-tie-3-4", ContactorKind::BusTie, BusId::Ac3, BusId::Ac4, AC_TIE_OHM),
+        let btc = [
+            tie("btc-1", ContactorKind::BusTie, BusId::Ac1, BusId::AcTransferLeft, AC_TIE_OHM),
+            tie("btc-2", ContactorKind::BusTie, BusId::Ac2, BusId::AcTransferLeft, AC_TIE_OHM),
+            tie("btc-3", ContactorKind::BusTie, BusId::Ac3, BusId::AcTransferRight, AC_TIE_OHM),
+            tie("btc-4", ContactorKind::BusTie, BusId::Ac4, BusId::AcTransferRight, AC_TIE_OHM),
+            tie("btc-5", ContactorKind::BusTie, BusId::Ac2, BusId::AcTransferMid, AC_TIE_OHM),
+            tie("btc-6", ContactorKind::BusTie, BusId::Ac3, BusId::AcTransferMid, AC_TIE_OHM),
+        ];
+        let sic = tie("sic", ContactorKind::BusTie, BusId::AcTransferLeft, BusId::AcTransferRight, AC_TIE_OHM);
+        let galc = [
+            tie("galc-1", ContactorKind::Feeder, BusId::Ac1, BusId::Galley1, ESS_FEEDER_OHM),
+            tie("galc-2", ContactorKind::Feeder, BusId::Ac2, BusId::Galley2, ESS_FEEDER_OHM),
+            tie("galc-3", ContactorKind::Feeder, BusId::Ac3, BusId::Galley3, ESS_FEEDER_OHM),
+            tie("galc-4", ContactorKind::Feeder, BusId::Ac4, BusId::Galley4, ESS_FEEDER_OHM),
+        ];
+        let galt = [
+            tie("galt-1-3", ContactorKind::BusTie, BusId::Galley1, BusId::Galley3, AC_TIE_OHM),
+            tie("galt-2-4", ContactorKind::BusTie, BusId::Galley2, BusId::Galley4, AC_TIE_OHM),
         ];
         let ac_ess_feed_1 = tie("ac-ess-feed-1", ContactorKind::Feeder, BusId::Ac1, BusId::AcEss, ESS_FEEDER_OHM);
         let ac_ess_feed_4 = tie("ac-ess-feed-4", ContactorKind::Feeder, BusId::Ac4, BusId::AcEss, ESS_FEEDER_OHM);
@@ -1181,10 +1270,20 @@ impl ElectricalLive {
         let dc_tie_1_2 = tie("dc-tie-1-2", ContactorKind::BusTie, BusId::Dc1, BusId::Dc2, DC_FEEDER_OHM);
         let dc_ess_feed_1 = tie("dc-ess-feed-1", ContactorKind::Feeder, BusId::Dc1, BusId::DcEss, DC_FEEDER_OHM);
         let dc_ess_shed = tie("dc-ess-shed", ContactorKind::Feeder, BusId::DcEss, BusId::DcEssShed, DC_FEEDER_OHM);
-        let dc_bat_tie = tie("dc-bat-tie", ContactorKind::Feeder, BusId::DcEss, BusId::DcBat, DC_FEEDER_OHM);
-        let bat2_charge_tie = tie("bat-2-charge-tie", ContactorKind::Feeder, BusId::DcBat, BusId::DcHot1, DC_FEEDER_OHM);
+        let bat_line = [
+            tie("bat-1-line", ContactorKind::BatteryDirect, BusId::DcHot1, BusId::Dc1, DC_FEEDER_OHM),
+            tie("bat-2-line", ContactorKind::BatteryDirect, BusId::DcHot2, BusId::Dc2, DC_FEEDER_OHM),
+            tie("bat-ess-line", ContactorKind::BatteryDirect, BusId::DcBat, BusId::DcEss, DC_FEEDER_OHM),
+        ];
+        let bat_1_emer = tie("bat-1-emer", ContactorKind::BatteryDirect, BusId::DcHot1, BusId::DcEss, DC_FEEDER_OHM);
         let ac_gnd_svc_feed = tie("ac-gnd-svc-feed", ContactorKind::Feeder, BusId::Ac1, BusId::AcGndFltSvc, GND_SVC_FEEDER_OHM);
         let dc_gnd_svc_feed = tie("dc-gnd-svc-feed", ContactorKind::Feeder, BusId::Dc2, BusId::DcGndFltSvc, GND_SVC_FEEDER_OHM);
+        let eha = [
+            tie("eha-ac-normal", ContactorKind::Feeder, BusId::Ac3, BusId::AcEha, ESS_FEEDER_OHM),
+            tie("eha-ac-ess", ContactorKind::Feeder, BusId::AcEss, BusId::AcEha, ESS_FEEDER_OHM),
+            tie("eha-dc-normal", ContactorKind::Feeder, BusId::Dc2, BusId::DcEha, DC_FEEDER_OHM),
+            tie("eha-dc-ess", ContactorKind::Feeder, BusId::DcEss, BusId::DcEha, DC_FEEDER_OHM),
+        ];
 
         // Transit-only actuators are dead unless something is driving them
         // (the gear/gear-door set, plus the gap-closing pass's own
@@ -1213,7 +1312,7 @@ impl ElectricalLive {
         // a load's own breaker, but never below the rating of the source
         // behind it -- a feeder cannot be the weak point of its own
         // generator's output.
-        let mut feeder_breaker = [0usize; 17];
+        let mut feeder_breaker = [0usize; super::network::NUM_BUSES];
         for &bus in ALL_BUS_IDS.iter() {
             let connected_a: f64 = net
                 .loads
@@ -1232,12 +1331,15 @@ impl ElectricalLive {
         let contactor = ContactorIndices {
             gen_line: [find_c(&net, "gen-1-line"), find_c(&net, "gen-2-line"), find_c(&net, "gen-3-line"), find_c(&net, "gen-4-line")],
             apu_gen_line: [find_c(&net, "apu-gen-1-line"), find_c(&net, "apu-gen-2-line")],
-            tr_line: [find_c(&net, "tr-1-line"), find_c(&net, "tr-2-line"), find_c(&net, "tr-ess-line"), find_c(&net, "tr-apu-line")],
+            tr_line: ["tr-1", "tr-2", "tr-ess", "tr-apu", "tr-2-backup"].map(|t| find_c(&net, &format!("{t}-line"))),
             static_inv_line: find_c(&net, "static-inv-line"),
-            bat_direct: [find_c(&net, "bat-1-direct"), find_c(&net, "bat-2-direct")],
+            bat_direct: [1, 2, 3, 4].map(|n| find_c(&net, &format!("bat-{n}-direct"))),
             gpu_line: [1, 2, 3, 4].map(|n| find_c(&net, &format!("gpu-{n}-line"))),
             rat_line: find_c(&net, "rat-line"),
-            ac_tie,
+            btc,
+            sic,
+            galc,
+            galt,
             ac_ess_feed_1,
             ac_ess_feed_4,
             ac_ess_shed,
@@ -1245,15 +1347,16 @@ impl ElectricalLive {
             dc_tie_1_2,
             dc_ess_feed_1,
             dc_ess_shed,
-            dc_bat_tie,
-            bat2_charge_tie,
+            bat_line,
+            bat_1_emer,
             ac_gnd_svc_feed,
             dc_gnd_svc_feed,
+            eha,
         };
         let src_gen = [find_s(&net, "gen-1"), find_s(&net, "gen-2"), find_s(&net, "gen-3"), find_s(&net, "gen-4")];
         let src_apu_gen = [find_s(&net, "apu-gen-1"), find_s(&net, "apu-gen-2")];
-        let src_tr = [find_s(&net, "tr-1"), find_s(&net, "tr-2"), find_s(&net, "tr-ess"), find_s(&net, "tr-apu")];
-        let src_bat = [find_s(&net, "bat-1"), find_s(&net, "bat-2")];
+        let src_tr = ["tr-1", "tr-2", "tr-ess", "tr-apu", "tr-2-backup"].map(|t| find_s(&net, t));
+        let src_bat = [1, 2, 3, 4].map(|n| find_s(&net, &format!("bat-{n}")));
         let src_gpu = find_s(&net, "gpu");
         let src_rat = find_s(&net, "rat");
 
@@ -1282,6 +1385,8 @@ impl ElectricalLive {
             .iter()
             .map(|id| find_l(&net, id))
             .chain((0..25).map(|i| find_l(&net, &format!("fuel-pump-{i}"))))
+            // The non-essential loads on DC ESS, which the batteries alone cannot carry.
+            .chain(catalog.other.iter().copied().filter(|&i| net.loads[i].spec.bus == BusId::DcEss && !TRANSIT_ONLY_ACTUATORS.contains(&net.loads[i].spec.id) && !TRANSIT_ONLY_NO_TRUTH_INPUT.contains(&net.loads[i].spec.id)))
             .collect();
 
         let (routed, unresolved) = route_failures(&net);
@@ -1308,11 +1413,11 @@ impl ElectricalLive {
             apu_gen_fault: (1..=2).map(|n| format!("ELEC_APU_GEN_{n}_FAULT")).collect(),
             gen_load_w: (1..=4).map(|n| format!("ELEC_ENG_GEN_{n}_LOAD_W")).collect(),
             apu_gen_load_w: (1..=2).map(|n| format!("ELEC_APU_GEN_{n}_LOAD_W")).collect(),
-            tr_fault: ["1", "2", "ESS", "APU"].iter().map(|s| format!("ELEC_TR_{s}_FAULT")).collect(),
-            bat_fault: (1..=2).map(|n| format!("ELEC_BAT_{n}_FAULT")).collect(),
-            bat_charge: (1..=2).map(|n| format!("ELEC_BAT_{n}_CHARGE_FRACTION")).collect(),
-            bat_temp: (1..=2).map(|n| format!("ELEC_BAT_{n}_TEMPERATURE")).collect(),
-            bat_resistance: (1..=2).map(|n| format!("ELEC_BAT_{n}_INTERNAL_RESISTANCE")).collect(),
+            tr_fault: ["1", "2", "ESS", "APU", "2_BACKUP"].iter().map(|s| format!("ELEC_TR_{s}_FAULT")).collect(),
+            bat_fault: BATTERY_TAGS.iter().map(|n| format!("ELEC_BAT_{n}_FAULT")).collect(),
+            bat_charge: BATTERY_TAGS.iter().map(|n| format!("ELEC_BAT_{n}_CHARGE_FRACTION")).collect(),
+            bat_temp: BATTERY_TAGS.iter().map(|n| format!("ELEC_BAT_{n}_TEMPERATURE")).collect(),
+            bat_resistance: BATTERY_TAGS.iter().map(|n| format!("ELEC_BAT_{n}_INTERNAL_RESISTANCE")).collect(),
             breaker_current: net.breakers.iter().map(|b| format!("ELEC_BKR_{}_CURRENT_A", b.id)).collect(),
             breaker_closed: net.breakers.iter().map(|b| format!("ELEC_BKR_{}_CLOSED", b.id)).collect(),
             load_powered: net.loads.iter().map(|l| format!("ELEC_LOAD_{}_POWERED", l.spec.id)).collect(),
@@ -1349,15 +1454,15 @@ impl ElectricalLive {
             report: NetworkReport::default(),
             gen_fault: [false; 4],
             apu_gen_fault: [false; 2],
-            tr_fault: [false; 4],
+            tr_fault: [false; TR_COUNT],
             gen_verdict: [None; 4],
             apu_gen_verdict: [None; 2],
             tr_verdict: [None; 4],
             static_inv_verdict: None,
-            bat_fault: [false; 2],
-            bat_charge: [1.0; 2],
-            bat_temp_c: [15.0; 2],
-            bat_resistance_ohm: [0.031; 2],
+            bat_fault: [false; 4],
+            bat_charge: [1.0; 4],
+            bat_temp_c: [15.0; 4],
+            bat_resistance_ohm: [0.031; 4],
             galley_shed: false,
             commercial_shed: false,
             galley_shed_commanded: false,
@@ -1370,9 +1475,8 @@ impl ElectricalLive {
             rat_solenoid_on: false,
             measured_gen_load_w: [0.0; 4],
             measured_apu_gen_load_w: [0.0; 2],
-            measured_tr_load_w: [0.0; 4],
-            measured_battery_current_a: [0.0; 2],
-            bat2_charge_limiter: Default::default(),
+            measured_tr_load_w: [0.0; TR_COUNT],
+            measured_battery_current_a: [0.0; 4],
             measured_rat_load_w: 0.0,
             fbw_raw_ac_potential: [0.0; 4],
             fbw_raw_dc_potential: [0.0; 2],
@@ -1381,6 +1485,12 @@ impl ElectricalLive {
             drive_oil_state: [crate::deep::apu::oil::OilState::default(); 4],
             rat_fault: false,
             gen_pb_on: [false; 4],
+            bcru_ac_lost_s: [f64::INFINITY; 3],
+            tefo: false,
+            drive_low_pressure_s: [0.0; 4],
+            drive_hot_s: [0.0; 4],
+            drive_fault: [false; 4],
+            drive_disconnected: [false; 4],
             fbw_raw_ac_powered: [false; 4],
             fbw_raw_dc_powered: [false; 2],
         }
@@ -1541,225 +1651,158 @@ impl ElectricalLive {
     /// Bus voltages, on the other hand, are necessarily last frame's: a
     /// voltage-sensing relay cannot act on a voltage it has not yet
     /// measured either.
-    fn command_contactors(&mut self, truth: &Truth, gpu_plugged_in: bool) {
+    fn command_contactors(&mut self, truth: &Truth, gpu_plugged_in: bool, dt: f64) {
         let producing = |net: &Network, src: usize| net.sources[src].open_circuit_v > 0.0;
-        let gpu_live = gpu_plugged_in && producing(&self.net, self.src_gpu);
-        let gpu_on_line: [bool; 4] = std::array::from_fn(|i| gpu_live && truth.controls.ext_pwr_pb_on[i]);
+        let power_ready = |net: &Network, src: usize| (POWER_READY_LOW_V..=POWER_READY_HIGH_V).contains(&net.sources[src].open_circuit_v);
+        let c = &truth.controls;
 
-        // A VFG is on line when its own GCU sees a healthy machine: excited
-        // (`sources::Vfg::CUT_IN_SPEED_FRACTION`) and not tripped off by its
-        // own overload element -- and the crew has not pulled its own GEN
-        // pushbutton, which is the GCU's own line contactor command, not a
-        // switch this model gets to assume is always in ENGAGED.
-        let mut gen_on_line = [false; 4];
+        // AC sources, then the transfer circuit's table of priority (transfer.rs).
+        let mut avail = super::transfer::Available::default();
         for i in 0..4 {
             let tripped = self.wiring.vfg[i].overload_heat() >= 1.0;
-            gen_on_line[i] = truth.controls.eng_gen_pb_on[i] && truth.engine_running[i] && producing(&self.net, self.src_gen[i]) && !tripped;
-            self.gen_pb_on[i] = truth.controls.eng_gen_pb_on[i];
-            let idx = self.contactor.gen_line[i];
-            self.net.contactors[idx].commanded_closed = gen_on_line[i];
+            avail.gen[i] = c.eng_gen_pb_on[i] && truth.engine_running[i] && power_ready(&self.net, self.src_gen[i]) && !tripped && !self.drive_disconnected[i];
+            self.gen_pb_on[i] = c.eng_gen_pb_on[i];
         }
-
-        let mut apu_on_line = false;
-        for i in 0..2 {
-            let on = truth.controls.apu_gen_pb_on[i] && truth.apu_running && producing(&self.net, self.src_apu_gen[i]) && self.wiring.apu_gen[i].overload_heat() < 1.0;
-            apu_on_line |= on;
-            self.net.contactors[self.contactor.apu_gen_line[i]].commanded_closed = on;
+        for k in 0..2 {
+            avail.apu[k] = c.apu_gen_pb_on[k] && truth.apu_running && power_ready(&self.net, self.src_apu_gen[k]) && self.wiring.apu_gen[k].overload_heat() < 1.0;
         }
-
-        // The four VFGs are not paralleled on the A380: each feeds its own
-        // bus. The ties close only when some AC bus has lost its own source
-        // *and* there is something left on the tie bar to feed it from --
-        // tying dead buses to each other would leave the tie bar with no
-        // reference at all.
-        let gpu_on = gpu_plugged_in && truth.controls.ext_pwr_pb_on.iter().any(|&on| on);
-        let anchored = gen_on_line.iter().any(|&g| g) || apu_on_line || gpu_on;
-        let need_tie = anchored && (gen_on_line.iter().any(|&g| !g) || apu_on_line || gpu_on);
-        for &idx in &self.contactor.ac_tie {
-            self.net.contactors[idx].commanded_closed = need_tie;
+        // In flight only one APU generator runs: GEN A, or GEN B when A is inoperative (FCOM DSC-24-10-20).
+        if !truth.on_ground && avail.apu[0] {
+            avail.apu[1] = false;
         }
+        let gpu_live = gpu_plugged_in && power_ready(&self.net, self.src_gpu);
+        for i in 0..4 {
+            avail.ext[i] = gpu_live && c.ext_pwr_pb_on[i];
+        }
+        let plan = super::transfer::plan(&avail, c.bus_tie_auto);
+        for i in 0..4 {
+            self.net.contactors[self.contactor.gen_line[i]].commanded_closed = plan.glc[i];
+            self.net.contactors[self.contactor.gpu_line[i]].commanded_closed = plan.epc[i];
+        }
+        for k in 0..2 {
+            self.net.contactors[self.contactor.apu_gen_line[k]].commanded_closed = plan.agc[k];
+        }
+        for (i, &idx) in self.contactor.btc.iter().enumerate() {
+            self.net.contactors[idx].commanded_closed = plan.btc[i];
+        }
+        self.net.contactors[self.contactor.sic].commanded_closed = plan.sic;
 
-        // AC ESS: normally from AC1, alternate from AC4.
-        //
-        // "Live" here means *fed by a real source*, not merely "at
-        // voltage". The distinction matters because every bus-to-bus
-        // contactor in this network is bidirectional (`network::relax`
-        // conducts through a tie both ways, which is what a real tie bar
-        // is), so the emergency AC bus's own inverter back-feeds AC ESS and
-        // -- through a closed `ac-ess-feed-1` -- AC1 itself. Deciding
-        // "AC1 is live" from the voltage alone therefore reads the
-        // emergency configuration's own output as evidence that the
-        // emergency configuration is not needed: the transfer logic
-        // latches on to its own back-feed and the whole network
-        // limit-cycles at the frame rate, one frame in emergency and the
-        // next out of it, forever. (That is what it did on a cold and dark
-        // aircraft: every AC and DC bus flapping between dead and alive on
-        // alternate frames, which restarted a dozen motor loads' switch-on
-        // inrush every single frame and, entirely correctly, cooked their
-        // breakers open on a genuinely sustained overcurrent.)
-        //
-        // `anchored` above is the honest statement of the same thing: at
-        // least one generator, APU generator or ground-power unit is
-        // actually on line onto the main AC network. A main AC bus is live
-        // when that is true *and* the bus is at voltage -- the second term
-        // still catches a bus isolated by its own feeder breaker with a
-        // generator running behind it.
-        let main_ac_anchored = anchored;
+        let main_ac_anchored = plan.fed_by.iter().any(|s| s.is_some());
         let main_ac_at_voltage = [BusId::Ac1, BusId::Ac2, BusId::Ac3, BusId::Ac4].map(|b| self.net.bus(b).voltage >= AC_UNDERVOLTAGE_TRIP_V);
-        let ac1_live = main_ac_anchored && main_ac_at_voltage[0];
-        let ac4_live = main_ac_anchored && main_ac_at_voltage[3];
-        self.net.contactors[self.contactor.ac_ess_feed_1].commanded_closed = ac1_live;
-        self.net.contactors[self.contactor.ac_ess_feed_4].commanded_closed = !ac1_live && ac4_live;
+        let ac_live: [bool; 4] = std::array::from_fn(|i| plan.fed_by[i].is_some() && main_ac_at_voltage[i]);
+        let altn = c.ac_ess_feed_altn;
+        self.net.contactors[self.contactor.ac_ess_feed_1].commanded_closed = ac_live[0] && !altn;
+        self.net.contactors[self.contactor.ac_ess_feed_4].commanded_closed = ac_live[3] && (!ac_live[0] || altn);
 
-        // Emergency configuration: no main AC bus is alive at all.
-        let emergency = !main_ac_anchored || !main_ac_at_voltage.iter().any(|&live| live);
+        // Emergency configuration: loss of main electrical supply, total engine flame-out, or RAT MAN ON.
+        let emergency = !main_ac_anchored || !ac_live.iter().any(|&live| live);
         self.emergency_config = emergency;
-
-        // The RAT deploys on a total loss of main AC generation in flight.
-        // `Rat::deploy` is instantaneous in this model (a stowed/deployed
-        // bool, not a multi-second extension), so the one tick it flips
-        // `false` to `true` is the *only* tick a real deploy solenoid would
-        // be doing anything -- captured here, before the call, as the one
-        // real signal `rat-deploy-solenoid`'s `commanded_on` is gated on
-        // below, instead of the permanent "no Truth input" off every other
-        // transit-only load in this pass gets.
+        self.tefo = !truth.on_ground && truth.engine_n2_frac.iter().all(|&n| n < TEFO_CORE_FRACTION);
+        let deploy = (emergency && !truth.on_ground) || self.tefo || c.rat_man_on;
         let was_rat_deployed = self.wiring.rat.deployed();
-        if emergency && !truth.on_ground {
+        if deploy {
             self.wiring.rat.deploy();
         }
         self.rat_deployed = self.wiring.rat.deployed();
-        self.rat_solenoid_on = emergency && !was_rat_deployed;
+        self.rat_solenoid_on = deploy && !was_rat_deployed;
         if let Some(i) = self.net.load_index("rat-deploy-solenoid") {
             self.net.loads[i].commanded_on = self.rat_solenoid_on;
         }
 
-        // The static inverter and the RAT feed the emergency AC bus, each
-        // once it is actually producing.
+        // The emergency generator takes AC ESS; the static inverter takes AC EMER only without it (FlyByWire's 3XB.2).
         let inv_live = producing(&self.net, self.contactor_source(self.contactor.static_inv_line));
-        self.net.contactors[self.contactor.static_inv_line].commanded_closed = emergency && inv_live;
         let rat_live = self.rat_deployed && producing(&self.net, self.src_rat);
+        self.net.contactors[self.contactor.static_inv_line].commanded_closed = emergency && !rat_live && inv_live;
         self.net.contactors[self.contactor.rat_line].commanded_closed = rat_live;
-
-        // Outside emergency configuration AC ESS feeds the emergency AC bus
-        // (FlyByWire's contactor 3XB.1). In emergency the emergency AC bus
-        // backs the *essential* AC bus up only from the RAT's own emergency
-        // generator -- never from the static inverter alone.
-        //
-        // `sources::StaticInverter::RATED_W` is 135 W (real, FBW-sourced:
-        // FlyByWire's own `power_consumption.rs` AC_STAT_INV bus demand,
-        // which is the whole load that inverter is sized to carry, and is
-        // why this network gives it its own `AcEmer` bus rather than
-        // hanging it on `AcEss`). `loads.rs` catalogues about 1.36 kW on
-        // `AcEss` -- ten times that -- so tying the two together asks a
-        // 135 W inverter for the entire essential AC bus. There is no
-        // solution to that network in which the bus stays above its own
-        // loads' `min_operating_voltage`: the bus collapses, every load on
-        // it drops out on under-voltage, the unloaded bus recovers, the
-        // loads' `UNDERVOLTAGE_LOCKOUT_S` expires, they all restart
-        // together and collapse it again -- a permanent limit cycle, with
-        // the bus straying either side of the 90 V at which `sources.rs`
-        // decides TR ESS has an AC input. TR ESS is (was) the essential DC
-        // bus's only feed, so the essential *DC* bus toggled powered/
-        // unpowered with it, tearing down and rebuilding every consumer
-        // that watches `ELEC_DC_ESS_BUS_IS_POWERED` -- including the
-        // cockpit's own radio panels. It is the same overload
-        // `command_emergency_shed`'s own doc describes, one bus further
-        // in, and the fix is the same in kind: do not connect a source to
-        // a bus it cannot hold up. The RAT (`sources::Rat::MAX_POWER_W`,
-        // 70 kW) can, and it is the real A380 emergency-configuration
-        // source for AC ESS.
         self.net.contactors[self.contactor.ac_emer_to_ess].commanded_closed = !emergency || rat_live;
-
-        // The shed buses drop in emergency configuration; that is what makes
-        // them shed buses.
         self.net.contactors[self.contactor.ac_ess_shed].commanded_closed = !emergency;
         self.net.contactors[self.contactor.dc_ess_shed].commanded_closed = !emergency;
 
-        // A TRU with no AC input rectifies nothing: its output is an open
-        // circuit, so its own feeder contactor opens rather than clamping
-        // its DC bus to zero.
-        let mut tr_live = [false; 4];
+        // DC: each BCRU runs its own line and battery contactors (A380 TTM ATA 24).
+        let tr_live: [bool; TR_COUNT] = std::array::from_fn(|i| producing(&self.net, self.src_tr[i]));
+        let ac_ess_fed = ac_live[0] || ac_live[3] || rat_live;
+        let bcru_has_ac = [ac_live[1] && tr_live[0], ac_live[2] && tr_live[1], ac_ess_fed && tr_live[2]];
+        for i in 0..3 {
+            self.bcru_ac_lost_s[i] = if bcru_has_ac[i] { 0.0 } else { self.bcru_ac_lost_s[i] + dt };
+        }
+        let blc_open = |lost: f64| lost >= BLC_OPEN_DELAY_S;
         for i in 0..4 {
-            tr_live[i] = producing(&self.net, self.src_tr[i]);
             self.net.contactors[self.contactor.tr_line[i]].commanded_closed = tr_live[i];
         }
-        // The essential DC bus is normally carried by DC1 as well as its own
-        // TR -- the real Airbus arrangement, and the reason one TR's rating
-        // does not have to cover the whole essential load on its own.
-        self.net.contactors[self.contactor.dc_ess_feed_1].commanded_closed = tr_live[0];
-        // The DC tie picks a dead DC bus up from the live one.
-        self.net.contactors[self.contactor.dc_tie_1_2].commanded_closed = tr_live[0] != tr_live[1];
-        // The battery/essential tie is the real battery contactor, and it
-        // closes for the two real reasons an Airbus closes one:
-        //
-        // * a TR is on line, so the main DC network is alive and the
-        //   batteries are being *charged* from it; or
-        // * the aircraft is in emergency electrical configuration in
-        //   flight, where the batteries are the essential DC bus's own
-        //   source. That is the whole purpose of the contactor.
-        //
-        // It must never be gated on the essential bus's own powered state.
-        // It used to be -- `tr_live[2]` is "TR ESS has an AC input", which
-        // in emergency configuration is decided by a bus the essential
-        // bus's own load feeds back into -- so the one tie that exists to
-        // pick a *dead* essential bus up could only close while something
-        // else was already holding it up. That is a feed conditional on
-        // its own result: the bus comes up, its load pulls the source that
-        // decides the gate down, the gate opens, the bus dies, the load
-        // goes with it, the source recovers and it all repeats, at frame
-        // rate, with nothing in the loop to damp it.
-        //
-        // On the ground with nothing running the tie stays open, which is
-        // also the real behaviour and the reason a parked Airbus does not
-        // flatten its batteries overnight: the batteries feed their own
-        // hot buses (`bat_direct` below) and nothing else. The essential
-        // DC bus is then honestly dead rather than held up by a
-        // circular feed.
-        self.net.contactors[self.contactor.dc_bat_tie].commanded_closed = tr_live[0] || tr_live[2] || (emergency && !truth.on_ground);
-        // The battery-direct contactor is the real BAT pushbutton's own
-        // contactor (`ContactorKind::BatteryDirect`) -- AUTO closes it onto
-        // the battery/hot bus, OFF opens it, exactly the real Airbus
-        // behaviour that a battery pushbutton switched off also drops its
-        // own hot bus (not merely the battery's contribution to the main DC
-        // network). `Controls::default`'s normal position is AUTO, so a
-        // cold aircraft with nobody touching the pushbuttons still has both
-        // hot buses alive.
-        for i in 0..2 {
-            let breaker_open = board::with_board(|b| b.bat_breaker_open[i]);
-            self.net.contactors[self.contactor.bat_direct[i]].commanded_closed = truth.controls.bat_pb_auto[i] && !breaker_open;
-        }
-        // Battery 2 sits on its hot bus, which no TR reaches; this is its BCL charging tie to the battery bus.
-        self.net.contactors[self.contactor.bat2_charge_tie].commanded_closed = self.bat2_charge_limiter.closed() && (tr_live[0] || tr_live[2]);
+        // TR 2 backs BCRU 2 up once BCRU 2's own line contactor has opened.
+        let tr_lc_2 = tr_live[4] && blc_open(self.bcru_ac_lost_s[1]);
+        self.net.contactors[self.contactor.tr_line[4]].commanded_closed = tr_lc_2;
+        let dc1_source = tr_live[0];
+        let dc2_source = tr_live[1] || tr_lc_2;
+        // IBLC 1 gives DC ESS DC 1 when BCRU ESS is lost; IBLC 2 joins DC 1 and DC 2 when only one
+        // side has a source, inhibited by BUS TIE OFF. Whichever closed first keeps priority.
+        let iblc1_want = blc_open(self.bcru_ac_lost_s[2]) && dc1_source;
+        let iblc2_want = c.bus_tie_auto && dc1_source != dc2_source;
+        let iblc1_was = self.net.contactors[self.contactor.dc_ess_feed_1].commanded_closed;
+        let iblc2_was = self.net.contactors[self.contactor.dc_tie_1_2].commanded_closed;
+        let (iblc1, iblc2) = if iblc2_was && iblc2_want {
+            (false, true)
+        } else if iblc1_want {
+            (true, false)
+        } else {
+            (false, iblc2_want && !iblc1_was)
+        };
+        self.net.contactors[self.contactor.dc_ess_feed_1].commanded_closed = iblc1;
+        self.net.contactors[self.contactor.dc_tie_1_2].commanded_closed = iblc2;
 
-        // The four external power contactors, one per main AC bus (see
-        // `sources::Wiring::build`). Each closes on the same condition a
-        // real EPC does: the cart is connected and actually producing.
-        // Nothing here reads a bus voltage, so there is no configuration
-        // in which ground power has to find the network already alive
-        // before it may energise it.
-        for (i, &idx) in self.contactor.gpu_line.iter().enumerate() {
-            self.net.contactors[idx].commanded_closed = gpu_on_line[i];
+        let bat_breaker_open = board::with_board(|b| b.bat_breaker_open);
+        let auto = c.bat_pb_auto;
+        for i in 0..3 {
+            self.net.contactors[self.contactor.bat_direct[i]].commanded_closed = !(i < 2 && bat_breaker_open[i]);
         }
+        self.net.contactors[self.contactor.bat_direct[3]].commanded_closed = auto[3] && (!tr_live[3] || self.bat_charge[3] < APU_BAT_RECHARGE_BELOW);
+        let emergency_hold = emergency || self.tefo || c.rat_man_on || self.rat_deployed;
+        let held = |lost: f64| lost < BAT_LC_HOLD_S;
+        let bat_lc = [
+            auto[0] && !self.bat_fault[0] && held(self.bcru_ac_lost_s[0]),
+            auto[1] && !self.bat_fault[1] && (held(self.bcru_ac_lost_s[1]) || tr_lc_2),
+            auto[2] && !self.bat_fault[2] && (held(self.bcru_ac_lost_s[2]) || emergency_hold),
+        ];
+        for (i, &on) in bat_lc.iter().enumerate() {
+            let idx = self.contactor.bat_line[i];
+            if on && !self.net.contactors[idx].commanded_closed {
+                let bus_v = self.net.bus(self.net.contactors[idx].to).voltage;
+                self.wiring.battery[i].prime_charge_limit(bus_v, Default::default());
+            }
+            self.net.contactors[idx].commanded_closed = on;
+        }
+        // The ELC puts BAT 1 beside ESS BAT on DC ESS: in emergency, and on the ground with no AC.
+        self.net.contactors[self.contactor.bat_1_emer].commanded_closed = auto[0] && auto[2] && !self.bat_fault[0] && emergency_hold;
 
-        // The ground/flight service buses carry cargo handling, service
-        // lighting and the cabin-servicing outlets; they are energised on
-        // the ground from AC1 (whether AC1 is carried by a generator, the
-        // APU or the cart) and dead in flight, which is what makes them
-        // *ground* service buses.
-        self.net.contactors[self.contactor.ac_gnd_svc_feed].commanded_closed = truth.on_ground && ac1_live;
-        self.net.contactors[self.contactor.dc_gnd_svc_feed].commanded_closed = truth.on_ground && tr_live[1];
+        // Ground/flight service buses: on their AC and DC bus in flight too; the nav lights are on them.
+        self.net.contactors[self.contactor.ac_gnd_svc_feed].commanded_closed = ac_live[0];
+        self.net.contactors[self.contactor.dc_gnd_svc_feed].commanded_closed = dc2_source;
+
+        // The EHA busbars: AC 3 and DC 2, or AC ESS and DC ESS once the hydraulics are gone (TEFO).
+        let dc2_live = self.net.bus(BusId::Dc2).voltage >= dc_undervoltage_trip_v();
+        let ac_ess_live = self.net.bus(BusId::AcEss).voltage >= AC_UNDERVOLTAGE_TRIP_V;
+        self.net.contactors[self.contactor.eha[0]].commanded_closed = ac_live[2];
+        self.net.contactors[self.contactor.eha[1]].commanded_closed = !ac_live[2] && ac_ess_live && (!emergency || self.tefo);
+        self.net.contactors[self.contactor.eha[2]].commanded_closed = dc2_live;
+        self.net.contactors[self.contactor.eha[3]].commanded_closed = self.tefo;
+
+        // Galleys: each on its own AC bus through its GALC; a GALT carries one from the galley across
+        // when its AC bus is lost. GALLEY and COMMERCIAL OFF open them all.
+        let galleys = c.galley_pb_auto && c.commercial_pb_on;
+        let galc: [bool; 4] = std::array::from_fn(|i| galleys && ac_live[i]);
+        for i in 0..4 {
+            self.net.contactors[self.contactor.galc[i]].commanded_closed = galc[i];
+        }
+        self.net.contactors[self.contactor.galt[0]].commanded_closed = galleys && galc[0] != galc[2];
+        self.net.contactors[self.contactor.galt[1]].commanded_closed = galleys && galc[1] != galc[3];
 
         // A feeder breaker that has opened isolates its bus: it is in series
         // with that bus's supply, so nothing may feed the bus through it
-        // until it is reset. This is the step `network::Network` cannot take
-        // on its own -- it measures a feeder breaker's current but has no
-        // model of what one being open means.
-        for bi in 0..17 {
+        // until it is reset.
+        for bi in 0..ALL_BUS_IDS.len() {
             if !self.net.breakers[self.feeder_breaker[bi]].closed {
                 let bus = ALL_BUS_IDS[bi];
                 for c in &mut self.net.contactors {
-                    // Either end: a bus-to-bus tie is one device, and
-                    // `network::relax` conducts through it both ways.
                     if c.to == bus || c.from == FeedSource::Bus(bus) {
                         c.commanded_closed = false;
                     }
@@ -1768,10 +1811,6 @@ impl ElectricalLive {
         }
     }
 
-    /// The 17 avionics/pyro transit-only loads this pass gives a real
-    /// command, plus the 6 gear/gear-door actuators -- see this struct's
-    /// own field doc. Every one of the 23 now has a real signal behind it;
-    /// none remain permanently off.
     fn command_transit_loads(&mut self, truth: &Truth) {
         let c = &truth.controls;
 
@@ -1974,8 +2013,8 @@ impl ElectricalLive {
 struct SourceFaults {
     vfg: [VfgFaults; 4],
     apu_gen: [ApuGeneratorFaults; 2],
-    tru: [TruFaults; 4],
-    battery: [BatteryFaults; 2],
+    tru: [TruFaults; TR_COUNT],
+    battery: [BatteryFaults; 4],
     static_inverter: StaticInverterFaults,
     rat: RatFaults,
     ground_power: GroundPowerFaults,
@@ -2057,7 +2096,7 @@ impl Area for ElectricalLive {
 
         // 4. Contactor control against those fresh terminals, then the
         //    load-management shed decision, then the one solve.
-        self.command_contactors(truth, gpu_plugged_in);
+        self.command_contactors(truth, gpu_plugged_in, dt);
         self.command_transit_loads(truth);
 
         let capacity_w = self.capacity_w(truth, gpu_plugged_in);
@@ -2085,7 +2124,7 @@ impl Area for ElectricalLive {
             let volts = |b: BusId| format!("{:.1}", self.report.bus_voltage[b.index()]);
             let open_v = |s: usize| format!("{:.1}", self.net.sources[s].open_circuit_v);
             crate::log(&format!(
-                "deep electrical: DC ESS {} (on ground {}, emergency {}, engines running {:?}, gen line {:?}, TR line {:?}, DC ESS feed {}, bat tie {}, bat direct {:?}, AC buses {:?}) dt {:.3} s, made: TR line {:?} DC ESS feed {} bat tie {} bat direct {:?}; V: DC ESS {} DC1 {} DC2 {} DC BAT {} AC1 {} AC ESS {}; TR open V {:?}, BAT open V {:?}",
+                "deep electrical: DC ESS {} (on ground {}, emergency {}, engines running {:?}, gen line {:?}, TR line {:?}, DC ESS feed {}, bat line {:?}, bat 1 emer {}, AC buses {:?}) dt {:.3} s, made: TR line {:?} DC ESS feed {} bat line {:?} bat 1 emer {}; V: DC ESS {} DC1 {} DC2 {} HOT ESS {} AC1 {} AC ESS {}; TR open V {:?}, BAT open V {:?}",
                 if dc_ess { "powered" } else { "LOST" },
                 truth.on_ground,
                 self.emergency_config,
@@ -2093,14 +2132,14 @@ impl Area for ElectricalLive {
                 self.contactor.gen_line.map(closed),
                 self.contactor.tr_line.map(closed),
                 closed(self.contactor.dc_ess_feed_1),
-                closed(self.contactor.dc_bat_tie),
-                self.contactor.bat_direct.map(closed),
+                self.contactor.bat_line.map(closed),
+                closed(self.contactor.bat_1_emer),
                 [BusId::Ac1, BusId::Ac2, BusId::Ac3, BusId::Ac4].map(|b| self.report.bus_powered[b.index()] as u8),
                 dt,
                 self.contactor.tr_line.map(made),
                 made(self.contactor.dc_ess_feed_1),
-                made(self.contactor.dc_bat_tie),
-                self.contactor.bat_direct.map(made),
+                self.contactor.bat_line.map(made),
+                made(self.contactor.bat_1_emer),
                 volts(BusId::DcEss),
                 volts(BusId::Dc1),
                 volts(BusId::Dc2),
@@ -2117,35 +2156,24 @@ impl Area for ElectricalLive {
         }
         for i in 0..2 {
             self.measured_apu_gen_load_w[i] = self.source_delivered_w(self.src_apu_gen[i], self.contactor.apu_gen_line[i]);
+        }
+        for i in 0..4 {
             self.measured_battery_current_a[i] = self.source_branch_current_a(self.src_bat[i], self.contactor.bat_direct[i]);
         }
         self.measured_rat_load_w = self.source_delivered_w(self.src_rat, self.contactor.rat_line);
-        for i in 0..4 {
+        for i in 0..TR_COUNT {
             self.measured_tr_load_w[i] = self.source_delivered_w(self.src_tr[i], self.contactor.tr_line[i]);
         }
         self.wiring.post_step(&self.net, &inputs, dt);
-        let bat2_breaker_open = board::with_board(|b| b.bat_breaker_open[1]);
-        let bat2_was_charging = self.bat2_charge_limiter.closed();
-        let dc_bat_v = self.net.bus(BusId::DcBat).voltage;
-        let bat2_charging = self.bat2_charge_limiter.step(
-            truth.controls.bat_pb_auto[1] && !bat2_breaker_open,
-            self.wiring.battery[1].open_circuit_voltage(sf.battery[1]),
-            self.wiring.battery[1].charge_fraction(sf.battery[1]),
-            dc_bat_v,
-            -self.measured_battery_current_a[1],
-            truth.on_ground,
-            dt,
-        );
-        if bat2_charging && !bat2_was_charging {
-            self.wiring.battery[1].prime_charge_limit(dc_bat_v, sf.battery[1]);
-        }
 
         // 5. Protective annunciations, all read off the solved network.
         let dc_trip = dc_undervoltage_trip_v();
         for i in 0..4 {
             let on_line = self.net.contactors[self.contactor.gen_line[i]].closed;
             let bus_v = self.net.bus(self.net.contactors[self.contactor.gen_line[i]].to).voltage;
-            self.gen_fault[i] = self.wiring.vfg[i].overload_heat() >= 1.0 || (on_line && (bus_v < AC_UNDERVOLTAGE_TRIP_V || bus_v > AC_OVERVOLTAGE_TRIP_V));
+            let terminal = self.net.sources[self.src_gen[i]].open_circuit_v;
+            let out_of_band = truth.engine_running[i] && terminal > 0.0 && !(POWER_READY_LOW_V..=POWER_READY_HIGH_V).contains(&terminal);
+            self.gen_fault[i] = self.wiring.vfg[i].overload_heat() >= 1.0 || out_of_band || (on_line && (bus_v < AC_UNDERVOLTAGE_TRIP_V || bus_v > AC_OVERVOLTAGE_TRIP_V));
         }
         for i in 0..2 {
             let on_line = self.net.contactors[self.contactor.apu_gen_line[i]].closed;
@@ -2154,15 +2182,14 @@ impl Area for ElectricalLive {
         }
         // A TR faults when it has an AC input but is no longer holding its
         // own DC bus up -- the real TR FAULT condition.
-        let tr_ac_in = [BusId::Ac1, BusId::Ac2, BusId::AcEss, BusId::AcEss];
-        let tr_dc_out = [BusId::Dc1, BusId::Dc2, BusId::DcEss, BusId::DcApu];
-        for i in 0..4 {
-            let ac_powered = self.net.bus(tr_ac_in[i]).voltage > 90.0;
-            self.tr_fault[i] = ac_powered && self.net.bus(tr_dc_out[i]).voltage < dc_trip;
+        for i in 0..TR_COUNT {
+            let ac_powered = self.net.bus(TR_AC_INPUT[i]).voltage > 90.0;
+            self.tr_fault[i] = ac_powered && self.net.bus(TR_DC_OUTPUT[i]).voltage < dc_trip;
         }
-        for i in 0..2 {
+        for i in 0..4 {
             let (v, _r) = self.wiring.battery[i].terminal(sf.battery[i]);
-            self.bat_fault[i] = self.net.contactors[self.contactor.bat_direct[i]].closed && v < dc_trip;
+            let runaway = self.wiring.battery[i].temperature_c() > BATTERY_RUNAWAY_C;
+            self.bat_fault[i] = runaway || (self.net.contactors[self.contactor.bat_direct[i]].closed && v < dc_trip);
             self.bat_charge[i] = self.wiring.battery[i].charge_fraction(sf.battery[i]);
             self.bat_temp_c[i] = self.wiring.battery[i].temperature_c();
             self.bat_resistance_ohm[i] = self.wiring.battery[i].internal_resistance_ohm(sf.battery[i]);
@@ -2176,7 +2203,9 @@ impl Area for ElectricalLive {
         for i in 0..4 {
             let driven = truth.engine_running[i] && self.net.sources[self.src_gen[i]].open_circuit_v > 0.0;
             let terminal = self.net.sources[self.src_gen[i]].open_circuit_v;
-            self.gen_verdict[i] = if self.wiring.vfg[i].overload_heat() >= 1.0 {
+            self.gen_verdict[i] = if self.drive_disconnected[i] {
+                Some(REASON_DRIVE_DISCONNECTED)
+            } else if self.wiring.vfg[i].overload_heat() >= 1.0 {
                 Some(REASON_OVERLOAD_TRIPPED)
             } else if driven && (terminal < AC_UNDERVOLTAGE_TRIP_V || terminal > AC_OVERVOLTAGE_TRIP_V) {
                 Some(REASON_REGULATOR_OUT_OF_BAND)
@@ -2261,6 +2290,13 @@ impl Area for ElectricalLive {
             let n_percent = n_frac * 100.0;
             let oil_faults = crate::deep::apu::oil::OilFaults { leak: self.misc_fault[MiscFault::DriveOilLeak1 as usize + i] };
             self.drive_oil_state[i] = self.drive_oil[i].step(n_percent, truth.engine_running[i], ambient_k, friction_heat_w, &oil_faults, dt);
+            let state = self.drive_oil_state[i];
+            let low = truth.engine_running[i] && state.low_pressure_tripped;
+            let (low_s, hot_s, fault, disconnect) = drive_protection(self.drive_low_pressure_s[i], self.drive_hot_s[i], low, state.temp_c, dt);
+            self.drive_low_pressure_s[i] = low_s;
+            self.drive_hot_s[i] = hot_s;
+            self.drive_fault[i] = fault;
+            self.drive_disconnected[i] |= disconnect || truth.controls.drive_disc_pressed[i];
         }
     }
 
@@ -2285,10 +2321,16 @@ impl Area for ElectricalLive {
             out(&self.names.gen_fault[i], if self.gen_fault[i] { 1.0 } else { 0.0 });
             out(&self.names.gen_load_w[i], self.measured_gen_load_w[i]);
             out(&self.names.tr_fault[i], if self.tr_fault[i] { 1.0 } else { 0.0 });
+            out(&format!("ELEC_DRIVE_{}_FAULT", i + 1), if self.drive_fault[i] { 1.0 } else { 0.0 });
+            out(&format!("ELEC_DRIVE_{}_DISCONNECTED", i + 1), if self.drive_disconnected[i] { 1.0 } else { 0.0 });
         }
+        out(&self.names.tr_fault[4], if self.tr_fault[4] { 1.0 } else { 0.0 });
+        out("ELEC_TEFO", if self.tefo { 1.0 } else { 0.0 });
         for i in 0..2 {
             out(&self.names.apu_gen_fault[i], if self.apu_gen_fault[i] { 1.0 } else { 0.0 });
             out(&self.names.apu_gen_load_w[i], self.measured_apu_gen_load_w[i]);
+        }
+        for i in 0..4 {
             out(&self.names.bat_fault[i], if self.bat_fault[i] { 1.0 } else { 0.0 });
             out(&self.names.bat_charge[i], self.bat_charge[i]);
             out(&self.names.bat_temp[i], self.bat_temp_c[i]);
@@ -2464,13 +2506,14 @@ mod tests {
     #[test]
     fn battery_2_is_recharged_from_the_dc_network_in_flight() {
         let mut live = ElectricalLive::new();
-        live.wiring.battery[1].restore([5.0, 20.0]);
+        live.wiring.battery[1].restore([12.0, 20.0]);
         let truth = Truth { dt_s: 0.25, ..flying_truth() };
         let before = live.wiring.battery[1].charge_fraction(BatteryFaults::default());
         run(&mut live, &truth, &Faults::default(), 1600);
         let after = live.wiring.battery[1].charge_fraction(BatteryFaults::default());
         assert!(after > before + 0.05, "battery 2 stayed at {before:.3} -> {after:.3} with generators on");
-        assert!(live.measured_battery_current_a[1] > -40.0, "charging current must respect the 1C limit: {}", live.measured_battery_current_a[1]);
+        let one_c = super::super::sources::Battery::RATED_CAPACITY_AH;
+        assert!(live.measured_battery_current_a[1] > -1.2 * one_c, "charging current must respect the 1C limit: {}", live.measured_battery_current_a[1]);
     }
 
     #[test]
@@ -2491,7 +2534,6 @@ mod tests {
         let mut live = ElectricalLive::new();
         let truth = Truth { dt_s: 0.25, ..flying_truth() };
         run(&mut live, &truth, &Faults::default(), 800);
-        assert!(!live.bat2_charge_limiter.closed());
         assert!(live.wiring.battery[1].charge_fraction(BatteryFaults::default()) > 0.97, "battery 2 at {}", live.wiring.battery[1].charge_fraction(BatteryFaults::default()));
     }
 
@@ -2736,6 +2778,22 @@ mod tests {
         let published = run(&mut live, &flying_truth(), &Faults::default(), 20);
         for id in ["ignition-1a", "ignition-4b", "eng-fire-bottle-1-squib-1", "apu-fire-bottle-squib-2", "apu-start-contactor", "cargo-door-fwd-actuator-ctl", "cargo-door-aft-actuator-ctl"] {
             assert_eq!(published[&format!("ELEC_LOAD_{id}_POWERED")], 0.0, "{id} is not presently commanded and must stay dead, not silently on");
+        }
+        board::clear();
+    }
+
+    #[test]
+    fn retracting_the_gear_does_not_drop_the_essential_dc_bus() {
+        board::clear();
+        let mut live = ElectricalLive::new();
+        let steady = flying_truth();
+        run(&mut live, &steady, &Faults::default(), 20);
+        let mut moving = flying_truth();
+        moving.controls.gear_door_commanded_open = [0.5; 3];
+        for _ in 0..10 {
+            let p = run(&mut live, &moving, &Faults::default(), 1);
+            assert_eq!(p["ELEC_LOAD_gear-actuator-left_POWERED"], 1.0, "the valve is driven while the gear travels");
+            assert_eq!(p["ELEC_DC_ESS_BUS_IS_POWERED"], 1.0, "DC ESS sagged to {} V with the gear in transit", p["ELEC_DC_ESS_BUS_POTENTIAL"]);
         }
         board::clear();
     }
@@ -3007,8 +3065,8 @@ mod tests {
         ids.dedup();
         assert_eq!(ids.len(), before, "two deep components must not claim the same FlyByWire failure");
         // 4 generators + 2 APU generators + 4 TRs + the static inverter +
-        // the 14 buses FlyByWire also models.
-        assert_eq!(table.len(), 25);
+        // the 17 buses FlyByWire also models.
+        assert_eq!(table.len(), 28);
     }
 
     #[test]
@@ -3402,6 +3460,233 @@ mod tests {
         truth.controls.ext_pwr_pb_on = [false; 4];
         let off_again = run(&mut live, &truth, &Faults::default(), 60);
         assert_eq!(off_again["ELEC_AC_1_BUS_IS_POWERED"], 0.0, "EXT PWR off again: dark again");
+        board::clear();
+    }
+
+    fn cold_truth() -> Truth {
+        Truth { dt_s: 1.0 / 30.0, on_ground: true, ..Truth::default() }
+    }
+
+    fn powered(p: &BTreeMap<String, f64>, bus: &str) -> bool {
+        p[&format!("ELEC_{bus}_BUS_IS_POWERED")] == 1.0
+    }
+
+    /// Runs `frames` frames and returns every frame's DC ESS powered state.
+    fn dc_ess_each_frame(live: &mut ElectricalLive, truth: &Truth, frames: usize) -> Vec<bool> {
+        (0..frames).map(|_| powered(&run(live, truth, &Faults::default(), 1), "DC_ESS")).collect()
+    }
+
+    #[test]
+    fn a_cold_aircraft_holds_dc_ess_and_every_hot_bus_on_its_batteries() {
+        board::clear();
+        let mut live = ElectricalLive::new();
+        let p = run(&mut live, &cold_truth(), &Faults::default(), 90);
+        for bus in ["DC_ESS", "DC_HOT_1", "DC_HOT_2", "DC_BAT", "DC_APU", "AC_EMER"] {
+            assert!(powered(&p, bus), "{bus} should be on its battery (AC EMER through the static inverter)");
+        }
+        for bus in ["AC_1", "AC_2", "AC_3", "AC_4", "DC_1", "DC_2"] {
+            assert!(!powered(&p, bus), "{bus} has no source on a cold aircraft");
+        }
+        board::clear();
+    }
+
+    #[test]
+    fn the_hot_buses_stay_alive_with_every_battery_pushbutton_off() {
+        board::clear();
+        let mut live = ElectricalLive::new();
+        let mut truth = cold_truth();
+        truth.controls.bat_pb_auto = [false; 4];
+        let p = run(&mut live, &truth, &Faults::default(), 90);
+        assert!(!powered(&p, "DC_ESS"), "both DC ESS battery contactors open with BAT 1 and ESS BAT off");
+        assert!(!powered(&p, "DC_APU"), "APU BAT off leaves its busbar");
+        for bus in ["DC_HOT_1", "DC_HOT_2", "DC_BAT"] {
+            assert!(powered(&p, bus), "{bus}: a hot bus stays on its battery with the pushbutton OFF");
+        }
+        board::clear();
+    }
+
+    #[test]
+    fn bat_1_alone_holds_dc_ess_in_emergency_configuration() {
+        board::clear();
+        let mut live = ElectricalLive::new();
+        let mut truth = cold_truth();
+        truth.controls.bat_pb_auto = [true, true, true, false];
+        let p = run(&mut live, &truth, &Faults::default(), 60);
+        assert!(powered(&p, "DC_ESS"));
+        assert!(live.net.contactors[live.contactor.bat_1_emer].closed, "6PC1 joins BAT 1 to DC ESS with no AC");
+        board::clear();
+    }
+
+    #[test]
+    fn every_bus_is_up_in_normal_flight_with_the_trs_on_their_fcom_inputs() {
+        board::clear();
+        let mut live = ElectricalLive::new();
+        let p = run(&mut live, &flying_truth(), &Faults::default(), 120);
+        for bus in ["AC_1", "AC_2", "AC_3", "AC_4", "AC_ESS", "AC_EMER", "DC_1", "DC_2", "DC_ESS", "DC_APU", "DC_HOT_1", "DC_HOT_2", "DC_BAT", "AC_GND_FLT_SVC", "DC_GND_FLT_SVC"] {
+            assert!(powered(&p, bus), "{bus} should be powered in normal flight");
+        }
+        assert_eq!(super::super::sources::TR_AC_INPUT, [BusId::Ac2, BusId::Ac3, BusId::AcEss, BusId::Ac4, BusId::Ac3]);
+        assert!(!live.net.contactors[live.contactor.dc_ess_feed_1].commanded_closed, "DC 1 feeds DC ESS only with ESS TR off line");
+        assert!(live.net.contactors[live.contactor.bat_line[2]].closed, "ESS BAT stays on DC ESS");
+        board::clear();
+    }
+
+    #[test]
+    fn dc_ess_never_drops_while_the_engines_are_lost_one_by_one_in_flight() {
+        board::clear();
+        let mut live = ElectricalLive::new();
+        let mut truth = flying_truth();
+        truth.environment.tas_ms = 250.0 * 0.514_444;
+        run(&mut live, &truth, &Faults::default(), 120);
+        for e in 0..4 {
+            truth.engine_running[e] = false;
+            truth.engine_n1_frac[e] = 0.0;
+            truth.engine_n2_frac[e] = 0.0;
+            let states = dc_ess_each_frame(&mut live, &truth, 90);
+            assert!(states.iter().all(|&s| s), "DC ESS dropped after engine {} was lost: {states:?}", e + 1);
+        }
+        let p = run(&mut live, &truth, &Faults::default(), 60);
+        assert!(live.rat_deployed, "all four generators lost in flight deploys the RAT");
+        assert!(powered(&p, "AC_ESS"), "the emergency generator supplies AC ESS");
+        assert_eq!(p["ELEC_TEFO"], 1.0);
+        assert!(powered(&p, "247XP") && powered(&p, "247PP"), "a flame-out brings the EHA busbars back on the essential buses");
+        assert!(!powered(&p, "AC_1"));
+        board::clear();
+    }
+
+    #[test]
+    fn bus_tie_off_keeps_ac_3_and_4_from_feeding_ac_1_and_2() {
+        board::clear();
+        let mut truth = flying_truth();
+        truth.engine_running = [false, false, true, true];
+        truth.engine_n2_frac = [0.0, 0.0, 0.9, 0.9];
+        let mut tied = ElectricalLive::new();
+        let p = run(&mut tied, &truth, &Faults::default(), 120);
+        assert!(powered(&p, "AC_1") && powered(&p, "AC_2"), "BUS TIE AUTO: GEN 3 and 4 carry the left side");
+        board::clear();
+        truth.controls.bus_tie_auto = false;
+        let mut split = ElectricalLive::new();
+        let p = run(&mut split, &truth, &Faults::default(), 120);
+        assert!(!powered(&p, "AC_1") && !powered(&p, "AC_2"), "BUS TIE OFF segregates AC 1/2 from AC 3/4");
+        assert!(powered(&p, "AC_3") && powered(&p, "AC_4"));
+        board::clear();
+    }
+
+    #[test]
+    fn ac_ess_feed_altn_takes_ac_ess_from_ac_4() {
+        board::clear();
+        let mut live = ElectricalLive::new();
+        let mut truth = flying_truth();
+        truth.controls.ac_ess_feed_altn = true;
+        let p = run(&mut live, &truth, &Faults::default(), 90);
+        assert_eq!(p["ELEC_AC_ESS_FED_BY_ALTN"], 1.0);
+        assert!(!live.net.contactors[live.contactor.ac_ess_feed_1].commanded_closed);
+        assert!(powered(&p, "AC_ESS"));
+        board::clear();
+    }
+
+    #[test]
+    fn the_apu_alone_powers_every_main_ac_bus_on_the_ground() {
+        board::clear();
+        let mut live = ElectricalLive::new();
+        let truth = Truth { apu_running: true, ..cold_truth() };
+        let p = run(&mut live, &truth, &Faults::default(), 120);
+        for bus in ["AC_1", "AC_2", "AC_3", "AC_4", "DC_1", "DC_2", "DC_ESS", "DC_APU"] {
+            assert!(powered(&p, bus), "{bus} should be up on the APU alone");
+        }
+        board::clear();
+    }
+
+    #[test]
+    fn tr_2_takes_dc_2_three_seconds_after_bcru_2_is_lost() {
+        board::clear();
+        let mut live = ElectricalLive::new();
+        let truth = flying_truth();
+        run(&mut live, &truth, &Faults::default(), 60);
+        live.wiring.tru[1].failed = true;
+        run(&mut live, &truth, &Faults::default(), 60);
+        assert!(!live.net.contactors[live.contactor.tr_line[4]].commanded_closed, "not before BCRU 2's line contactor has opened");
+        let p = run(&mut live, &truth, &Faults::default(), 60);
+        assert!(live.net.contactors[live.contactor.tr_line[4]].closed, "TR LC 2 closed");
+        assert!(live.net.contactors[live.contactor.bat_line[1]].closed, "BAT 2 stays on DC 2 beside TR 2");
+        assert!(powered(&p, "DC_2"));
+        assert!(!live.net.contactors[live.contactor.dc_tie_1_2].commanded_closed, "DC 2 has a source, so the IBLC stays open");
+        board::clear();
+    }
+
+    #[test]
+    fn with_three_generators_lost_bat_1_leaves_dc_1_and_dc_2_carries_it() {
+        board::clear();
+        let mut live = ElectricalLive::new();
+        let mut truth = flying_truth();
+        run(&mut live, &truth, &Faults::default(), 60);
+        truth.engine_running = [false, false, false, true];
+        truth.engine_n2_frac = [0.0, 0.0, 0.0, 0.9];
+        let p = run(&mut live, &truth, &Faults::default(), 60);
+        assert!(!powered(&p, "AC_1") && !powered(&p, "AC_2"), "one generator carries its own side only");
+        assert!(powered(&p, "AC_3") && powered(&p, "AC_4"));
+        assert!(live.net.contactors[live.contactor.bat_line[0]].commanded_closed, "BAT 1 holds DC 1 through the transfer");
+        let p = run(&mut live, &truth, &Faults::default(), 120);
+        assert!(!live.net.contactors[live.contactor.bat_line[0]].commanded_closed, "BCRU 1 lets BAT 1 go 5 s after losing AC 2");
+        assert!(live.net.contactors[live.contactor.dc_tie_1_2].commanded_closed, "IBLC 2 picks DC 1 up from DC 2");
+        assert!(powered(&p, "DC_1") && powered(&p, "DC_2") && powered(&p, "DC_ESS"), "the entire DC network stays supplied");
+        board::clear();
+    }
+
+    #[test]
+    fn a_galley_follows_its_neighbour_across_when_its_ac_bus_is_lost() {
+        board::clear();
+        let mut truth = flying_truth();
+        truth.engine_running = [false, true, true, true];
+        truth.engine_n2_frac = [0.0, 0.9, 0.9, 0.9];
+        truth.controls.bus_tie_auto = false;
+        let mut live = ElectricalLive::new();
+        let p = run(&mut live, &truth, &Faults::default(), 90);
+        assert!(!powered(&p, "AC_1"), "BUS TIE OFF: AC 1 has no source");
+        assert!(live.net.contactors[live.contactor.galt[0]].commanded_closed);
+        assert!(powered(&p, "181XP"), "GALLEY 1 is carried from GALLEY 3");
+        truth.controls.galley_pb_auto = false;
+        let p = run(&mut live, &truth, &Faults::default(), 30);
+        for bus in ["181XP", "183XP", "282XP", "280XP"] {
+            assert!(!powered(&p, bus), "GALLEY OFF drops {bus}");
+        }
+        board::clear();
+    }
+
+    #[test]
+    fn a_starved_drive_faults_after_30_s_and_disconnects_after_5_min() {
+        let (mut low, mut hot) = (0.0, 0.0);
+        let mut fault_at = None;
+        let mut disc_at = None;
+        for tick in 0..400 {
+            let (l, h, fault, disc) = drive_protection(low, hot, true, 90.0, 1.0);
+            low = l;
+            hot = h;
+            if fault && fault_at.is_none() {
+                fault_at = Some(tick + 1);
+            }
+            if disc && disc_at.is_none() {
+                disc_at = Some(tick + 1);
+            }
+        }
+        assert_eq!(fault_at, Some(30));
+        assert_eq!(disc_at, Some(300));
+        let (_, _, fault, disc) = drive_protection(0.0, 0.0, false, 205.0, 1.0);
+        assert!(fault && !disc, "200 C faults the drive at once and disconnects it only after 5 min");
+    }
+
+    #[test]
+    fn a_crew_drive_disconnect_takes_its_generator_off_for_good() {
+        board::clear();
+        let mut live = ElectricalLive::new();
+        let mut truth = flying_truth();
+        truth.controls.drive_disc_pressed[0] = true;
+        run(&mut live, &truth, &Faults::default(), 30);
+        truth.controls.drive_disc_pressed[0] = false;
+        let p = run(&mut live, &truth, &Faults::default(), 30);
+        assert_eq!(p["ELEC_DRIVE_1_DISCONNECTED"], 1.0);
+        assert!(!live.net.contactors[live.contactor.gen_line[0]].commanded_closed);
+        assert!(powered(&p, "AC_1"), "AC 1 is carried from AC 2 through the transfer circuit");
         board::clear();
     }
 }

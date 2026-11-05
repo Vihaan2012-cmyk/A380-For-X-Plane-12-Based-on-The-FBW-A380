@@ -1125,6 +1125,73 @@ pub(crate) mod tests {
         out
     }
 
+    /// The steady state at the N1 that makes `thrust_n`, found by bisection.
+    fn at_thrust(thrust_n: f64, (lo, hi): (f64, f64), run: impl Fn(f64) -> EngineOutputs) -> EngineOutputs {
+        let (mut lo, mut hi) = (lo, hi);
+        let mut out = run(hi);
+        for _ in 0..16 {
+            let mid = 0.5 * (lo + hi);
+            out = run(mid);
+            if out.net_thrust_n < thrust_n { lo = mid } else { hi = mid }
+        }
+        out
+    }
+
+    fn cruise_inputs(target_n1: f64) -> EngineInputs {
+        let temp = 218.8;
+        EngineInputs {
+            ambient_pressure_pa: 23_842.0,
+            ambient_temp_k: temp,
+            mach: 0.85,
+            true_airspeed_m_s: 0.85 * (GAMMA_AIR * R_AIR * temp).sqrt(),
+            target_n1_corrected_pct: target_n1,
+            ..isa_sea_level()
+        }
+    }
+
+    /// Lit and spooled at sea level, then held at FL350 M0.85: an engine
+    /// started from rest at cruise altitude hangs, which is not cruise.
+    fn cruise_at(target_n1: f64) -> EngineOutputs {
+        let mut engine = Engine::new();
+        run_to_steady_state(&mut engine, EngineInputs { target_n1_corrected_pct: 70.0, ..isa_sea_level() }, 10.0);
+        run_for(&mut engine, cruise_inputs(target_n1), 60.0).0
+    }
+
+    #[test]
+    fn icao_lto_fuel_flows_match_the_emissions_databank() {
+        // ICAO Aircraft Engine Emissions Databank v32 (EASA, 03/2026), Trent
+        // 972-84, UID 01P18RR104: 345.95 kN rated, fuel flow at 100/85/30/7 %
+        // of it, ISA sea level static, no bleed or offtake. Scaled to this
+        // engine's 356.8 kN rating by thrust.
+        const RATED_N: f64 = 345_950.0;
+        const POINTS: [(f64, f64); 4] = [(1.00, 2.672), (0.85, 2.210), (0.30, 0.735), (0.07, 0.258)];
+        let run = |n1: f64| run_to_steady_state(&mut Engine::new(), EngineInputs { target_n1_corrected_pct: n1, ..isa_sea_level() }, 40.0);
+        for (fraction, databank_kg_s) in POINTS {
+            let out = at_thrust(fraction * STATIC_THRUST_N, (5.0, 110.0), run);
+            let expected = databank_kg_s * STATIC_THRUST_N / RATED_N;
+            let error = (out.fuel_flow_kg_s - expected) / expected;
+            println!("ICAO {:>3.0} %: N1 {:.2} fuel {:.3} kg/s, databank {expected:.3} ({:+.1} %), TGT {:.0} C, TET {:.0} K", fraction * 100.0, out.n1_pct, out.fuel_flow_kg_s, error * 100.0, out.egt_c, out.tet_k);
+            assert!(
+                error.abs() < 0.05,
+                "{:.0} % thrust: fuel flow {:.3} kg/s vs databank {expected:.3} ({:+.1} %)",
+                fraction * 100.0,
+                out.fuel_flow_kg_s,
+                error * 100.0
+            );
+        }
+    }
+
+    #[test]
+    fn take_off_tgt_sits_below_the_certificated_limit_with_a_new_engine_margin() {
+        // EASA.E.012: 956 C measured (untrimmed) take-off TGT. A new engine
+        // at ISA sea level, below its flat-rating corner, has tens of degrees
+        // in hand.
+        let out = run_to_steady_state(&mut Engine::new(), EngineInputs { target_n1_corrected_pct: TAKEOFF_N1_PCT, ..isa_sea_level() }, 40.0);
+        let limit = crate::physics::damage::trent900::TGT_TAKEOFF_UNTRIMMED_C;
+        println!("take-off TGT {:.0} C", out.egt_c);
+        assert!(out.egt_c < limit - 30.0 && out.egt_c > limit - 200.0, "take-off TGT {:.0} C against the {limit:.0} C limit", out.egt_c);
+    }
+
     #[test]
     fn static_takeoff_thrust_matches_the_certificated_rating() {
         // The design point is calibrated to this exact figure (module
@@ -1162,42 +1229,16 @@ pub(crate) mod tests {
     }
 
     #[test]
-    fn cruise_like_fuel_flow_is_a_plausible_order_of_magnitude() {
-        // FL350, M0.85 ISA-ish conditions; A380/Trent-900-class public
-        // references commonly put cruise fuel burn in the neighbourhood of
-        // 1 kg/s per engine (total aircraft burn often quoted around
-        // 10-13 t/h, i.e. roughly 0.7-0.9 kg/s per engine). This checks
-        // the model lands in that neighbourhood, not an exact figure (no
-        // certificated cruise fuel flow for this engine is public).
-        let mut engine = Engine::new();
-        let cruise_pressure_pa = 23_842.0; // ISA FL350
-        let cruise_temp_k = 218.8; // ISA FL350
-        let inputs = EngineInputs {
-            ambient_pressure_pa: cruise_pressure_pa,
-            ambient_temp_k: cruise_temp_k,
-            mach: 0.85,
-            true_airspeed_m_s: 0.85 * (GAMMA_AIR * R_AIR * cruise_temp_k).sqrt(),
-            target_n1_corrected_pct: 88.0,
-            fuel_valve_open: true,
-            starter_engaged: false,
-            starter_supply_fraction: 1.0,
-            ignition_available: true,
-            bleed_extraction_kg_s: 0.5,
-            bleed_from_ip_port: false,
-            gearbox_elec_load_w: 60_000.0,
-            gearbox_hyd_load_w: 20_000.0,
-            compressor_efficiency_loss_fraction: 0.0,
-            compressor_flow_capacity_loss_fraction: 0.0,
-            turbine_efficiency_loss_fraction: 0.0,
-            bearing_friction_extra_fraction: 0.0,
-            oil_pressure_fraction: 1.0,
-            fuel_temp_k: T_REF_K,
-            oil_faults: Default::default(),
-            dt_s: 0.02,
-        };
-        let out = run_to_steady_state(&mut engine, inputs, 90.0);
-        assert!(out.fuel_flow_kg_s > 0.3 && out.fuel_flow_kg_s < 3.0, "{}", out.fuel_flow_kg_s);
-        assert!(out.net_thrust_n > 0.0);
+    fn cruise_fuel_flow_matches_the_published_cruise_sfc() {
+        // Trent 900 cruise SFC, M0.85 at 35,000 ft: 16 g/(kN s), 0.56 lb/(lbf h)
+        // (Roux, *Turbofan and Turbojet Engines: Database Handbook*). About
+        // 60 kN per engine holds a mid-cruise A380, about 12-13 t/h for four.
+        let out = at_thrust(60_000.0, (40.0, 110.0), cruise_at);
+        let sfc = out.fuel_flow_kg_s / out.net_thrust_n * 1e6;
+        println!("cruise: N1 {:.2} fuel {:.3} kg/s SFC {sfc:.2} g/(kN s) TGT {:.0} C", out.n1_pct, out.fuel_flow_kg_s, out.egt_c);
+        assert!((sfc - 16.0).abs() < 16.0 * 0.12, "cruise SFC {sfc:.2} g/(kN s) at {:.0} N", out.net_thrust_n);
+        let four_engines_t_h = 4.0 * out.fuel_flow_kg_s * 3.6;
+        assert!((10.0..=14.0).contains(&four_engines_t_h), "{four_engines_t_h:.1} t/h");
     }
 
     #[test]

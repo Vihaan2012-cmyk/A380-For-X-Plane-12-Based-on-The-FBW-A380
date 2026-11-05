@@ -167,6 +167,11 @@ impl Conversion {
                 },
                 _ => Conversion::Raw,
             },
+            // MSFS hands an angle read as a plain number back in radians.
+            Some(Kind::Plain) if units::normalise(wanted) == "number" => match stored.and_then(units::kind) {
+                Some(Kind::Measure(from)) if from.dimension == units::Dimension::Angle && from.offset == 0. => Conversion::Linear(from.scale, 0.),
+                _ => Conversion::Raw,
+            },
             _ => Conversion::Raw,
         }
     }
@@ -1542,6 +1547,14 @@ mod tests {
         assert!((c.write(c.read(123.)) - 123.).abs() < 1e-9);
         assert!(matches!(Conversion::between(None, "feet"), Conversion::Raw));
         assert_eq!(Conversion::between(Some("Feet"), "Bool").read(3.), 1.);
+    }
+
+    #[test]
+    fn an_angle_read_as_a_number_comes_back_in_radians() {
+        let c = Conversion::between(Some("Degrees"), "number");
+        assert!((c.read(8.1) - 8.1_f64.to_radians()).abs() < 1e-12, "the PFD trim scale multiplies this by 180/pi");
+        assert!(matches!(Conversion::between(Some("Feet"), "number"), Conversion::Raw));
+        assert!(matches!(Conversion::between(Some("Degrees"), "Enum"), Conversion::Raw));
     }
 
     /// Regression guard for the ARINC429 "string vs number" bridge bug

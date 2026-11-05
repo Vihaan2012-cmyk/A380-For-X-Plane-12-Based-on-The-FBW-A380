@@ -250,13 +250,28 @@ fn chocks_pulled_for_beacon(installed: &mut [bool; N], was_on: bool, on: bool) -
     if !on || was_on {
         return lines;
     }
+    pull_chocks(installed, "beacon on", &mut lines);
+    lines
+}
+
+/// BetterPushback stops pushing whenever the toe brakes read applied, and FlyByWire's chocks
+/// brake the wheels fully, so its tug could never move a chocked aircraft (GitHub #14). The tug
+/// arriving is the ground crew's cue to pull them, as BetterPushback itself does for the Zibo 737.
+fn chocks_pulled_for_tug(installed: &mut [bool; N], was_started: bool, started: bool) -> Vec<String> {
+    let mut lines = Vec::new();
+    if started && !was_started {
+        pull_chocks(installed, "pushback tug connecting", &mut lines);
+    }
+    lines
+}
+
+fn pull_chocks(installed: &mut [bool; N], cue: &str, lines: &mut Vec<String>) {
     for &idx in &CHOCKS {
         if installed[idx] {
             installed[idx] = false;
-            lines.push(format!("walkaround: {} pulled by the ground crew, beacon on", ITEMS[idx]));
+            lines.push(format!("walkaround: {} pulled by the ground crew, {cue}", ITEMS[idx]));
         }
     }
-    lines
 }
 
 /// FlyByWire's wheel chocks (`A380BrakingForce::update_chocks_braking`)
@@ -332,6 +347,10 @@ pub struct Walkaround {
     wheel_chocks: VariableIdentifier,
     beacon: VariableIdentifier,
     beacon_was_on: bool,
+    /// BetterPushback's `bp/started`, looked up until that plugin is loaded.
+    bp_started: Option<DataRef>,
+    bp_lookup_in: u32,
+    bp_was_started: bool,
     groundspeed_ms: Option<DataRef>,
     local_x: Option<DataRef>,
     local_z: Option<DataRef>,
@@ -378,6 +397,9 @@ impl Walkaround {
             wheel_chocks: vars.get("MODEL_WHEELCHOCKS_ENABLED".to_string()),
             beacon: vars.get("LIGHT BEACON".to_string()),
             beacon_was_on: false,
+            bp_started: None,
+            bp_lookup_in: 0,
+            bp_was_started: false,
             groundspeed_ms: xplm.find("sim/flightmodel/position/groundspeed"),
             local_x: xplm.find("sim/flightmodel/position/local_x"),
             local_z: xplm.find("sim/flightmodel/position/local_z"),
@@ -462,6 +484,16 @@ impl Walkaround {
         let beacon_on = vars.read(&self.beacon) != 0.0;
         self.events.extend(chocks_pulled_for_beacon(&mut self.installed, self.beacon_was_on, beacon_on));
         self.beacon_was_on = beacon_on;
+        if self.bp_started.is_none() {
+            if self.bp_lookup_in == 0 {
+                self.bp_started = xplm.find("bp/started");
+                self.bp_lookup_in = 300;
+            }
+            self.bp_lookup_in -= 1;
+        }
+        let tug = self.bp_started.is_some_and(|d| xplm.get_i(d) != 0);
+        self.events.extend(chocks_pulled_for_tug(&mut self.installed, self.bp_was_started, tug));
+        self.bp_was_started = tug;
 
         for i in 0..N {
             published::set(self.values[i], self.installed[i] as i32 as f64);
@@ -598,6 +630,17 @@ mod tests {
         assert!(wheel_chocks_from(&installed));
         chock_overrun(&mut installed, 2.0);
         assert!(!wheel_chocks_from(&installed), "overrun chocks no longer hold");
+    }
+
+    #[test]
+    fn the_ground_crew_pulls_the_chocks_for_a_betterpushback_tug() {
+        let mut installed = [true; N];
+        assert!(chocks_pulled_for_tug(&mut installed, false, false).is_empty());
+        assert_eq!(chocks_pulled_for_tug(&mut installed, false, true).len(), CHOCKS.len());
+        assert!(!wheel_chocks_from(&installed), "nothing holds the wheels against the tug");
+        assert!(installed[STATIC_COVERS], "the other walkaround items are left alone");
+        installed[CHOCKS[0]] = true;
+        assert!(chocks_pulled_for_tug(&mut installed, true, true).is_empty(), "chocks refitted during the push stay");
     }
 
     #[test]

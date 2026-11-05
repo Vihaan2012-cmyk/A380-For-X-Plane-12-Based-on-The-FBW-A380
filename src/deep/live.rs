@@ -607,8 +607,19 @@ pub struct Controls {
     pub baro_mode: [f64; 2],
     /// `[1, 2]`: the A380's two APU generator pushbuttons.
     pub apu_gen_pb_on: [bool; 2],
-    /// `[1, 2]`: the two battery pushbuttons' AUTO/OFF position.
-    pub bat_pb_auto: [bool; 2],
+    /// `[1, 2, ESS, APU]`: the four battery pushbuttons' AUTO/OFF position.
+    pub bat_pb_auto: [bool; 4],
+    /// The BUS TIE pushbutton in AUTO.
+    pub bus_tie_auto: bool,
+    /// The AC ESS FEED pushbutton in ALTN.
+    pub ac_ess_feed_altn: bool,
+    /// RAT MAN ON pressed.
+    pub rat_man_on: bool,
+    /// The GALLEY and COMMERCIAL pushbuttons in AUTO/ON.
+    pub galley_pb_auto: bool,
+    pub commercial_pb_on: bool,
+    /// Each DRIVE pushbutton pressed: the crew's irreversible drive disconnect.
+    pub drive_disc_pressed: [bool; 4],
     /// `[1..4]`: the EXT PWR pushbuttons, each its own external power
     /// contactor's command.
     pub ext_pwr_pb_on: [bool; 4],
@@ -691,7 +702,13 @@ impl Default for Controls {
             eng_gen_pb_on: [true; 4],
             baro_mode: [0.0; 2],
             apu_gen_pb_on: [true; 2],
-            bat_pb_auto: [true; 2],
+            bat_pb_auto: [true; 4],
+            bus_tie_auto: true,
+            ac_ess_feed_altn: false,
+            rat_man_on: false,
+            galley_pb_auto: true,
+            commercial_pb_on: true,
+            drive_disc_pressed: [false; 4],
             ext_pwr_pb_on: [true; 4],
             ground_spoiler_lever_armed: false,
             apu_master_sw_on: false,
@@ -1002,7 +1019,7 @@ pub fn start_truth(start: DeepStart, base: &Truth) -> Truth {
         t.dc_bus_powered = [true; 2];
         t.prim_healthy = [true; 3];
         t.sec_healthy = [true; 3];
-        t.controls.bat_pb_auto = [true; 2];
+        t.controls.bat_pb_auto = [true; 4];
     }
     if start == DeepStart::Turnaround {
         t.apu_running = true;

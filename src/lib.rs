@@ -224,6 +224,7 @@ mod tod_pause;
 #[cfg(feature = "js")]
 mod atc_online;
 mod drag_match;
+mod engine_forces;
 // [slot modules: sound] FlyByWire's Wwise sounds played through X-Plane's sound API.
 mod sound;
 mod procedure_pack;
@@ -1574,6 +1575,7 @@ struct Plugin {
     slides: slides::Slides,
     gear_collapse: gear_collapse::GearCollapse,
     drag_match: drag_match::DragMatch,
+    engine_forces: engine_forces::EngineForces,
     /// Cached ids for the deep-area outputs `apply_deep_xp_consequences`
     /// reads back every tick -- already published by `deep::gear_structure`/
     /// `deep::environment`'s own `publish` (`deep::plugin::DeepLayer::tick`
@@ -2023,6 +2025,7 @@ impl Plugin {
         let fap = fap::Fap::new(&mut vars);
         let slides = slides::Slides::new(&mut vars);
         let drag_match = drag_match::DragMatch::new(xplm);
+        let engine_forces = engine_forces::EngineForces::new(xplm);
         // [slot new: sound] Starts loading the user's MSFS package in the
         // background; nothing here touches XPLM or Vars.
         let sound = sound::Sound::new();
@@ -2201,6 +2204,7 @@ impl Plugin {
             slides,
             gear_collapse: gear_collapse::GearCollapse::default(),
             drag_match,
+            engine_forces,
             // [slot init: sound]
             sound,
             sound_pack,
@@ -2538,6 +2542,7 @@ impl Plugin {
             &events.throttles,
         );
         self.prims.update_after_fadecs(&mut self.vars, eec);
+        self.engine_forces.update(xplm, &self.engine_commands.forward_thrust_n(), crate::physics::engine::params::STATIC_THRUST_N, delta);
         crate::perf::lap("tick: fcdc");
         // [slot tick: fcdc] FlyByWire runs updateFcdc between updateSec and
         // updateFadec, and updateSpoilers after updateServoSolenoidStatus
@@ -3941,6 +3946,7 @@ pub unsafe extern "C" fn XPluginDisable() {
         let p = &raw mut PLUGIN;
         if let Some(plugin) = (*p).as_mut() {
             plugin.engine_commands.release(xplm);
+            plugin.engine_forces.release(xplm);
             // [slot release: flight_controls] Surfaces back to X-Plane.
             plugin.flight_controls.release(xplm);
             plugin.handling.release(xplm);

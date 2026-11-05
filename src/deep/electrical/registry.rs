@@ -21,7 +21,7 @@ use std::collections::HashMap;
 use crate::deep::api::*;
 
 use super::loads;
-use super::network::Network;
+use super::network::{BusId, Network};
 use super::sources;
 
 /// Sequential-per-ATA-chapter failure numbering (the brief's own "number n
@@ -125,7 +125,7 @@ pub fn register(r: &mut Registry) {
     }
 
     // ---- Every bus: one component + 1 (short-to-ground) failure each.
-    for bus in &net.buses {
+    for bus in net.buses.iter().filter(|b| !matches!(b.id, BusId::AcTransferLeft | BusId::AcTransferRight | BusId::AcTransferMid)) {
         let comp_id = format!("24_elec.bus.{}", bus.id.label());
         register_component(r, &mut counters, 24, comp_id, format!("{} bus", bus.id.label()), "network::Bus", &[("short_to_ground", "a short from the busbar itself to structure, independent of any one load on it: 0 none .. 1 dead short", "0..1, short severity; conductance = severity / BUS_FAULT_RESISTANCE_OHM (0.03 ohm)", "collapses the bus's own voltage and can overload whatever feeder/tie breaker protects it")]);
     }
@@ -199,6 +199,31 @@ pub fn register(r: &mut Registry) {
     // above; `super::live::MISC_FAULTS` is the single list both this
     // registration and `super::live::route_failures` read, so they cannot
     // drift apart.
+    // ---- ESS BAT and APU BAT, after everything else so the earlier ids keep their numbers.
+    register_component(
+        r,
+        &mut counters,
+        24,
+        "24_elec.tr-2-backup".to_string(),
+        "TR 2 (BCRU 2 backup)".to_string(),
+        "sources::Tru",
+        &[("winding_degradation", "winding/diode-bridge degradation: 0 healthy .. 1 resistance at 4x", "0..1, internal resistance grows to 4x", "DC 2 sags harder on its backup source")],
+    );
+    for (n, name) in [(3u16, "ESS BAT"), (4, "APU BAT")] {
+        register_component(
+            r,
+            &mut counters,
+            24,
+            format!("24_elec.bat-{n}"),
+            name.to_string(),
+            "sources::Battery",
+            &[
+                ("capacity_fade", "permanently degraded cell capacity: 0 healthy .. 1 up to 70% capacity lost", "0..1, fraction of MAX_CAPACITY_FADE (0.7) capacity lost", "less usable charge before the battery reads empty, shorter time-to-empty under the same load"),
+                ("resistance_growth", "aged internal resistance: 0 healthy .. 1 up to 3x", "0..1, internal resistance grows toward 3x (AGED_RESISTANCE_MULTIPLIER)", "terminal voltage sags harder under load, less real power deliverable before hitting the max-power-transfer ceiling"),
+            ],
+        );
+    }
+
     for &(suffix, name, meaning) in &super::live::MISC_FAULTS {
         let comp_id = format!("24_elec.misc.{suffix}");
         register_component(r, &mut counters, 24, comp_id, name.to_string(), "misc::Health", &[("fault", meaning, "0..1 (boolean for every entry but the two drive-oil-leak channels, which are continuous, 0..1, exactly as `apu::oil::OilFaults::leak` already is)", "see this failure's own name/meaning for the specific effect")]);

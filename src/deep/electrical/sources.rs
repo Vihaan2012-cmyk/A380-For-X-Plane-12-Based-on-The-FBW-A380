@@ -27,7 +27,7 @@
 //! uses between the systems tick and the engine model
 //! (`ENGINE_GEARBOX_ELEC_LOAD_W:n`).
 
-use super::network::{BusId, Contactor, ContactorKind, Diode, FeedSource, Network, Source};
+use super::network::{BusId, Contactor, ContactorKind, FeedSource, Network, Source};
 
 const MIN_RESISTANCE_OHM: f64 = 1.0e-4;
 
@@ -307,6 +307,11 @@ pub struct TruFaults {
 
 pub struct Tru {
     temp_c: f64,
+    idle_v: f64,
+    resistance_ohm: f64,
+    degraded_resistance_ohm: f64,
+    /// The unit has failed outright: no output whatever its AC input.
+    pub(crate) failed: bool,
 }
 
 impl Tru {
@@ -324,9 +329,19 @@ impl Tru {
     /// `transformer_rectifier.rs::COOLING_W_PER_KELVIN` (real, FBW-sourced).
     const COOLING_W_PER_KELVIN: f64 = 3.5;
 
+    /// A battery charge and rectifier unit or the APU TR: a regulated output.
     pub fn new(ambient_c: f64) -> Self {
-        Self { temp_c: ambient_c }
+        Self { temp_c: ambient_c, idle_v: Self::IDLE_OUTPUT_VOLTAGE, resistance_ohm: Self::INTERNAL_RESISTANCE_OHM, degraded_resistance_ohm: Self::DEGRADED_RESISTANCE_OHM, failed: false }
     }
+
+    /// TR 2, BCRU 2's backup: unregulated, 25.5-31 V over its 300 A (A380 TTM ATA 24).
+    pub fn unregulated(ambient_c: f64) -> Self {
+        let r = (Self::UNREGULATED_IDLE_V - Self::UNREGULATED_FULL_LOAD_V) / TRU_RATED_A;
+        Self { temp_c: ambient_c, idle_v: Self::UNREGULATED_IDLE_V, resistance_ohm: r, degraded_resistance_ohm: 4.0 * r, failed: false }
+    }
+
+    const UNREGULATED_IDLE_V: f64 = 31.0;
+    const UNREGULATED_FULL_LOAD_V: f64 = 25.5;
 
     pub fn temperature_c(&self) -> f64 {
         self.temp_c
@@ -334,12 +349,12 @@ impl Tru {
 
     /// This tick's terminal, given whether the AC input bus is powered.
     pub fn terminal(&self, ac_input_powered: bool, faults: TruFaults) -> (f64, f64) {
-        if !ac_input_powered {
+        if !ac_input_powered || self.failed {
             return (0.0, MIN_RESISTANCE_OHM);
         }
         let degradation = faults.winding_degradation.clamp(0.0, 1.0);
-        let r = Self::INTERNAL_RESISTANCE_OHM + degradation * (Self::DEGRADED_RESISTANCE_OHM - Self::INTERNAL_RESISTANCE_OHM);
-        (Self::IDLE_OUTPUT_VOLTAGE, r)
+        let r = self.resistance_ohm + degradation * (self.degraded_resistance_ohm - self.resistance_ohm);
+        (self.idle_v, r)
     }
 
     /// Updates the TRU's own thermal state from its measured delivered
@@ -351,7 +366,7 @@ impl Tru {
     /// oil.rs`'s chamber model.
     pub fn step(&mut self, ac_input_powered: bool, measured_load_w: f64, faults: TruFaults, ambient_c: f64, dt_s: f64) -> f64 {
         let (_, r) = self.terminal(ac_input_powered, faults);
-        let approx_current = if ac_input_powered { measured_load_w.max(0.0) / Self::IDLE_OUTPUT_VOLTAGE } else { 0.0 };
+        let approx_current = if ac_input_powered { measured_load_w.max(0.0) / self.idle_v } else { 0.0 };
         let heat_w = approx_current * approx_current * r;
         let target = ambient_c + heat_w / Self::COOLING_W_PER_KELVIN;
         let k = Self::COOLING_W_PER_KELVIN / Self::THERMAL_MASS_J_PER_KELVIN;
@@ -375,10 +390,8 @@ impl StaticInverter {
     const EFFICIENCY: f64 = 0.85;
     /// `static_inverter.rs::DEGRADED_EFFICIENCY_FLOOR` (real, FBW-sourced).
     const DEGRADED_EFFICIENCY_FLOOR: f64 = 0.3;
-    /// `breakers.rs::static_inverter_rated_a`'s own basis: FBW's
-    /// `power_consumption.rs` AC_STAT_INV bus demand, 135 W (real,
-    /// FBW-sourced).
-    const RATED_W: f64 = 135.0;
+    /// 2.5 kVA, sized with BAT 1 and ESS BAT for 30 minutes of flight (A380 TTM ATA 24).
+    const RATED_W: f64 = 2_500.0;
     const RATED_VOLTAGE_VOLT: f64 = 115.0;
     /// GENERIC: a switch-mode static inverter is well regulated.
     const RATED_VOLTAGE_REGULATION: f64 = 0.05;
@@ -443,7 +456,14 @@ impl Rat {
     /// would supply a real altitude-corrected density instead).
     const AIR_DENSITY_KG_M3: f64 = 1.225;
     const RATED_VOLTAGE_VOLT: f64 = 115.0;
-    const FREQUENCY_HZ: f64 = 400.0;
+    /// 70 kVA above 175 kt, 58 kVA from 140 to 175 kt, 482-664 Hz (A380 TTM ATA 24).
+    const FULL_POWER_KT: f64 = 175.0;
+    const REDUCED_POWER_KT: f64 = 140.0;
+    const REDUCED_POWER_W: f64 = 58_000.0;
+    const MIN_FREQUENCY_HZ: f64 = 482.0;
+    const MAX_FREQUENCY_HZ: f64 = 664.0;
+    /// GENERIC: the speed at which the turbine reaches its top frequency.
+    const FULL_FREQUENCY_KT: f64 = 260.0;
 
     pub fn new() -> Self {
         Self { deployed: false }
@@ -464,7 +484,8 @@ impl Rat {
         }
         let v_ms = (airspeed_kt.max(0.0)) * 0.514444;
         let area_m2 = std::f64::consts::PI * (Self::PROPELLER_DIAMETER_M / 2.0).powi(2);
-        let available_w = (0.5 * Self::AIR_DENSITY_KG_M3 * area_m2 * v_ms.powi(3) * Self::POWER_COEFFICIENT * (1.0 - jammed)).min(Self::MAX_POWER_W);
+        let rated_w = if airspeed_kt >= Self::FULL_POWER_KT { Self::MAX_POWER_W } else { Self::REDUCED_POWER_W };
+        let available_w = (0.5 * Self::AIR_DENSITY_KG_M3 * area_m2 * v_ms.powi(3) * Self::POWER_COEFFICIENT * (1.0 - jammed)).min(rated_w);
         if available_w <= 1.0 {
             return Source { id: "rat", open_circuit_v: 0.0, resistance_ohm: MIN_RESISTANCE_OHM, frequency_hz: 0.0 };
         }
@@ -475,7 +496,9 @@ impl Rat {
         // `network.rs`'s existing overload/collapse branch instead of
         // inventing a second capping mechanism.
         let r = (Self::RATED_VOLTAGE_VOLT * Self::RATED_VOLTAGE_VOLT / (4.0 * available_w)).max(MIN_RESISTANCE_OHM);
-        Source { id: "rat", open_circuit_v: Self::RATED_VOLTAGE_VOLT, resistance_ohm: r, frequency_hz: Self::FREQUENCY_HZ }
+        let speed = ((airspeed_kt - Self::REDUCED_POWER_KT) / (Self::FULL_FREQUENCY_KT - Self::REDUCED_POWER_KT)).clamp(0.0, 1.0);
+        let frequency_hz = Self::MIN_FREQUENCY_HZ + speed * (Self::MAX_FREQUENCY_HZ - Self::MIN_FREQUENCY_HZ);
+        Source { id: "rat", open_circuit_v: Self::RATED_VOLTAGE_VOLT, resistance_ohm: r, frequency_hz }
     }
 }
 
@@ -506,8 +529,10 @@ pub struct Battery {
 }
 
 impl Battery {
-    /// `battery.rs::RATED_CAPACITY_AMPERE_HOURS` (real, FBW-sourced).
-    const RATED_CAPACITY_AH: f64 = 23.0;
+    /// FCOM DSC-24-10-30: "Each battery has a capacity of 50 Ah."
+    pub(crate) const RATED_CAPACITY_AH: f64 = 50.0;
+    /// The capacity [`Battery::ocv_for_charge_ah`]'s curve is drawn for.
+    const CURVE_CAPACITY_AH: f64 = 23.0;
     /// `battery.rs::CELL_INTERNAL_RESISTANCE_OHM_AT_20C` (real,
     /// FBW-sourced, itself cited to Airbus/Saft documentation per that
     /// file's own comment).
@@ -583,7 +608,7 @@ impl Battery {
 
     fn open_circuit_v(&self, faults: BatteryFaults) -> f64 {
         let usable = self.usable_capacity_ah(faults).max(1.0e-6);
-        let rescaled_ah = (self.charge_ah * Self::RATED_CAPACITY_AH / usable).clamp(0.0, Self::RATED_CAPACITY_AH);
+        let rescaled_ah = (self.charge_ah * Self::CURVE_CAPACITY_AH / usable).clamp(0.0, Self::CURVE_CAPACITY_AH);
         Self::ocv_for_charge_ah(rescaled_ah)
     }
 
@@ -716,12 +741,19 @@ impl ChargeLimiter {
 // breaker of the same name/rating), and orchestrates the pre/post-tick
 // measured-feedback loop every source above needs.
 
+/// BCRU 1 (TR 1), BCRU 2 (TR 2), BCRU ESS, APU TR and TR 2, BCRU 2's backup (A380 TTM ATA 24).
+pub const TR_COUNT: usize = 5;
+/// Each unit's AC input: BCRU 1 from AC 2, BCRU 2 and TR 2 from AC 3, BCRU ESS from AC ESS, APU TR from AC 4.
+pub const TR_AC_INPUT: [BusId; TR_COUNT] = [BusId::Ac2, BusId::Ac3, BusId::AcEss, BusId::Ac4, BusId::Ac3];
+/// And the DC bus each feeds.
+pub const TR_DC_OUTPUT: [BusId; TR_COUNT] = [BusId::Dc1, BusId::Dc2, BusId::DcEss, BusId::DcApu, BusId::Dc2];
+
 pub struct Wiring {
     pub vfg: [Vfg; 4],
     pub apu_gen: [ApuGenerator; 2],
-    pub tru: [Tru; 4],
+    pub tru: [Tru; TR_COUNT],
     pub static_inverter: StaticInverter,
-    pub battery: [Battery; 2],
+    pub battery: [Battery; 4],
     pub ground_power: GroundPower,
     pub rat: Rat,
     source_index: SourceIndex,
@@ -731,9 +763,9 @@ pub struct Wiring {
 struct SourceIndex {
     gen: [usize; 4],
     apu_gen: [usize; 2],
-    tr: [usize; 4],
+    tr: [usize; TR_COUNT],
     static_inv: usize,
-    battery: [usize; 2],
+    battery: [usize; 4],
     gpu: usize,
     rat: usize,
 }
@@ -747,9 +779,8 @@ fn generator_rated_a() -> f64 {
 fn apu_generator_rated_a() -> f64 {
     120_000.0 / 0.8 / 115.0
 }
-/// `breakers.rs::TRU_RATED_A`: typical Airbus TRU continuous rating,
-/// typical/derived (documented as such in `breakers.rs` itself).
-const TRU_RATED_A: f64 = 200.0;
+/// A BCRU's and TR 2's continuous rating (A380 TTM ATA 24: 300 A, 450 A for 5 s).
+const TRU_RATED_A: f64 = 300.0;
 /// `breakers.rs::static_inverter_rated_a`, real/FBW-sourced.
 fn static_inverter_rated_a() -> f64 {
     135.0 / 115.0
@@ -788,9 +819,11 @@ impl Wiring {
             net.add_feeder_breaker(super::network::Breaker::new(Box::leak(format!("gen-{}-bkr", i + 1).into_boxed_str()), generator_rated_a(), bus), bus);
         }
 
-        let apu_gen_bus = BusId::Ac3; // APU generator feeds whichever AC tie is available; documented approximation (its real bus depends on the priority table, out of this module's scope).
+        // APU GEN A sits on the transfer circuit's left bar, APU GEN B on its right (A380 TTM ATA 24).
+        let apu_gen_buses = [BusId::AcTransferLeft, BusId::AcTransferRight];
         let mut apu_gen = [0usize; 2];
         for i in 0..2usize {
+            let apu_gen_bus = apu_gen_buses[i];
             let id: &'static str = Box::leak(format!("apu-gen-{}", i + 1).into_boxed_str());
             apu_gen[i] = net.add_source(Source::new(id));
             let contactor_id: &'static str = Box::leak(format!("apu-gen-{}-line", i + 1).into_boxed_str());
@@ -798,23 +831,24 @@ impl Wiring {
             net.add_feeder_breaker(super::network::Breaker::new(Box::leak(format!("apu-gen-{}-bkr", i + 1).into_boxed_str()), apu_generator_rated_a(), apu_gen_bus), apu_gen_bus);
         }
 
-        let tr_names = ["tr-1", "tr-2", "tr-ess", "tr-apu"];
-        let tr_buses = [BusId::Dc1, BusId::Dc2, BusId::DcEss, BusId::DcApu];
-        let mut tr = [0usize; 4];
-        for i in 0..4usize {
+        let tr_names = ["tr-1", "tr-2", "tr-ess", "tr-apu", "tr-2-backup"];
+        let mut tr = [0usize; TR_COUNT];
+        for i in 0..TR_COUNT {
             tr[i] = net.add_source(Source::new(tr_names[i]));
             let contactor_id: &'static str = Box::leak(format!("{}-line", tr_names[i]).into_boxed_str());
-            net.add_contactor(Contactor::new(contactor_id, ContactorKind::Feeder, FeedSource::Source(tr[i]), tr_buses[i], MIN_RESISTANCE_OHM));
-            net.add_feeder_breaker(super::network::Breaker::new(Box::leak(format!("{}-bkr", tr_names[i]).into_boxed_str()), TRU_RATED_A, tr_buses[i]), tr_buses[i]);
+            net.add_contactor(Contactor::new(contactor_id, ContactorKind::Feeder, FeedSource::Source(tr[i]), TR_DC_OUTPUT[i], MIN_RESISTANCE_OHM));
+            net.add_feeder_breaker(super::network::Breaker::new(Box::leak(format!("{}-bkr", tr_names[i]).into_boxed_str()), TRU_RATED_A, TR_DC_OUTPUT[i]), TR_DC_OUTPUT[i]);
         }
 
         let static_inv = net.add_source(Source::new("static-inv"));
         net.add_contactor(Contactor::new("static-inv-line", ContactorKind::Feeder, FeedSource::Source(static_inv), BusId::AcEmer, MIN_RESISTANCE_OHM));
         net.add_feeder_breaker(super::network::Breaker::new("static-inv-bkr", static_inverter_rated_a(), BusId::AcEmer), BusId::AcEmer);
 
-        let mut battery = [0usize; 2];
-        let battery_buses = [BusId::DcBat, BusId::DcHot1];
-        for i in 0..2usize {
+        // BAT 1, BAT 2 and ESS BAT on their own hot buses (FCOM DSC-24-10-30; `DcBat` is HOT BUS ESS),
+        // APU BAT on the APU battery busbar through its own contactor (FlyByWire's 5PB).
+        let mut battery = [0usize; 4];
+        let battery_buses = [BusId::DcHot1, BusId::DcHot2, BusId::DcBat, BusId::DcApu];
+        for i in 0..4usize {
             let id: &'static str = Box::leak(format!("bat-{}", i + 1).into_boxed_str());
             battery[i] = net.add_source(Source::new(id));
             let contactor_id: &'static str = Box::leak(format!("bat-{}-direct", i + 1).into_boxed_str());
@@ -822,14 +856,6 @@ impl Wiring {
             net.add_feeder_breaker(super::network::Breaker::new(Box::leak(format!("bat-{}-bkr", i + 1).into_boxed_str()), Battery::RATED_CAPACITY_AH * 4.0, battery_buses[i]), battery_buses[i]);
         }
 
-        // A real A380-style hot-bus isolation diode: DC_HOT2 is cross-fed
-        // from the battery bus through a diode rather than its own direct
-        // contactor, so it can never back-feed current into DC_BAT (a real,
-        // if minor, aircraft wiring pattern -- hot buses must never become a
-        // path for one battery/bus to drive another). GENERIC forward drop
-        // (`Diode::forward_drop_v`'s own doc: ~1 V typical for a high-current
-        // silicon power rectifier), no A380-specific figure public.
-        net.add_diode(Diode::new("bat-cross-feed-diode", FeedSource::Bus(BusId::DcBat), BusId::DcHot2, 1.0, MIN_RESISTANCE_OHM));
 
         // External power feeds the **four main AC buses**, one receptacle
         // and one external power contactor per bus. That is FlyByWire's
@@ -872,14 +898,15 @@ impl Wiring {
         }
 
         let rat = net.add_source(Source::new("rat"));
-        net.add_contactor(Contactor::new("rat-line", ContactorKind::Feeder, FeedSource::Source(rat), BusId::AcEmer, MIN_RESISTANCE_OHM));
+        // The emergency generator supplies AC ESS (FCOM DSC-24-10-40, FlyByWire's 5XE).
+        net.add_contactor(Contactor::new("rat-line", ContactorKind::Feeder, FeedSource::Source(rat), BusId::AcEss, MIN_RESISTANCE_OHM));
 
         Self {
             vfg: std::array::from_fn(|_| Vfg::new()),
             apu_gen: std::array::from_fn(|_| ApuGenerator::new()),
-            tru: std::array::from_fn(|_| Tru::new(ambient_c)),
+            tru: std::array::from_fn(|i| if i == 4 { Tru::unregulated(ambient_c) } else { Tru::new(ambient_c) }),
             static_inverter: StaticInverter::new(),
-            battery: [Battery::new(1.0, ambient_c), Battery::new(1.0, ambient_c)],
+            battery: std::array::from_fn(|_| Battery::new(1.0, ambient_c)),
             ground_power: GroundPower::new(),
             rat: Rat::new(),
             source_index: SourceIndex { gen, apu_gen, tr, static_inv, battery, gpu, rat },
@@ -906,17 +933,12 @@ impl Wiring {
             let out = self.apu_gen[i].step(ApuGeneratorInputs { apu_speed_fraction: inputs.apu_speed_fraction, measured_load_w: inputs.measured_apu_gen_load_w[i] }, inputs.apu_gen_faults[i], dt_s);
             net.set_source(self.source_index.apu_gen[i], out.open_circuit_v, out.resistance_ohm, out.frequency_hz);
         }
-        // TR 1/TR 2 take their real per-bus AC input (AC1/AC2); TR ESS and
-        // TR APU both fall back to AC_ESS -- this 17-bus model has no
-        // separate APU-generator AC tie of its own, a documented
-        // approximation (`breakers.rs`'s own ATA24 doc makes the same call
-        // for several of its bus-feeder entries).
-        let ac_powered = [net.bus(BusId::Ac1).voltage > 90.0, net.bus(BusId::Ac2).voltage > 90.0, net.bus(BusId::AcEss).voltage > 90.0, net.bus(BusId::AcEss).voltage > 90.0];
-        for i in 0..4usize {
+        let ac_powered = TR_AC_INPUT.map(|b| net.bus(b).voltage > 90.0);
+        for i in 0..TR_COUNT {
             let (v, r) = self.tru[i].terminal(ac_powered[i], inputs.tru_faults[i]);
             net.set_source(self.source_index.tr[i], v, r, 0.0);
         }
-        for i in 0..2usize {
+        for i in 0..4usize {
             let (v, r) = self.battery[i].terminal(inputs.battery_faults[i]);
             net.set_source(self.source_index.battery[i], v, r, 0.0);
         }
@@ -940,11 +962,11 @@ impl Wiring {
         // (positive = discharging into the network, negative = a TRU/GCU
         // charging it back up) -- see `Wiring`'s own module doc for why this
         // one value cannot be derived from the resistive solve itself.
-        for i in 0..2usize {
+        for i in 0..4usize {
             self.battery[i].step(inputs.measured_battery_current_a[i], inputs.battery_faults[i], inputs.ambient_c, dt_s);
         }
-        let ac_powered = [net.bus(BusId::Ac1).voltage > 90.0, net.bus(BusId::Ac2).voltage > 90.0, net.bus(BusId::AcEss).voltage > 90.0, net.bus(BusId::AcEss).voltage > 90.0];
-        for i in 0..4usize {
+        let ac_powered = TR_AC_INPUT.map(|b| net.bus(b).voltage > 90.0);
+        for i in 0..TR_COUNT {
             self.tru[i].step(ac_powered[i], inputs.measured_tr_load_w[i], inputs.tru_faults[i], inputs.ambient_c, dt_s);
         }
     }
@@ -961,10 +983,10 @@ pub struct WiringInputs {
     pub apu_speed_fraction: f64,
     pub measured_apu_gen_load_w: [f64; 2],
     pub apu_gen_faults: [ApuGeneratorFaults; 2],
-    pub tru_faults: [TruFaults; 4],
-    pub measured_tr_load_w: [f64; 4],
-    pub battery_faults: [BatteryFaults; 2],
-    pub measured_battery_current_a: [f64; 2],
+    pub tru_faults: [TruFaults; TR_COUNT],
+    pub measured_tr_load_w: [f64; TR_COUNT],
+    pub battery_faults: [BatteryFaults; 4],
+    pub measured_battery_current_a: [f64; 4],
     pub static_inverter_faults: StaticInverterFaults,
     pub gpu_plugged_in: bool,
     pub ground_power_faults: GroundPowerFaults,
@@ -982,10 +1004,10 @@ impl Default for WiringInputs {
             apu_speed_fraction: 0.0,
             measured_apu_gen_load_w: [0.0; 2],
             apu_gen_faults: [ApuGeneratorFaults::default(); 2],
-            tru_faults: [TruFaults::default(); 4],
-            measured_tr_load_w: [0.0; 4],
-            battery_faults: [BatteryFaults::default(); 2],
-            measured_battery_current_a: [0.0; 2],
+            tru_faults: [TruFaults::default(); TR_COUNT],
+            measured_tr_load_w: [0.0; TR_COUNT],
+            battery_faults: [BatteryFaults::default(); 4],
+            measured_battery_current_a: [0.0; 4],
             static_inverter_faults: StaticInverterFaults::default(),
             gpu_plugged_in: false,
             ground_power_faults: GroundPowerFaults::default(),
@@ -1176,14 +1198,14 @@ mod tests {
             slow.resistance_ohm
         );
 
-        // On the governed plateau, 150 kt and 300 kt must give the identical
+        // On the governed plateau, 200 kt and 300 kt must give the identical
         // equivalent source: the max-power-transfer resistance of a 115 V
         // source delivering the rated 70 kW is V_oc^2/(4P) = 115^2/280000
         // = 0.047232 ohm.
         let plateau_r = Rat::RATED_VOLTAGE_VOLT * Rat::RATED_VOLTAGE_VOLT / (4.0 * Rat::MAX_POWER_W);
-        let cruise = rat.terminal(150.0, RatFaults::default());
+        let cruise = rat.terminal(200.0, RatFaults::default());
         let fast = rat.terminal(300.0, RatFaults::default());
-        assert!((cruise.resistance_ohm - plateau_r).abs() < 1e-12, "150 kt is already on the 70 kW plateau: {}", cruise.resistance_ohm);
+        assert!((cruise.resistance_ohm - plateau_r).abs() < 1e-12, "200 kt is on the 70 kW plateau: {}", cruise.resistance_ohm);
         assert!((fast.resistance_ohm - plateau_r).abs() < 1e-12, "300 kt is governed to the same 70 kW rating: {}", fast.resistance_ohm);
     }
 
@@ -1231,5 +1253,23 @@ mod tests {
         let bkr = net.breaker_index(&Wiring::gen_breaker_id(1)).expect("GEN 1 breaker should exist");
         net.breakers[bkr].pull();
         assert!(!net.breakers[bkr].closed);
+    }
+    #[test]
+    fn the_rat_gives_70_kva_above_175_kt_and_58_kva_below() {
+        let mut rat = Rat::new();
+        rat.deploy();
+        let fast = rat.terminal(200.0, RatFaults::default());
+        let slow = rat.terminal(150.0, RatFaults::default());
+        let watts = |s: &Source| s.open_circuit_v * s.open_circuit_v / (4.0 * s.resistance_ohm);
+        assert!((watts(&fast) - 70_000.0).abs() < 1.0, "{}", watts(&fast));
+        assert!((watts(&slow) - 58_000.0).abs() < 1.0, "{}", watts(&slow));
+        assert!((482.0..=664.0).contains(&slow.frequency_hz) && fast.frequency_hz > slow.frequency_hz);
+    }
+
+    #[test]
+    fn tr_2_is_unregulated_from_31_v_down_to_25_5_v_at_300_a() {
+        let tr = Tru::unregulated(20.0);
+        let (v, r) = tr.terminal(true, TruFaults::default());
+        assert!((v - 31.0).abs() < 1e-9 && (v - 300.0 * r - 25.5).abs() < 1e-9);
     }
 }

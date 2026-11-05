@@ -95,14 +95,13 @@ pub const MAX_COMBUSTOR_FUEL_AIR_RATIO: f64 = 0.08;
 
 // ---- Public reference (Trent 900 family) -------------------------------
 
-/// Bypass ratio. Public Trent 900 family figure (Rolls-Royce/aircraft-
-/// commerce.com specification sheet; commonly quoted 8-8.7 across the
-/// 970/972/977/980 thrust ratings).
-pub const BYPASS_RATIO: f64 = 8.5;
+/// Bypass ratio. ICAO Aircraft Engine Emissions Databank v32, Trent 972-84
+/// (UID 01P18RR104): 8.41.
+pub const BYPASS_RATIO: f64 = 8.41;
 
-/// Overall pressure ratio at max climb. Public Trent 900 family figure
-/// (~39-42:1 quoted across sources).
-pub const OPR_DESIGN: f64 = 42.0;
+/// Overall pressure ratio at take-off, sea level static. ICAO Aircraft Engine
+/// Emissions Databank v32, Trent 972-84 (UID 01P18RR104): 38.68.
+pub const OPR_DESIGN: f64 = 38.68;
 
 /// Fan tip diameter, metres. Public Trent 900 specification.
 pub const FAN_DIAMETER_M: f64 = 2.95;
@@ -117,19 +116,21 @@ pub const DRY_WEIGHT_KG: f64 = 6246.0;
 /// three spools. No public per-spool split exists for this engine; this is
 /// a plausible architecture-typical split for a 3-spool, fan+8-stage-IPC+
 /// 6-stage-HPC layout (Trent architecture), chosen so the product
-/// reproduces `OPR_DESIGN` (1.6 × 4.0 × 6.6 = 42.24 ≈ 42). Derived, not
-/// measured.
+/// reproduces the ICAO databank's take-off pressure ratio for the Trent
+/// 972-84, 38.68: the core sees the fan hub's share of the rise
+/// (`gas_path::FAN_HUB_FRACTION`, a hub ratio of 1.36), so 1.36 × 4.0 × 7.11
+/// = 38.7. Derived, not measured.
 pub const PR_FAN_DESIGN: f64 = 1.6;
 pub const PR_IPC_DESIGN: f64 = 4.0;
-pub const PR_HPC_DESIGN: f64 = 6.6;
+pub const PR_HPC_DESIGN: f64 = 7.11;
 
 /// Total (core + bypass) design mass flow, kg/s, one engine, sea level
-/// static. Derived from a typical high-bypass turbofan specific thrust of
-/// ~275 N per kg/s of airflow (a generic, commonly cited figure for this
-/// class of engine) applied to `STATIC_THRUST_N`: 356,834 N / 275 ≈ 1298
-/// kg/s. No public certificated airflow figure was available to check this
-/// against; it is in the range commonly quoted for GE90/Trent-900-class
-/// large turbofans (~1200-1300 kg/s).
+/// static. Rolls-Royce's Trent 900 brochure gives 1,204-1,245 kg/s across
+/// the ratings (about 1,227 for the 972B-84). This model runs 6 % more: with
+/// its derived fan pressure ratio, 1,227 kg/s makes the rated thrust only
+/// with a TGT 50 C hotter and a 15-95 % acceleration 1.2 s slower than the
+/// data sheet, while 1,298 kg/s meets the ICAO fuel flows, the take-off TGT
+/// and the acceleration time together.
 pub const MDOT_TOTAL_DESIGN_KG_S: f64 = 1298.0;
 
 /// Isentropic component efficiencies at the design point. Generic values

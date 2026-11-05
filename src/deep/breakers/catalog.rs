@@ -526,7 +526,7 @@ fn ata32(v: &mut Vec<BreakerDef>) {
     const ACTUATORS: [&str; 6] = ["gear-actuator-nose", "gear-actuator-left", "gear-actuator-right", "gear-door-actuator-nose", "gear-door-actuator-left", "gear-door-actuator-right"];
     for id in ACTUATORS {
         let name: &'static str = Box::leak(id.replace('-', " ").to_uppercase().into_boxed_str());
-        push_electrical(v, id, name, 32, Bus::DcEss, 75.0 * 28.0, 0.85, "gear/gear-door hydraulic actuator control", "deep::electrical::loads.rs::ata32 gear/door actuator control (same order of magnitude as the electric hydraulic pumps)");
+        push_electrical(v, id, name, 32, Bus::DcEss, 50.0, 0.8, "gear/gear-door hydraulic selector valve", "deep::electrical::loads.rs::ata32 gear/door selector valve solenoid (the legs and doors are hydraulic)");
     }
 }
 

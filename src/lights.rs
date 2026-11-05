@@ -313,6 +313,9 @@ struct MsfsLight {
     circuit_numbers: Vec<usize>,
 }
 
+/// X-Plane's battery arrays are this long.
+const XP_BATTERIES: usize = 8;
+
 pub struct Lights {
     // X-Plane exterior light datarefs.
     beacon_on: Option<DataRef>,
@@ -324,6 +327,12 @@ pub struct Lights {
     strobe_switch: Option<DataRef>,
     strobe_switch_looks: u32,
     on_ground_any: Option<DataRef>,
+    /// X-Plane's own batteries. Its named exterior lights only shine with X-Plane's buses live,
+    /// which a cold-and-dark start leaves dead, so they are kept on and charged: the A380's own
+    /// circuits gate the lights through the switches above.
+    xp_battery_on: Option<DataRef>,
+    xp_battery_charge: Option<DataRef>,
+    xp_battery_full_wh: [f32; XP_BATTERIES],
     // Window heat / wipers.
     window_heat_on: Option<DataRef>,
     wiper_speed_switch: Option<DataRef>,
@@ -471,6 +480,9 @@ impl Lights {
             strobe_switch: None,
             strobe_switch_looks: 0,
             on_ground_any: xplm.find("sim/flightmodel/failures/onground_any"),
+            xp_battery_on: xplm.find("sim/cockpit2/electrical/battery_on"),
+            xp_battery_charge: xplm.find("sim/cockpit/electrical/battery_charge_watt_hr"),
+            xp_battery_full_wh: [0.0; XP_BATTERIES],
             window_heat_on: xplm.find("sim/cockpit2/ice/ice_window_heat_on"),
             wiper_speed_switch: xplm.find("sim/cockpit2/switches/wiper_speed_switch"),
 
@@ -633,10 +645,30 @@ impl Lights {
     }
 
     /// After the systems tick, so `ELEC_*_BUS_IS_POWERED` is this tick's.
+    fn keep_xp_batteries_up(&mut self, xplm: &Xplm) {
+        if let Some(d) = self.xp_battery_on {
+            for i in 0..XP_BATTERIES {
+                xplm.set_vi_at(d, i, 1);
+            }
+        }
+        if let Some(d) = self.xp_battery_charge {
+            let mut wh = [0.0f32; XP_BATTERIES];
+            let n = xplm.get_vf(d, &mut wh).min(XP_BATTERIES);
+            for i in 0..n {
+                let full = &mut self.xp_battery_full_wh[i];
+                *full = full.max(wh[i]);
+                if wh[i] < *full * 0.9 {
+                    xplm.set_vf_at(d, i, *full);
+                }
+            }
+        }
+    }
+
     pub fn update(&mut self, vars: &mut Vars, xplm: &Xplm, circuits: &Circuits, delta: f64) {
         self.cockpit_tests.update(vars, xplm, delta);
         let commands = COMMANDS.lock().map(|mut q| std::mem::take(&mut *q)).unwrap_or_default();
 
+        self.keep_xp_batteries_up(xplm);
         let strobe_auto = self.strobe_auto(xplm);
         for (group, dataref, auto) in [
             (&mut self.beacon, self.beacon_on, None),

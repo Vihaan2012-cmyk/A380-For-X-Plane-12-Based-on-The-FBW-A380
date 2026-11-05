@@ -23,6 +23,24 @@ pub const GAMMA_GAS: f64 = 1.333;
 /// using the same value is a standard simplification.
 pub const R_GAS: f64 = R_AIR;
 
+/// Air's specific heat as a straight line in temperature through the ideal-gas
+/// air table's 1.007 kJ/(kg·K) at 300 K and 1.216 at 1500 K (Incropera &
+/// DeWitt, Table A.4). The combustor's temperature rise needs it: a constant
+/// 1005 under-counts the fuel for a take-off rise by about 15 %.
+const CP_AIR_AT_0K: f64 = 954.8;
+const CP_AIR_PER_K: f64 = 0.1742;
+
+/// Sensible enthalpy of air above 0 K, J/kg, from that line.
+pub fn air_enthalpy(t_k: f64) -> f64 {
+    t_k * (CP_AIR_AT_0K + 0.5 * CP_AIR_PER_K * t_k)
+}
+
+/// The temperature at which air holds `h_j_kg`, the inverse of `air_enthalpy`.
+pub fn air_temperature(h_j_kg: f64) -> f64 {
+    let h = h_j_kg.max(0.0);
+    2.0 * h / (CP_AIR_AT_0K + (CP_AIR_AT_0K * CP_AIR_AT_0K + 2.0 * CP_AIR_PER_K * h).sqrt())
+}
+
 /// Total pressure from total temperature ratio and gamma (isentropic
 /// relation): `Pt2/Pt1 = (Tt2/Tt1)^(gamma/(gamma-1))`.
 pub fn pressure_ratio_from_temperature_ratio(temperature_ratio: f64, gamma: f64) -> f64 {

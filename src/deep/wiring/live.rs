@@ -172,25 +172,13 @@ impl Default for WiringLive {
 }
 
 /// The bus index in `deep::electrical`'s solved network for one of
-/// `routing.rs`'s own bus labels. Kept as a plain label match so this
-/// module does not import `deep::electrical::network::BusId` for what is a
-/// naming question; the labels are `BusId::label()`'s own.
+/// `routing.rs`'s own bus labels (`BusId::label()`'s own).
 fn bus_index_for_label(label: &str) -> Option<usize> {
-    // `network::ALL_BUS_IDS`'s own fixed order (`BusId::index`).
-    const LABELS: [&str; 17] = [
-        "AC1", "AC2", "AC3", "AC4", "AC_ESS", "AC_ESS_SHED", "AC_EMER", "AC_GND_FLT_SVC", "DC1", "DC2", "DC_ESS", "DC_ESS_SHED", "DC_BAT", "DC_HOT1",
-        "DC_HOT2", "DC_APU", "DC_GND_FLT_SVC",
-    ];
-    LABELS.iter().position(|&l| l == label)
+    crate::deep::electrical::network::ALL_BUS_IDS.iter().position(|b| b.label() == label)
 }
 
 fn nominal_voltage_for_bus_index(i: usize) -> f64 {
-    // Indices 0..=7 are the AC buses (`BusId::is_ac`), the rest DC.
-    if i < 8 {
-        115.0
-    } else {
-        28.0
-    }
+    crate::deep::electrical::network::ALL_BUS_IDS.get(i).map_or(28.0, |b| b.nominal_voltage())
 }
 
 impl WiringLive {
@@ -305,7 +293,7 @@ impl WiringLive {
     /// The voltage behind a circuit's own fault, V: its bus's last solved
     /// voltage if `deep::electrical` has published one, its bus's nominal
     /// otherwise (the frame before that area has ever run).
-    fn source_voltage(&self, c: &Circuit, bus_voltage: &[f64; 17]) -> f64 {
+    fn source_voltage(&self, c: &Circuit, bus_voltage: &[f64; crate::deep::electrical::network::NUM_BUSES]) -> f64 {
         match c.bus_index {
             Some(i) => {
                 let v = bus_voltage[i];

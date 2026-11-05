@@ -104,19 +104,20 @@ engine is built to match, since it is FlyByWire's own cited figure.
 | Combustion floor, N1 / N3 | 10% / 20% | `engines.cfg min_n1_for_combustion`/`min_n2_for_combustion` |
 | Overspeed protection, N1 / N3 | 101% / 116.5% | `engines.cfg max_n1_protection`/`max_n2_protection` |
 | Starter alone reaches | 12% (N1-equivalent) | `engines.cfg starter_N1_max_pct` (cross-check only; the model's own starter engages the HP spool, cutting out at 30% N3, derived — see below) |
-| Bypass ratio | 8.5 | Public Trent 900 family figure (Rolls-Royce/aircraft-commerce.com spec sheet; commonly quoted 8-8.7 across ratings) |
-| Overall pressure ratio | 42 | Public Trent 900 family figure (~39-42 quoted across sources) |
+| Bypass ratio | 8.41 | ICAO Aircraft Engine Emissions Databank v32, Trent 972-84 (UID 01P18RR104) |
+| Overall pressure ratio | 38.68 | ICAO Aircraft Engine Emissions Databank v32, Trent 972-84, take-off |
 | Fan diameter | 2.95 m | Public Trent 900 specification |
 | Dry weight | 6,246 kg | Public Trent 900 specification (used only to derive spool inertia) |
 | Jet A-1 LHV | 43.1 MJ/kg | Standard published Jet A-1 spec value (ASTM D1655-typical) |
-| Fan/IPC/HPC design pressure ratio split | 1.6 / 4.0 / 6.6 | **Derived**: no public per-spool split exists; chosen to reproduce OPR ≈ 42 with an architecture-typical (fan, 8-stage IPC, 6-stage HPC) split |
-| Total design mass flow | 1,298 kg/s | **Derived**: static thrust ÷ a generic ~275 N per kg/s specific-thrust figure typical of this engine class |
+| Fan/IPC/HPC design pressure ratio split | 1.6 / 4.0 / 7.11 | **Derived**: no public per-spool split exists; the core sees the fan hub's 1.36, so 1.36 × 4.0 × 7.11 reproduces the databank's 38.7 |
+| Total design mass flow | 1,298 kg/s | **Derived**: Rolls-Royce's brochure gives 1,204-1,245 kg/s; at 1,227 this model's derived fan pressure ratio needs a TGT 50 C hotter and a 15-95 % acceleration 1.2 s slower than the data sheet, so it runs 6 % more |
 | Component isentropic efficiencies | Fan 0.90, IPC 0.89, HPC 0.86, HPT 0.90, IPT 0.91, LPT 0.925 | **Generic**: typical modern large high-bypass turbofan values (no Trent-specific map is public) |
 | Combustor efficiency / pressure loss | 0.999 / 5% | **Generic**: typical modern annular combustor values |
+| Combustor heat capacity | 1.007 kJ/(kg K) at 300 K to 1.216 at 1500 K, linear | Ideal-gas air table (Incropera & DeWitt, Table A.4); a constant 1.005 under-counted take-off fuel by about 15 % |
 | Ram recovery | 0.99 | **Generic**: typical subsonic podded-nacelle value |
 | Mechanical/duct losses | 0.99 shaft, 2% bypass duct | **Generic**: typical values |
 | Spool inertia (LP/IP/HP) | Derived from dry weight × geometry (see `params::inertia`) | **Derived**: no public figure; literature-typical module-mass fractions (fan+booster ~18%, IPC ~8%, HPC+HPT ~10% of dry weight) at effective radii scaled from the fan radius, `I = m·r²`. The primary free parameter, checked against the certification spool-up time below. |
-| Design fuel flow / turbine power split | Calibrated (≈3.4 kg/s at 100% N1, SL, ISA) | **Derived by calibration**: bisected so the model reproduces the cited static thrust exactly (see "one deliberate simplification" above); not an independent SFC guess, to keep the compressor-power/combustion-power energy budget self-consistent |
+| Design fuel flow / turbine power split | Calibrated (≈2.77 kg/s at take-off, SL, ISA) | **Derived by calibration**: bisected so the model reproduces the cited static thrust exactly (see "one deliberate simplification" above); not an independent SFC guess, to keep the compressor-power/combustion-power energy budget self-consistent |
 | Starter peak power | 130 kW | **Generic**: typical large-turbofan pneumatic starter rating (no Trent-900-specific figure is public) |
 | Starter cutoff speed | 30% N3 | **Derived**: a margin above the 20% N3 combustion floor above |
 | EGT probe location | Between IP and LP turbines | Matches the Trent family's own interstage EGT measurement plane |
@@ -141,11 +142,15 @@ All in `src/physics/engine/*.rs` and `src/engine_commands.rs`. Highlights
   documented here rather than chased further).
 - **Idle thrust/fuel flow**: positive, and well below (<20%/<50%) the
   take-off values.
-- **Cruise-like fuel flow**: FL350/M0.85, lands between 0.3-3.0 kg/s per
-  engine — public A380/Trent-900-class references commonly put per-engine
-  cruise burn near 1 kg/s (aircraft-level burn often quoted 10-13 t/h); no
-  certificated cruise fuel flow for this specific engine is public, so this
-  is an order-of-magnitude check, not an exact one.
+- **ICAO fuel flows**: at 100/85/30/7 % of rated thrust, ISA sea level
+  static, within 5 % of the ICAO Emissions Databank v32 Trent 972-84 figures
+  scaled to this rating (today +0.2 / -1.1 / -0.1 / +1.5 %).
+- **Take-off TGT**: below EASA.E.012's 956 C untrimmed limit with a new
+  engine's margin (today 821 C).
+- **Cruise SFC**: 60 kN at FL350/M0.85 within 12 % of the published 16
+  g/(kN s) (Roux), 10-14 t/h for four engines (today 15.1, 13.0 t/h).
+  The engine is lit at sea level first: started from rest at cruise
+  altitude it hangs at 930 C, an open item for the start sequencer work.
 - **Spool-up time**: idle→TOGA reaches 95% of take-off thrust within the
   CS-E 745/14 CFR 33.73-style 5-second certification limit.
 - **Conservation**: `combustor.rs`'s `energy_is_conserved` test checks the

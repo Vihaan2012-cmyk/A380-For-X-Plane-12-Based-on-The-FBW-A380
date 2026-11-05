@@ -973,7 +973,7 @@ mod tests {
         );
     }
 
-    /// **193 of the 414** breakers protecting a modelled load: how many
+    /// **163 of the 414** breakers protecting a modelled load: how many
     /// registered `trip_calibration_drift` failures no state this crate
     /// models can act on, as measured by
     /// [`how_many_drift_failures_are_inert_by_construction`]. Pinned so
@@ -1023,7 +1023,7 @@ mod tests {
     /// and the four EFIS panels are small DC ESS loads on the smallest
     /// standard part, and the two ND second breakers carry no current
     /// while their first feed is healthy.
-    const DRIFT_INERT_IN_EVERY_STATE: usize = 193;
+    const DRIFT_INERT_IN_EVERY_STATE: usize = 163;
 
     /// The live counterpart, and the cheap one: `BREAKERS_DRIFT_INERT_COUNT`
     /// reports the same thing for the state the aircraft is in right now,

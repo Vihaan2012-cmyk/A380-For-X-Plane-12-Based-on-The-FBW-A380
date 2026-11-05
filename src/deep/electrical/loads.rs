@@ -67,12 +67,16 @@ impl Catalog {
 // Generic per-class defaults, so each catalogue entry only states what is
 // actually distinctive about it.
 
-/// Under-voltage dropout point: MIL-STD-704F's steady-state AC/DC limits sit
-/// around 90-107% nominal; 85% is a slightly looser, GENERIC "the LRU's own
-/// internal regulation gives up" margin below that (no A380-specific
-/// per-LRU spec is public).
+/// Under-voltage dropout point. AC: 85% of nominal, a GENERIC margin below
+/// MIL-STD-704F's steady-state AC limits. DC: 22 V, the bottom of
+/// MIL-STD-704F's normal steady-state range for 28 V DC equipment, which is
+/// what lets a battery-only essential bus carry its loads.
 fn min_operating_voltage(bus: BusId) -> f64 {
-    bus.nominal_voltage() * 0.85
+    if bus.is_ac() {
+        bus.nominal_voltage() * 0.85
+    } else {
+        22.0
+    }
 }
 
 /// Feeder wiring resistance a load's own `short_to_ground` fault current is
@@ -368,7 +372,8 @@ fn ata27(net: &mut Network, cat: &mut Catalog) {
         // redundant-bus pattern breakers.rs's own doc already cites) plus a
         // DC ESS backup feed, OR-ed internally -- losing either single feed
         // does not lose the computer. Two breakers per computer.
-        let normal_bus = if k % 2 == 0 { BusId::Dc1 } else { BusId::Dc2 };
+        // PRIM 2 and SEC 2 take the EHA DC busbar (FCOM DSC-24-10-50).
+        let normal_bus = if id == "prim-2" || id == "sec-2" { BusId::DcEha } else if k % 2 == 0 { BusId::Dc1 } else { BusId::Dc2 };
         let spec = avionics_spec(id, name, ata, normal_bus, 100.0, "breakers.rs::ata27 flight-control/autoflight computer (100 W typical FCC-class LRU, typical/derived: FBW's C++ FCCs carry no Rust-side bus figure); real Airbus-style dual feed, normal DC bus + DC ESS backup, each on its own breaker, OR-ed internally");
         let a = rated_current(&spec);
         add_dual(net, cat, LoadCategory::Essential, spec, a, BusId::DcEss);
@@ -438,7 +443,7 @@ fn ata32(net: &mut Network, cat: &mut Catalog) {
     const ACTUATORS: [&str; 6] = ["gear-actuator-nose", "gear-actuator-left", "gear-actuator-right", "gear-door-actuator-nose", "gear-door-actuator-left", "gear-door-actuator-right"];
     for id in ACTUATORS {
         let name: &'static str = Box::leak(id.replace('-', " ").to_uppercase().into_boxed_str());
-        let spec = motor_spec(id, name, 32, BusId::DcEss, 75.0 * 28.0, 0.85, 3.0, 0.5, "breakers.rs::ata32_gear_and_door_sensors gear/door actuator control (same order of magnitude as the electric hydraulic pumps, typical/derived)");
+        let spec = motor_spec(id, name, 32, BusId::DcEss, 50.0, 0.8, 2.0, 0.3, "breakers.rs::ata32_gear_and_door_sensors gear/door selector valve solenoid (the legs and doors are hydraulic; DC ESS only switches the valve)");
         add(net, cat, LoadCategory::Other, spec.clone(), rated_current(&spec));
     }
 }
@@ -556,12 +561,12 @@ fn ata30_ice_protection(net: &mut Network, cat: &mut Catalog) {
 // few kW of ovens/water heaters/chillers per zone).
 fn ata25_galleys(net: &mut Network, cat: &mut Catalog) {
     const GALLEYS: [(&str, &str, BusId, f64); 6] = [
-        ("galley-fwd-upper", "FWD UPPER GALLEY", BusId::Ac1, 8000.0),
-        ("galley-aft-upper", "AFT UPPER GALLEY", BusId::Ac2, 8000.0),
-        ("galley-fwd-main", "FWD MAIN DECK GALLEY", BusId::Ac3, 10000.0),
-        ("galley-mid-main", "MID MAIN DECK GALLEY", BusId::Ac4, 10000.0),
-        ("galley-aft-main", "AFT MAIN DECK GALLEY", BusId::Ac1, 10000.0),
-        ("galley-lower", "LOWER DECK GALLEY LIFT", BusId::Ac2, 3000.0),
+        ("galley-fwd-upper", "FWD UPPER GALLEY", BusId::Galley1, 8000.0),
+        ("galley-aft-upper", "AFT UPPER GALLEY", BusId::Galley2, 8000.0),
+        ("galley-fwd-main", "FWD MAIN DECK GALLEY", BusId::Galley3, 10000.0),
+        ("galley-mid-main", "MID MAIN DECK GALLEY", BusId::Galley4, 10000.0),
+        ("galley-aft-main", "AFT MAIN DECK GALLEY", BusId::Galley1, 10000.0),
+        ("galley-lower", "LOWER DECK GALLEY LIFT", BusId::Galley2, 3000.0),
     ];
     for (id, name, bus, watts) in GALLEYS {
         let spec = resistive_spec(id, name, 25, bus, watts, "GENERIC: typical wide-body galley complex load (ovens, water heaters, chillers combined), no public per-zone A380 figure; the first load shed on a generator loss (`shedding.rs`)");

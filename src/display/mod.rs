@@ -158,6 +158,9 @@ pub struct Stats {
     pub draw_calls: usize,
 }
 
+/// A screen rides through a power interruption this short (RTCA DO-160 section 16, category Z).
+const POWER_RIDE_THROUGH: std::time::Duration = std::time::Duration::from_millis(200);
+
 struct Screen {
     def: &'static ScreenDef,
     /// Counts meshes made, so the GPU knows when its copy is old.
@@ -170,6 +173,8 @@ struct Screen {
     stats: Stats,
     /// Each dimming region's brightness, 0..1.
     brightness: Vec<f32>,
+    /// When each dimming region last had power, for the DO-160 200 ms interruption ride-through.
+    powered_at: Vec<Option<std::time::Instant>>,
     handle: AvionicsId,
     pressed: bool,
     hover: Option<(c_int, c_int)>,
@@ -669,6 +674,7 @@ impl Displays {
                 gpu: gl::ScreenGpu::default(),
                 stats: Stats::default(),
                 brightness: vec![0.; def.dimming.len()],
+                powered_at: vec![None; def.dimming.len()],
                 handle: std::ptr::null_mut(),
                 pressed: false,
                 hover: None,
@@ -1704,8 +1710,13 @@ impl Displays {
         self.native_tick();
         let auto = self.ambient_factor();
         for s in &mut self.screens {
-            for (value, d) in s.brightness.iter_mut().zip(s.def.dimming) {
-                let powered = d.buses.iter().any(|bus| read(bus).is_some_and(|v| v != 0.));
+            let now = std::time::Instant::now();
+            for ((value, d), seen) in s.brightness.iter_mut().zip(s.def.dimming).zip(s.powered_at.iter_mut()) {
+                let live = d.buses.iter().any(|bus| read(bus).is_some_and(|v| v != 0.));
+                if live {
+                    *seen = Some(now);
+                }
+                let powered = live || seen.is_some_and(|t| now.duration_since(t) < POWER_RIDE_THROUGH);
                 *value = screens::brightness(read(&format!("LIGHT POTENTIOMETER:{}", d.potentiometer)), powered) * auto;
             }
             if !s.brightness.is_empty() && crate::browser_screens::shows(s.def.id) {

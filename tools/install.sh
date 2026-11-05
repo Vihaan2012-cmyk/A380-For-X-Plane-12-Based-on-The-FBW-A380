@@ -107,6 +107,14 @@ cp -r html_ui/. "$STAGE/html_ui/"
 for j in "$XPJS_BUILD"/*.json; do
   [ -f "$j" ] && cp "$j" "$STAGE/"
 done
+# The OIT's maintenance pages read the breaker, failure and MEL catalogue beside oit.html (the EFB copy is not installed).
+CATALOGUE="$STAGE/html_ui/Pages/VCockpit/Instruments/A380X/OIT/catalogue.json"
+rm -f "$CATALOGUE"
+CATALOGUE_OUT="$(cygpath -w "$CATALOGUE" 2>/dev/null || echo "$CATALOGUE")" CARGO_TARGET_DIR="$TARGET" cargo +stable-x86_64-pc-windows-gnu test --lib -- --ignored --exact study::catalogue::tests::dump_catalogue >/dev/null
+if [ ! -s "$CATALOGUE" ]; then
+  echo "install.sh: FAIL: the catalogue export did not write $CATALOGUE -- the OIT C/B, failure and MEL pages would be empty." >&2
+  exit 1
+fi
 PFD_HTML="$STAGE/html_ui/Pages/VCockpit/Instruments/A380X/PFD/pfd.html"
 if [ ! -f "$PFD_HTML" ]; then
   echo "install.sh: FAIL: $PFD_HTML is missing after the html_ui merge -- every cockpit screen will be BLACK." >&2

@@ -742,9 +742,9 @@ fn design_at(tt4_k: f64) -> Option<Design> {
     let h = hpc.compress(m_core, w_hp, i.tt_out_k, i.pt_out_pa, 1.0, 1.0);
 
     // Fuel for tt4, inverting the combustor's own energy balance
-    // (`combustor::burn`: `Tt4 = Tt3 + wf LHV eta_b / (mdot_gas cp)`).
-    let rise = tt4_k - h.tt_out_k;
-    let wf = m_core * CP_AIR * rise / (LHV_JET_A1_J_KG * COMBUSTOR_EFFICIENCY - CP_AIR * rise);
+    // (`combustor::burn`: `wf LHV eta_b = mdot_gas (h(Tt4) - h(Tt3))`).
+    let rise = super::gas::air_enthalpy(tt4_k) - super::gas::air_enthalpy(h.tt_out_k);
+    let wf = m_core * rise / (LHV_JET_A1_J_KG * COMBUSTOR_EFFICIENCY - rise);
     if !(wf > 0.0) {
         return None;
     }

@@ -3,7 +3,7 @@
 //! from the model instead of being scripted.
 
 use super::params::{COMBUSTOR_EFFICIENCY, COMBUSTOR_PRESSURE_LOSS_FRAC, FAR_STOICHIOMETRIC, LHV_JET_A1_J_KG};
-use super::gas::CP_AIR;
+use super::gas::{air_enthalpy, air_temperature};
 
 #[derive(Clone, Copy, Debug, Default)]
 pub struct Combustion {
@@ -14,8 +14,8 @@ pub struct Combustion {
 }
 
 /// Energy balance: `mdot_fuel * LHV * eta_b + (mdot_air + mdot_fuel) *
-/// cp_air * Tt3 = (mdot_air + mdot_fuel) * cp_air * Tt4`, solved for Tt4 —
-/// equivalently `Tt4 = Tt3 + Q / (mdot_gas * cp)`.
+/// h(Tt3) = (mdot_air + mdot_fuel) * h(Tt4)`, solved for Tt4, with `h` the
+/// temperature-dependent enthalpy of `gas::air_enthalpy`.
 ///
 /// The fuel stream carries its own sensible enthalpy in, at the combustor
 /// inlet total temperature: it has come through the fuel/oil heat
@@ -30,16 +30,8 @@ pub struct Combustion {
 /// at the temperature of what is in it, and those 0 K station temperatures
 /// were propagating through the turbines into the gas path's plenums as
 /// NaN. Both sides use
-/// air's specific heat, not the hot-gas value the downstream turbines use
-/// (`turbine.rs`'s `CP_GAS`): using two different heat capacities across
-/// the same energy balance would leave `Tt4 != Tt3` at zero fuel flow, an
-/// unphysical result this model must not produce (see the
-/// `no_fuel_leaves_temperature_unchanged` test). Real combustion gas's
-/// higher heat capacity only really matters once the flow *is* hot
-/// combustion product, which is what the turbine expansions downstream
-/// model; treating the combustor's own balance with one consistent heat
-/// capacity is the standard simplification for a reduced-order cycle
-/// model. `mdot_air_kg_s` is the core air mass flow actually reaching the
+/// the same enthalpy curve, so zero fuel leaves `Tt4 == Tt3` (see the
+/// `no_fuel_leaves_temperature_unchanged` test). `mdot_air_kg_s` is the core air mass flow actually reaching the
 /// combustor (after bleed extraction has already been taken out
 /// upstream). Pressure drops by the combustor's fractional total-pressure
 /// loss.
@@ -65,8 +57,7 @@ pub fn burn(mdot_air_kg_s: f64, mdot_fuel_kg_s: f64, tt3_k: f64, pt3_pa: f64) ->
         tt3_k
     } else {
         let heat_released = burnt_fuel * LHV_JET_A1_J_KG * COMBUSTOR_EFFICIENCY;
-        let heat_in = mdot_gas * CP_AIR * tt3_k;
-        (heat_released + heat_in) / (mdot_gas * CP_AIR)
+        air_temperature((heat_released + mdot_gas * air_enthalpy(tt3_k)) / mdot_gas)
     };
     Combustion { tt4_k: tt4, pt4_pa: pt3_pa * (1.0 - COMBUSTOR_PRESSURE_LOSS_FRAC), mdot_gas_kg_s: mdot_gas }
 }
@@ -113,8 +104,8 @@ mod tests {
         // Both streams enter at Tt3: the air, and the fuel with its own
         // sensible enthalpy (see `burn`'s docs — the fuel is not injected
         // at 0 K).
-        let energy_in = mdot_fuel * LHV_JET_A1_J_KG * COMBUSTOR_EFFICIENCY + (mdot_air + mdot_fuel) * CP_AIR * tt3;
-        let energy_out = c.mdot_gas_kg_s * CP_AIR * c.tt4_k;
+        let energy_in = mdot_fuel * LHV_JET_A1_J_KG * COMBUSTOR_EFFICIENCY + (mdot_air + mdot_fuel) * air_enthalpy(tt3);
+        let energy_out = c.mdot_gas_kg_s * air_enthalpy(c.tt4_k);
         assert!((energy_in - energy_out).abs() / energy_in < 1e-9);
     }
 

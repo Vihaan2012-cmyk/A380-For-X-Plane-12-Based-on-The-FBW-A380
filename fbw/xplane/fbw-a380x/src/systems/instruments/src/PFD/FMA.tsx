@@ -903,20 +903,25 @@ class B1Cell extends ShowForSecondsComponent<B1CellProps> {
     this.primFgDiscreteWord3,
   );
 
-  private readonly activeVerticalModeClassSub = this.primFgDiscreteWord3.derive((word) => {
-    // VS FPA has a smaller font than the other active modes
-    const fpaMode = word.bitValueOr(18, false);
-    const vsMode = word.bitValueOr(17, false);
+  private readonly activeVerticalModeClassSub = Derived.from(
+    ([word, b1]) => {
+      // VS FPA has a smaller font than the other active modes
+      const fpaMode = word.bitValueOr(18, false);
+      const vsMode = word.bitValueOr(17, false);
 
-    // ALT CRZ* also has a smaller font, as it otherwise would be too large for the box.
-    const altCstrApplicable = word.bitValueOr(28, false);
-    const altIsCrzAlt = word.bitValueOr(29, false);
-    const altAcqMode = word.bitValueOr(19, false);
+      // ALT CRZ* also has a smaller font, as it otherwise would be too large for the box.
+      const altCstrApplicable = word.bitValueOr(28, false);
+      const altIsCrzAlt = word.bitValueOr(29, false);
+      const altAcqMode = word.bitValueOr(19, false);
+      const crzStar = b1 === B1Messages.ALT_CRZ_STAR;
 
-    return vsMode || fpaMode || (altAcqMode && !altCstrApplicable && altIsCrzAlt)
-      ? 'FontMediumSmaller MiddleAlign Green'
-      : 'FontMedium MiddleAlign Green';
-  });
+      return vsMode || fpaMode || crzStar || (altAcqMode && !altCstrApplicable && altIsCrzAlt)
+        ? 'FontMediumSmaller MiddleAlign Green'
+        : 'FontMedium MiddleAlign Green';
+    },
+    this.primFgDiscreteWord3,
+    this.props.B1Message,
+  );
 
   constructor(props: B1CellProps) {
     super(props, 10);

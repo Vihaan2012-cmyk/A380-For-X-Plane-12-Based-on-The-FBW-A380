@@ -13,6 +13,58 @@ SCREENS = {
 DEVICE = 'ATTR_cockpit_device SCREEN_IFE 0 0 0 350'
 SHOW = ['ANIM_begin', 'ANIM_hide -1000000 1000000 fbw/options/cabin_visible', 'ANIM_show 0.5 1.5 fbw/options/cabin_visible']
 
+
+def clusters(pos, tris):
+    parent = list(range(len(pos)))
+
+    def find(a):
+        while parent[a] != a:
+            parent[a] = parent[parent[a]]
+            a = parent[a]
+        return a
+
+    key = {}
+    for i, p in enumerate(pos):
+        k = tuple(np.round(p, 3))
+        if k in key:
+            parent[find(i)] = find(key[k])
+        else:
+            key[k] = i
+    for t in tris:
+        a = find(t[0])
+        for b in t[1:]:
+            parent[find(b)] = a
+    groups = {}
+    for ti, t in enumerate(tris):
+        groups.setdefault(find(t[0]), []).append(ti)
+    return list(groups.values())
+
+def planar_uv(path):
+    """Each screen's UVs from its own plane, so the IFE page lands on it once, upright and
+    unmirrored: the remap above flips and clips triangle by triangle, which folded the map
+    across the bezel wherever a screen's triangles disagreed."""
+    lines = open(path, encoding='latin-1').read().split('\n')
+    vt_lines = [i for i, l in enumerate(lines) if l.startswith('VT ')]
+    vt = np.array([[float(x) for x in lines[i].split()[1:9]] for i in vt_lines])
+    idx = [int(x) for l in lines if l.startswith(('IDX10 ', 'IDX ')) for x in l.split()[1:]]
+    tris = np.array(idx[: len(idx) // 3 * 3]).reshape(-1, 3)
+    pos, nrm = vt[:, 0:3], vt[:, 3:6]
+    for g in clusters(pos, tris):
+        verts = sorted(set(tris[g].ravel().tolist()))
+        n = nrm[verts].mean(axis=0)
+        n = n / (np.linalg.norm(n) or 1.0)
+        right = np.cross([0.0, 1.0, 0.0], n)
+        right = right / np.linalg.norm(right) if np.linalg.norm(right) > 1e-6 else np.array([1.0, 0.0, 0.0])
+        up = np.cross(n, right)
+        u, v = pos[verts] @ right, pos[verts] @ up
+        su = (u - u.min()) / max(u.max() - u.min(), 1e-9)
+        sv = (v - v.min()) / max(v.max() - v.min(), 1e-9)
+        for k, vi in enumerate(verts):
+            parts = lines[vt_lines[vi]].split()
+            parts[7], parts[8] = f'{su[k]:.6f}', f'{sv[k]:.6f}'
+            lines[vt_lines[vi]] = ' '.join(parts)
+    open(path, 'w', encoding='latin-1', newline='\n').write('\n'.join(lines))
+
 full_dir, objects_dir = sys.argv[1], sys.argv[2]
 made = 0
 for name in sorted(os.listdir(full_dir)):
@@ -66,6 +118,7 @@ for name in sorted(os.listdir(full_dir)):
     lines = open(ife, encoding='latin-1').read().split('\n')
     lines = ['TEXTURE solid_000000ff.png' if l.startswith('TEXTURE ') else l for l in lines if not l.startswith(('TEXTURE_LIT', 'TEXTURE_MAP', 'TEXTURE_NORMAL', 'ATTR_light_level'))]
     open(ife, 'w', encoding='latin-1', newline='\n').write('\n'.join(lines))
+    planar_uv(ife)
     wrap(ife, SHOW)
     kept = obj.write(path, [w < 0 for w in which])
     print(f'{name}: {shown} screen triangles to {os.path.basename(ife)}, {kept} left in the seats')
