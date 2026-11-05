@@ -3867,13 +3867,15 @@ pub unsafe extern "C" fn XPluginStart(
     write_into(name, "A380 systems");
     write_into(signature, "msfs2xp.fbw.a380.systems");
     write_into(description, "A380 for X-Plane 12 (Ported from FBW A380): systems");
+    // Before remember_main_thread: it caches XPLMGetSystemPath, which is an HFS
+    // `Macintosh HD:...` path on a Mac until native paths are on.
+    #[cfg(not(windows))]
+    xp::use_native_paths();
     xp::remember_main_thread();
 
     let Some(xplm) = Xplm::load() else { return 0 };
     let xplm_ref = &raw mut XPLM;
     *xplm_ref = Some(xplm);
-    #[cfg(not(windows))]
-    xp::use_native_paths();
     diag::start();
     log(&format!("starting on {} {}, X-Plane at {:?}", std::env::consts::OS, std::env::consts::ARCH, xp::system_path()));
     #[cfg(feature = "js")]
