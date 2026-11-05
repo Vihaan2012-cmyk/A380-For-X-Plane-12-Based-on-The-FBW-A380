@@ -75,6 +75,97 @@ Risk: CEF calls must run on the thread that pumps X-Plane's CEF; on macOS that
 is the AppKit main thread, which is X-Plane's flight-loop thread. Confirm
 before relying on it.
 
+#### Prototype status (branch `claude/mac-own-cef-8e3070`)
+
+Done, in `src/browser_screens/`:
+
+- `own_cef.rs` builds for macOS. It finds CEF with
+  `xp::library_symbol("Chromium Embedded Framework.framework/", ...)`, which
+  does `dlopen(RTLD_NOLOAD)` over the loaded dyld images, then `dlsym`. It never
+  loads or links the framework itself. The hash constant is per platform (Mac:
+  `35b5f365...`). `WindowInfo` uses the `cef_types_mac.h` layout.
+- Structs were checked against the CEF source at `da4c36a` (117.2.5+gda4c36a,
+  the build X-Plane's binary names). Its `cef_api_hash.h` has exactly the
+  measured platform hash and universal hash. A C program compiled against
+  those headers printed `sizeof`/`offsetof` for every struct and vtable slot
+  the plugin touches. They are now `const` asserts in `own_cef.rs`
+  (`cfg(target_os = "macos")`), so a wrong field fails the build. Only
+  `cef_window_info_t` differs from the Windows code. Everything else
+  (browser, host, client, render/life/load handlers, browser settings, key,
+  mouse and screen info) has the same layout.
+- `paint_copy.rs` and `paint_thread.rs` build on macOS. The paint thread
+  reads with `mach_vm_read_overwrite` where Windows uses
+  `ReadProcessMemory`. Both fail rather than fault. On macOS our Chromium
+  switches are never applied, because X-Plane started CEF before we load and
+  its `cef_initialize` is not ours to hook. So `paints_on_their_thread()` is
+  false and `OnPaint` copies on the main thread, straight into the
+  ScreenBlocks that `display/mod.rs` already creates (in-process emulation)
+  and uploads with `bridge_upload`. No new GL code was needed.
+- `enabled()`: on macOS the own route needs no browser-device API. It checks
+  that the framework is loaded and `cef_api_hash(0)` matches.
+  `tick()`/`tick_own()` no longer need `XPLMAvionicsSetURL`. Windows still
+  boots Chromium with a blank device (`chromium_up`, Windows body).
+- Thread: on macOS CEF has no `multi_threaded_message_loop`, so its UI
+  thread is the thread that called `cef_initialize`, the AppKit main thread,
+  which is where XPLM callbacks run. The plugin checks this at runtime
+  before the first call: `chromium_up` (macOS body) calls
+  `cef_currently_on(TID_UI)` once a second and opens browsers only when it
+  returns 1. Before CEF is up, that call returns 0 with no harm (the
+  task-runner manager is null; each such check logs one CEF warning).
+- Static evidence that X-Plane has CEF running: X-Plane's binary carries the
+  string "Failed to initialize the required Chromium Embedded Framework."
+  and the `CefMessageRouter` wrapper. It loads the framework at runtime (it
+  is not in `otool -L`).
+
+Not tested inside X-Plane (nothing was installed). To test: back up the
+installed `plugins/<plugin>/64/mac.xpl`, copy `target/mac-own-cef/mac.xpl`
+from this worktree over it, leave `FBW_BROWSER_ROUTE` unset
+(`browserDisplays` is on by default on macOS), load the A380, then read
+`Log.txt`. What to look for, in order:
+
+1. `browser screens: using the app: ...`: the framework is not loaded, or
+   the hash differs. `enabled()` decides once, when the plugin starts, so
+   "not loaded" may also mean X-Plane loads CEF later than our plugin. Then
+   move the `available()` check into `chromium_up`.
+2. `X-Plane's Chromium is not up on this thread ...` repeating: CEF never
+   came up, or plugins do not run on its UI thread.
+3. `X-Plane's Chromium is up and this is its UI thread`, then
+   `N browsers opened`.
+4. `X-Plane's Chromium refused the browser for ...`: in 117.2.5,
+   `CreateBrowser` returns false only for an invalid context, a wrong
+   `cef_browser_settings_t` size (asserted at 288), or a missing render
+   handler. So this is unexpected; read CEF's own log.
+5. `paints a second, N open: ...` every 30 s: 0 paints means the browsers
+   exist but nothing reaches `OnPaint`. Either X-Plane's message pump does not
+   drive them, or X-Plane's `CefSettings.windowless_rendering_enabled` is
+   off. CEF only logs an error for that ("Creating a windowless browser
+   without setting ...") and creates the browser anyway. If it is that
+   setting, option A is dead without Laminar's help.
+
+Left to do:
+
+- Run it in X-Plane and work through the list above.
+- Our Chromium switches (`disable-gpu-compositing`) do not apply on macOS, so
+  Chromium composites as X-Plane set it up. With GPU compositing, `OnPaint`
+  still delivers a CPU buffer, but measure its cost on the main thread.
+- Key input uses Windows virtual-key codes in `windows_key_code` and leaves
+  `native_key_code` at 0. CEF on macOS may want `native_key_code` (a macOS key
+  code) for some keys. Test MFD and KCCU typing.
+- `Browsers::close()` pumps `cef_do_message_loop_work` itself for up to 5 s
+  while the plugin stops. That was proven on Windows only; an aircraft
+  unload or reload on macOS may hang or crash there.
+- Only the arm64 slice could be dlopen-tested here (no Rosetta on this Mac).
+  The universal `target/mac-own-cef/mac.xpl` loads with `dlopen(RTLD_NOW)`.
+  `nm -u` shows no `cef_*` or Windows symbols in either slice.
+- `mac.sh` still needs the string-pool alignment step (below). Check both
+  slices: in this build the arm64 string pool happened to be aligned and the
+  x86_64 one was 4 bytes off.
+- Windows was not `cargo check`ed: only the two darwin targets are installed in
+  the toolchain used here. The Windows code paths were moved behind `cfg`, not
+  changed, apart from `cef_symbol()` replacing the inline
+  `GetModuleHandleA`/`GetProcAddress` pairs and `chromium_up()` holding the
+  boot-device step that used to be inline in `tick_own`.
+
 ### B. Teach the QuickJS runtime the xp-ui page format
 
 Make `importPage()` also run `<script src>` and clone `<template id>`, and load

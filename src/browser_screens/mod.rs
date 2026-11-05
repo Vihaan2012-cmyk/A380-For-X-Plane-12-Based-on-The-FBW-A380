@@ -2,15 +2,15 @@
 //! `browserDisplays` setting is on. The systems run on a thread of the plugin
 //! (`FBW_SYSTEMS_IN_PROCESS=0` puts them in `fbw_a380_systems_server.exe`) and
 //! `server.rs` stands in for the rest of XPHFBW. The pages draw in our own browsers inside X-Plane's Chromium
-//! (`own_cef.rs`); `FBW_BROWSER_ROUTE=device` uses X-Plane's browser devices
+//! (`own_cef.rs`, Windows and macOS); `FBW_BROWSER_ROUTE=device` uses X-Plane's browser devices
 //! instead (`xplm_WindowContentTypeBrowser`), which X-Plane runs at about 30 Hz.
 
 mod dead_band;
 pub mod server;
-#[cfg(windows)]
+#[cfg(any(windows, target_os = "macos"))]
 pub mod own_cef;
 /// Elsewhere the pages draw on X-Plane's browser devices: `own_route` is false.
-#[cfg(not(windows))]
+#[cfg(not(any(windows, target_os = "macos")))]
 pub mod own_cef {
     use crate::xphfbw_bridge::Session;
 
@@ -41,9 +41,9 @@ pub mod own_cef {
 }
 #[cfg(windows)]
 mod main_thread_profile;
-#[cfg(any(windows, test))]
+#[cfg(any(windows, target_os = "macos", test))]
 mod paint_copy;
-#[cfg(windows)]
+#[cfg(any(windows, target_os = "macos"))]
 mod paint_thread;
 
 use std::collections::HashMap;
@@ -96,7 +96,7 @@ fn api() -> Option<Api> {
 
 pub fn own_route() -> bool {
     static OWN: OnceLock<bool> = OnceLock::new();
-    *OWN.get_or_init(|| cfg!(windows) && std::env::var("FBW_BROWSER_ROUTE").map_or(true, |v| v != "device"))
+    *OWN.get_or_init(|| cfg!(any(windows, target_os = "macos")) && std::env::var("FBW_BROWSER_ROUTE").map_or(true, |v| v != "device"))
 }
 
 /// The setting (or `FBW_BROWSER_DISPLAYS=1`), on an X-Plane that has what the route needs.
@@ -104,11 +104,13 @@ pub fn enabled() -> bool {
     static ON: OnceLock<bool> = OnceLock::new();
     *ON.get_or_init(|| {
         let wanted = std::env::var("FBW_BROWSER_DISPLAYS").map_or_else(|_| !cfg!(windows) || crate::app_settings::load_now().browser_displays, |v| v == "1");
-        if wanted && api().is_none() {
+        // Windows' own route still asks a browser device to start Chromium; macOS's
+        // X-Plane has it running already and needs none.
+        if wanted && api().is_none() && !(cfg!(target_os = "macos") && own_route()) {
             log("this X-Plane has no browser devices (12.4 or later needed); using the app");
             return false;
         }
-        #[cfg(windows)]
+        #[cfg(any(windows, target_os = "macos"))]
         if wanted && own_route() {
             if let Err(e) = xp::system_path().ok_or_else(|| "no X-Plane folder".to_string()).and_then(|root| own_cef::available(&root)) {
                 log(&format!("using the app: {e}"));
@@ -280,6 +282,10 @@ struct State {
     wanted: Vec<own_cef::Wanted>,
     browsers: Option<own_cef::Browsers>,
     boot: usize,
+    #[cfg(target_os = "macos")]
+    cef_checked_at: Option<Instant>,
+    #[cfg(target_os = "macos")]
+    cef_waits: u32,
 }
 
 // The handles are only ever used on X-Plane's main thread.
@@ -458,28 +464,15 @@ pub fn prepare_chromium() {
     }
 }
 
-/// Chromium starts when X-Plane first needs it, so a blank browser device asks for
-/// it; our browsers open once that page has loaded.
-fn tick_own(session: &Session, api: Api) {
+/// Our browsers open once X-Plane's Chromium is up.
+fn tick_own(session: &Session) {
     let Ok(mut s) = state().lock() else { return };
     let s = &mut *s;
     if s.attached_at.is_none() {
         return;
     }
     if s.browsers.is_none() {
-        if s.boot == 0 {
-            let Some(avionics) = s.avionics else { return };
-            own_cef::prepare_chromium_start();
-            let handle = create(&avionics, "A380X_BROWSER_BOOT", "A380X browser start", 16, 16, std::ptr::null_mut());
-            if handle.is_null() {
-                crate::log("browser screens: X-Plane refused the start device");
-                return;
-            }
-            let url = CString::new("about:blank").expect("no nul");
-            unsafe { (api.set_url)(handle, url.as_ptr()) };
-            s.boot = handle as usize;
-        }
-        if !CHROMIUM_UP.load(Ordering::SeqCst) {
+        if !chromium_up(s) {
             return;
         }
         s.browsers = own_cef::open_all(&s.tag, s.port, &s.wanted, fps_cap());
@@ -495,6 +488,50 @@ fn tick_own(session: &Session, api: Api) {
             crate::log("browser screens: pages reloaded");
         }
     }
+}
+
+/// Chromium starts when X-Plane first needs it, so a blank browser device asks for
+/// it, and is up once that page has loaded.
+#[cfg(windows)]
+fn chromium_up(s: &mut State) -> bool {
+    if s.boot == 0 {
+        let (Some(avionics), Some(api)) = (s.avionics, api()) else { return false };
+        own_cef::prepare_chromium_start();
+        let handle = create(&avionics, "A380X_BROWSER_BOOT", "A380X browser start", 16, 16, std::ptr::null_mut());
+        if handle.is_null() {
+            crate::log("browser screens: X-Plane refused the start device");
+            return false;
+        }
+        let url = CString::new("about:blank").expect("no nul");
+        unsafe { (api.set_url)(handle, url.as_ptr()) };
+        s.boot = handle as usize;
+    }
+    CHROMIUM_UP.load(Ordering::SeqCst)
+}
+
+/// macOS: X-Plane starts its Chromium itself, and CEF's UI thread there can only be
+/// the AppKit main thread this runs on. Checked once a second, as CEF logs each
+/// check made before it is up.
+#[cfg(target_os = "macos")]
+fn chromium_up(s: &mut State) -> bool {
+    if s.cef_checked_at.is_some_and(|t| t.elapsed() < Duration::from_secs(1)) {
+        return false;
+    }
+    s.cef_checked_at = Some(Instant::now());
+    if own_cef::on_ui_thread() {
+        crate::log(&format!("browser screens: X-Plane's Chromium is up and this is its UI thread (after {} checks)", s.cef_waits + 1));
+        return true;
+    }
+    if s.cef_waits % 30 == 0 {
+        crate::log(&format!("browser screens: X-Plane's Chromium is not up on this thread (cef_currently_on(UI) false, {} s); the screens stay dark until it is", s.cef_waits));
+    }
+    s.cef_waits += 1;
+    false
+}
+
+#[cfg(not(any(windows, target_os = "macos")))]
+fn chromium_up(_: &mut State) -> bool {
+    false
 }
 
 pub fn detach() {
@@ -539,11 +576,11 @@ pub fn tick(session: &Session) {
             crate::log(&format!("browser screens: {line}"));
         }
     }
-    let Some(api) = api() else { return };
     if own_route() {
-        tick_own(session, api);
+        tick_own(session);
         return;
     }
+    let Some(api) = api() else { return };
     publish_underlays();
     let Ok(mut s) = state().lock() else { return };
     let s = &mut *s;

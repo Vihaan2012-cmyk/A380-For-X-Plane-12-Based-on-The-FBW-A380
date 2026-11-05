@@ -5,7 +5,9 @@
 //! the next paint then goes whole. A paint arriving during a read can tear one frame
 //! at worst: the rows it wrote are in its own damage, and are copied again.
 
-use std::ffi::{c_int, c_void};
+use std::ffi::c_int;
+#[cfg(windows)]
+use std::ffi::c_void;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Condvar, Mutex};
 use std::thread::JoinHandle;
@@ -14,9 +16,28 @@ use std::time::{Duration, Instant};
 use super::paint_copy::copy_changed;
 use crate::xphfbw_bridge::{ScreenBlock, MAX_DIRTY_RECTS};
 
+#[cfg(windows)]
 extern "system" {
     fn ReadProcessMemory(process: *mut c_void, base: *const c_void, buffer: *mut c_void, size: usize, read: *mut usize) -> i32;
     fn GetCurrentProcess() -> *mut c_void;
+}
+
+/// `to.len()` bytes of this process from `from`, or false where that memory is gone (no fault).
+unsafe fn read_own(from: usize, to: &mut [u8]) -> bool {
+    #[cfg(windows)]
+    {
+        let mut read = 0usize;
+        ReadProcessMemory(GetCurrentProcess(), from as *const c_void, to.as_mut_ptr().cast(), to.len(), &mut read) != 0 && read == to.len()
+    }
+    #[cfg(target_os = "macos")]
+    {
+        extern "C" {
+            static mach_task_self_: u32;
+            fn mach_vm_read_overwrite(task: u32, address: u64, size: u64, data: u64, out: *mut u64) -> c_int;
+        }
+        let mut read = 0u64;
+        mach_vm_read_overwrite(mach_task_self_, from as u64, to.len() as u64, to.as_mut_ptr() as u64, &mut read) == 0 && read == to.len() as u64
+    }
 }
 
 static READ_FAILURES: AtomicU64 = AtomicU64::new(0);
@@ -153,8 +174,7 @@ impl PaintSlot {
         }
         let bytes = (y1 - y0) as usize * stride;
         scratch.resize(bytes, 0);
-        let mut read = 0usize;
-        let ok = unsafe { ReadProcessMemory(GetCurrentProcess(), (buffer + y0 as usize * stride) as *const c_void, scratch.as_mut_ptr().cast(), bytes, &mut read) } != 0 && read == bytes;
+        let ok = unsafe { read_own(buffer + y0 as usize * stride, scratch) };
         if !ok {
             READ_FAILURES.fetch_add(1, Ordering::Relaxed);
             self.pending.lock().unwrap_or_else(|e| e.into_inner()).whole = true;
