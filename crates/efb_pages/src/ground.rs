@@ -79,6 +79,39 @@ pub struct Group {
     pub hide_missing: bool,
 }
 
+/// One service in progress, for the status column.
+#[derive(Clone, Debug, Default, Deserialize)]
+#[serde(default)]
+pub struct Running {
+    pub label: String,
+    pub state: String,
+    pub secs: f64,
+    pub done: bool,
+}
+
+/// The services page's live state, from the engine's ground services.
+#[derive(Clone, Debug, Default, Deserialize)]
+#[serde(default)]
+pub struct ServicesView {
+    pub icao: String,
+    pub airport: String,
+    pub gate: String,
+    pub gate_kind: String,
+    pub situation: String,
+    pub route: String,
+    pub pax: f64,
+    pub pax_planned: f64,
+    pub boarding: bool,
+    pub deboarding: bool,
+    pub board_eta_s: f64,
+    pub fuel_kg: f64,
+    pub fuel_target_kg: f64,
+    pub refuelling: bool,
+    pub departure: String,
+    pub running: Vec<Running>,
+    pub log: Vec<(String, String)>,
+}
+
 #[derive(Clone, Debug, Default, Deserialize)]
 #[serde(default)]
 pub struct GroundModel {
@@ -89,6 +122,30 @@ pub struct GroundModel {
     pub lp_editing: u32,
     pub lp_armed: u32,
     pub preview: bool,
+    /// services, aircraft or state.
+    pub view: String,
+    pub more: bool,
+    pub svc: ServicesView,
+}
+
+/// The automation switches: setting key, label, what it does, and whether it is on before it is set.
+pub const GS_AUTOMATION: [(&str, &str, &str, bool); 6] = [
+    ("xphfbw.gsAutoCatering", "Catering", "The catering trucks come with boarding and after deboarding", false),
+    ("xphfbw.gsAutoPushback", "Pushback", "Boarded and fuelled: the aircraft is readied for departure and ground is called", false),
+    ("xphfbw.gsAutoDeboard", "Deboarding", "Passengers leave once the aircraft is on blocks", false),
+    ("xphfbw.gsAutoGpu", "GPU connection on arrival", "Ground power once the engines are off on the stand", false),
+    ("xphfbw.gsAutoChocks", "Chocks on arrival", "Chocks in once the engines are off on the stand", true),
+    ("xphfbw.gsAutoJetway", "Jetways on arrival", "The jetways dock once the engines are off on the stand", false),
+];
+pub const GS_NOTIFY: &str = "xphfbw.gsNotify";
+
+/// Whether a ground services switch is on, with its default when unset.
+pub fn gs_setting(settings: &BTreeMap<String, String>, key: &str, default: bool) -> bool {
+    match settings.get(key).map(String::as_str) {
+        Some("1" | "true") => true,
+        Some("0" | "false") => false,
+        _ => default,
+    }
 }
 
 fn num(v: Option<&Value>) -> f64 {
@@ -477,7 +534,223 @@ fn tile(text: &str, state: &str, loading: bool, act: &str) -> Node {
     Node::el("button", "tile").class_if("loading", loading).attr("type", "button").act(act).child(Node::new("span").text(text)).child(span("tile-state", state))
 }
 
+fn gs_icon(paths: &[&str]) -> Node {
+    let mut svg = Node::el("svg", "gs-ic");
+    for (k, v) in [("viewBox", "0 0 24 24"), ("fill", "none"), ("stroke", "currentColor"), ("stroke-width", "1.7"), ("stroke-linecap", "round"), ("stroke-linejoin", "round")] {
+        svg.svgattr.insert(k.into(), v.into());
+    }
+    for d in paths {
+        svg.shapes.push(shape("path", 0, &[("d", d.to_string())]));
+    }
+    svg
+}
+
+const IC_DEBOARD: &[&str] = &["M9 4.5a1.6 1.6 0 1 0 3.2 0a1.6 1.6 0 1 0-3.2 0", "M10.5 8v6l-3 5.5", "M10.5 14l3 5.5", "M10.5 9.5l4 2", "M15 15h6M18 12l3 3-3 3"];
+const IC_BOARD: &[&str] = &["M12 4.5a1.6 1.6 0 1 0 3.2 0a1.6 1.6 0 1 0-3.2 0", "M13.5 8v6l-3 5.5", "M13.5 14l3 5.5", "M13.5 9.5l-4 2", "M9 15H3M6 12l-3 3 3 3"];
+const IC_CATERING: &[&str] = &["M3 9.5h11v7H3z", "M14 11.5h4l3 3v2h-7", "M5.5 18.5a1.5 1.5 0 1 0 3 0a1.5 1.5 0 1 0-3 0", "M15.5 18.5a1.5 1.5 0 1 0 3 0a1.5 1.5 0 1 0-3 0", "M5 9.5V6h7v3.5"];
+const IC_FUEL: &[&str] = &["M5 20V5.5A1.5 1.5 0 0 1 6.5 4h6A1.5 1.5 0 0 1 14 5.5V20", "M3.5 20h12", "M7 8h5", "M14 10h2l2 2v5.5a1.5 1.5 0 0 0 3 0V9l-3-3"];
+const IC_DEPART: &[&str] = &["M3 17h18", "M5 13.5l3.5 1 9-4.5c1.2-.6 2.4.6 1.6 1.6L15 15H6z", "M9 10.5 7.5 6h2l3.5 3.5"];
+const IC_JETWAY: &[&str] = &["M3 9h13v5H3z", "M16 10h3.5l1.5 1.5v1L19.5 14H16", "M6 14v6M12 14v6", "M4 20h10"];
+const IC_STAIRS: &[&str] = &["M4 20h4v-4h4v-4h4V8h4", "M4 20 18 6", "M18 6V3"];
+const IC_MORE: &[&str] = &["M4 7h16M4 12h16M4 17h10", "M17.5 14.5l3 2.5-3 2.5"];
+const IC_PUSH: &[&str] = &["M4 15h9l3-3V9H7", "M6.5 18a1.5 1.5 0 1 0 3 0a1.5 1.5 0 1 0-3 0", "M12.5 18a1.5 1.5 0 1 0 3 0a1.5 1.5 0 1 0-3 0", "M16 12h5"];
+
+fn gs_item(icon: &[&str], text: &str, status: &str, tone: &str, act: &str, enabled: bool) -> Node {
+    Node::el("button", "gs-item")
+        .class_if("off", !enabled)
+        .attr("type", "button")
+        .attr_if("disabled", !enabled)
+        .act(act)
+        .child(gs_icon(icon))
+        .child(span("gs-it", text))
+        .child(span(&format!("gs-is {tone}"), status))
+}
+
+fn gs_switch(on: bool, act: &str) -> Node {
+    Node::el("button", "gs-sw").class_if("on", on).attr("type", "button").act(act).child(Node::new("span"))
+}
+
+fn gs_toggle_row(m: &GroundModel, key: &str, text: &str, note: &str, default: bool) -> Node {
+    let on = gs_setting(&m.settings, key, default);
+    Node::el("div", "gs-opt")
+        .child(Node::el("div", "gs-ol").child(span("gs-on", text)).child(span("gs-od", note)))
+        .child(gs_switch(on, &format!("set:{key}={}", if on { "0" } else { "1" })))
+}
+
+fn mins(secs: f64) -> String {
+    let s = secs.max(0.0).round() as u64;
+    format!("{}:{:02}", s / 60, s % 60)
+}
+
+fn place_state(m: &GroundModel, places: &'static [&'static str]) -> u32 {
+    m.state(&Spec::Places(places))
+}
+
+fn tone(st: u32) -> &'static str {
+    match st {
+        2 => "ok",
+        1 | 3 => "chg",
+        _ => "",
+    }
+}
+
+fn gs_options(m: &GroundModel) -> Node {
+    let op = m.settings.get("xphfbw.gseOperator").cloned().unwrap_or_else(|| "0".into());
+    let known = ["dnata", "swissport", "menzies"].contains(&op.as_str());
+    let seg = Node::el("div", "gm-seg").children(GM_OPERATORS.iter().map(|(v, l)| button("pc-opt", l).class_if("on", op == *v || (*v == "0" && !known)).attr("type", "button").act(&format!("set:xphfbw.gseOperator={v}"))));
+    let options = Node::el("div", "pc-card gs-card")
+        .child(label("pc-h", "OPTIONS"))
+        .child(gs_toggle_row(m, GS_NOTIFY, "Service notifications", "A message on screen as each service moves on", true))
+        .child(Node::el("div", "gs-opt gs-col").child(span("gs-on", "Handling agent")).child(seg));
+    let mut auto = Node::el("div", "pc-card gs-card").child(label("pc-h", "SERVICE AUTOMATION"));
+    for (key, text, note, default) in GS_AUTOMATION {
+        auto = auto.child(gs_toggle_row(m, key, text, note, default));
+    }
+    Node::el("div", "gs-left").child(options).child(auto)
+}
+
+fn gs_menu(m: &GroundModel) -> Node {
+    let v = &m.svc;
+    let jet = ["m1l", "m2l", "u1l"].iter().filter(|d| m.gse(&format!("jetway_{d}/state")) > 1.0).count();
+    let parked = v.situation.starts_with("Parked");
+    let (title, sub) = if v.icao.is_empty() {
+        ("No airport nearby".to_string(), String::new())
+    } else {
+        (format!("Services at {} {}", v.icao, v.airport), if v.gate.is_empty() { "Not on a stand".to_string() } else { v.gate.clone() })
+    };
+    let pct = |a: f64, b: f64| if b > 0.0 { (a / b * 100.0).clamp(0.0, 100.0).round() } else { 0.0 };
+    let deboard = if v.deboarding {
+        (format!("Deboarding, {} aboard", v.pax.round()), "chg")
+    } else if v.pax < 0.5 {
+        ("Nobody aboard".to_string(), "")
+    } else {
+        (format!("{} aboard", v.pax.round()), "")
+    };
+    let board = if v.boarding {
+        let eta = if v.board_eta_s > 0.0 { format!(", {} left", mins(v.board_eta_s)) } else { String::new() };
+        (format!("Boarding {} of {}{eta}", v.pax.round(), v.pax_planned.round()), "chg")
+    } else if v.pax_planned > 0.0 && (v.pax - v.pax_planned).abs() < 0.5 {
+        (format!("Boarded, {} aboard", v.pax.round()), "ok")
+    } else if v.pax_planned > 0.0 {
+        (format!("{} planned", v.pax_planned.round()), "")
+    } else {
+        ("Set the load on Payload & Fuel".to_string(), "")
+    };
+    let fuel_truck = place_state(m, &["fuel_hydrant", "fuel_tanker"]);
+    let refuel = if v.refuelling {
+        (format!("Refuelling {}%", pct(v.fuel_kg, v.fuel_target_kg)), "chg")
+    } else if fuel_truck != 0 {
+        (state_text(fuel_truck).to_string(), tone(fuel_truck))
+    } else if v.fuel_target_kg > 0.0 && (v.fuel_kg - v.fuel_target_kg).abs() < 100.0 {
+        ("Planned fuel aboard".to_string(), "ok")
+    } else {
+        (format!("{:.1} t aboard", v.fuel_kg / 1000.0), "")
+    };
+    let cat = place_state(m, &["cat_m2r", "udcat_u1r"]);
+    let stairs = place_state(m, &["stairs_m1l", "stairs_m2l", "stairs_u1l"]);
+    let (stairs_text, stairs_on) = if jet >= 3 {
+        ("Stairs disabled: every door has a jetway".to_string(), false)
+    } else if stairs != 0 {
+        (state_text(stairs).to_string(), true)
+    } else {
+        ("Not requested".to_string(), true)
+    };
+    let jet_text = match jet {
+        0 => "Not docked".to_string(),
+        1 => "Docked".to_string(),
+        n => format!("Docked at {n} doors"),
+    };
+    let depart = if v.departure.is_empty() { ("Services away, doors closed".to_string(), "") } else { (v.departure.clone(), if v.departure.starts_with("Ready") { "ok" } else { "chg" }) };
+    let mut list = Node::el("div", "gs-list")
+        .child(gs_item(IC_DEBOARD, "Request deboarding", &deboard.0, deboard.1, "gs:req:deboard", parked && (v.pax >= 0.5 || v.deboarding)))
+        .child(gs_item(IC_CATERING, "Request catering", if cat == 0 { "Not requested" } else { state_text(cat) }, tone(cat), "gs:req:catering", parked))
+        .child(gs_item(IC_FUEL, "Request refuelling", &refuel.0, refuel.1, "gs:req:refuel", parked))
+        .child(gs_item(IC_BOARD, "Request boarding", &board.0, board.1, "gs:req:board", parked && v.pax_planned > 0.0))
+        .child(gs_item(IC_DEPART, "Prepare for pushback and departure", &depart.0, depart.1, "gs:req:depart", parked))
+        .child(gs_item(IC_JETWAY, "Operate jetway", &jet_text, if jet > 0 { "ok" } else { "" }, "gs:req:jetway", parked))
+        .child(gs_item(IC_STAIRS, if stairs == 0 { "Request stairs" } else { "Stairs" }, &stairs_text, tone(stairs), "gs:req:stairs", parked && stairs_on))
+        .child(gs_item(IC_PUSH, "Pushback", "Plan the push and talk to the ground engineer", "", "tab:pushback", true))
+        .child(gs_item(IC_MORE, "Additional services", if m.more { "Hide" } else { "Power, air, water, cargo, cowls" }, "", "gs:more", true));
+    if m.more {
+        list = list.child(gs_more(m));
+    }
+    Node::el("div", "pc-card gs-card gs-menu").child(label("gs-where", &title)).child(label("gs-gate", &sub)).child(list)
+}
+
+fn gs_more(m: &GroundModel) -> Node {
+    let mut col = Node::el("div", "gs-more");
+    let chocks = m.chocks();
+    let n = GM_CHOCKS.len();
+    col = col.child(gm_row("Wheel chocks", if chocks == n { 2 } else { 0 }, Some(if chocks > 0 { format!("{chocks} of {n} in place") } else { String::new() }), "gs:chocks"));
+    let cowls = Node::el("div", "gm-seg").children((0..GM_ENGINES).map(|e| button("pc-opt", &format!("ENG {}", e + 1)).class_if("on", m.cowl(e) > 0.98).attr("type", "button").act(&format!("gs:cowl:{}", e + 1))));
+    col = col.child(Node::el("div", "gm-row").child(Node::el("div", "gm-rl").child(Node::new("span").text("Fan cowl doors"))).child(cowls));
+    for (title, rows) in GM_GROUPS.iter() {
+        col = col.child(label("gm-gh", title));
+        for (key, lbl, spec) in rows.iter() {
+            col = col.child(gm_row(lbl, m.state(spec), None, &format!("gs:svc:{key}")));
+        }
+    }
+    col
+}
+
+fn gs_status(m: &GroundModel) -> Node {
+    let v = &m.svc;
+    let op = m.settings.get("xphfbw.gseOperator").map(String::as_str).filter(|o| ["dnata", "swissport", "menzies"].contains(o)).map(|o| match o {
+        "dnata" => "dnata",
+        "swissport" => "Swissport",
+        _ => "Menzies",
+    });
+    let airport = if v.icao.is_empty() { String::new() } else if v.airport.is_empty() { v.icao.clone() } else { format!("{} {}", v.icao, v.airport) };
+    let stand = if v.gate.is_empty() { String::new() } else if v.gate_kind.is_empty() { v.gate.clone() } else { format!("{}, {}", v.gate, v.gate_kind.replace('_', " ")) };
+    let pairs = [("Airport", airport), ("Stand", stand), ("Handling", op.unwrap_or("Nearest airport's agent").to_string()), ("Flight", v.route.clone())];
+    let kv = Node::el("div", "pc-kv").children(pairs.iter().filter(|(_, val)| !val.is_empty()).flat_map(|(k, val)| [span("pc-k", k), span("pc-v", val)]));
+    let mut card = Node::el("div", "pc-card gs-card gs-status")
+        .child(label("pc-h", "STATUS"))
+        .child(label("gs-sit", &format!("Our airplane is {}", if v.situation.is_empty() { "on the ground".to_string() } else { v.situation.to_lowercase() })))
+        .child(kv);
+    card = card.child(label("pc-h gs-sub", "IN PROGRESS"));
+    if v.running.is_empty() {
+        card = card.child(label("gs-none", "Nothing running"));
+    }
+    for r in &v.running {
+        card = card.child(
+            Node::el("div", "gs-run")
+                .child(span("gs-rl", &r.label))
+                .child(span(if r.done { "gs-rs ok" } else { "gs-rs chg" }, &r.state))
+                .child(span("gs-rt mono", &mins(r.secs))),
+        );
+    }
+    card = card.child(label("pc-h gs-sub", "ACTIVITY"));
+    if v.log.is_empty() {
+        card = card.child(label("gs-none", "No messages yet"));
+    }
+    for (t, text) in v.log.iter().rev() {
+        card = card.child(Node::el("div", "gs-log").child(span("gs-lt mono", t)).child(span("gs-lx", text)));
+    }
+    card
+}
+
+pub fn gs_services(m: &GroundModel) -> Node {
+    Node::el("div", "gs-grid").child(gs_options(m)).child(gs_menu(m)).child(gs_status(m))
+}
+
 pub fn ground_content(m: &GroundModel) -> Node {
+    if m.view.is_empty() {
+        return state_content(m, Node::el("div", "page-main").id("ground-content")).child(gm_section(m));
+    }
+    let view = m.view.as_str();
+    let tabs = Node::el("div", "pc-tabs").children([("services", "SERVICES"), ("aircraft", "AIRCRAFT"), ("state", "AIRCRAFT STATE")].iter().map(|(k, t)| {
+        button("pc-tab", t).class_if("on", view == *k).attr("type", "button").act(&format!("gs:view:{k}"))
+    }));
+    let page = Node::el("div", "page-main").id("ground-content").child(tabs);
+    match view {
+        "aircraft" => page.child(gm_section(m)).child(label("label dim", "Passenger doors open only with the cabin depressurised (below 0.8 psi), as their handles do.")),
+        "state" => state_content(m, page),
+        _ => page.child(gs_services(m)),
+    }
+}
+
+fn state_content(m: &GroundModel, page: Node) -> Node {
     let loading = m.var(PRESET_LOAD);
     let presets = Node::el("div", "tiles").children(AIRCRAFT_PRESETS.iter().map(|(id, l, what)| {
         let on = loading == f64::from(*id);
@@ -490,17 +763,13 @@ pub fn ground_content(m: &GroundModel) -> Node {
         expedite = expedite.attr("checked", "");
     }
     let cancel = button("small grey", "Cancel").attr("type", "button").attr_if("disabled", loading == 0.0).act("gs:preset:0");
-    Node::el("div", "page-main")
-        .id("ground-content")
-        .child(label("section-title", "Aircraft state"))
+    page.child(label("section-title", "Aircraft state"))
         .child(presets)
         .child(Node::el("div", "row").child(bar).child(Node::el("label", "row").style("margin:0").child(expedite).child(span("label", "Expedite"))).child(cancel))
         .child(label("label dim", "On the ground only, as in the flyPad."))
         .child(lp_section(m))
-        .child(gm_section(m))
         .child(label("section-title", "Maintenance"))
         .child(Node::el("div", "tiles").child(tile("Service oxygen", "refill crew bottles", false, "study:serviceOxygen")).child(tile("Repack escape slides", "after a deployment", false, "gs:slides")))
-        .child(label("label dim", "Passenger doors open only with the cabin depressurised (below 0.8 psi), as their handles do."))
         .child(label("section-title", "State"))
         .child(render_groups(&m.groups, m))
 }

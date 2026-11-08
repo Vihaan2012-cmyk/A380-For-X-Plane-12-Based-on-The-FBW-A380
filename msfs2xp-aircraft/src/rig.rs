@@ -843,7 +843,7 @@ fn bound_manip(b: &bind::Binding, san: &str, tip: &str) -> String {
         Click::Script(sc) if sc.push.is_some() || sc.pull.is_some() => {
             format!("ATTR_manip_axis_switch_up_down up_down -1 1 1 0 fbw/cockpit/{san}_pp {tip}\nATTR_manip_wheel 0.01")
         }
-        Click::Script(sc) if sc.repeat.is_some() && sc.up.is_some() => {
+        Click::Script(sc) if (sc.repeat.is_some() || sc.turn_hold_hz.is_some()) && sc.up.is_some() => {
             let (kind, cursor) = match (sc.knob, sc.horizontal) {
                 (true, _) => ("axis_knob", "rotate_medium"),
                 (false, true) => ("axis_switch_left_right", "left_right"),
@@ -871,6 +871,9 @@ fn bound_lua(b: &bind::Binding, san: &str, clip_dref: Option<&str>, up: f64) -> 
     let mut s = format!("do -- {} ({})\n", b.anim, b.template);
     let func = |name: &str, body: &str| format!("local function {name}()\n{body}\nend\n");
     if let Click::Script(sc) = &b.click {
+        if let Some(init) = &sc.init {
+            s.push_str(&format!("do\nlocal s = {{}}\n{init}\nend\n"));
+        }
         let press_anim = |v: f64| clip_dref.filter(|_| b.look.is_none()).map(|d| format!("set(D[\"{d}\"], {}) ", num(v))).unwrap_or_default();
         if let Some(p) = &sc.press {
             s.push_str(&func("press", p));
@@ -1542,7 +1545,7 @@ pub fn main_lua(title: &str, rigs: &[&Rig], sim: Option<&SimState>) -> String {
          \x20     return\n\
          \x20   end\n\
          \x20   local n = 0\n\
-         \x20   while now >= h.next and n < 1 do again() h.next = h.next + 1 / hz n = n + 1 end\n\
+         \x20   while now >= h.next and n < 1 do again(h.dir) h.next = h.next + 1 / hz n = n + 1 end\n\
          \x20   if now >= h.next then h.next = now + 1 / hz end\n\
          \x20 end\n\
          end\n\

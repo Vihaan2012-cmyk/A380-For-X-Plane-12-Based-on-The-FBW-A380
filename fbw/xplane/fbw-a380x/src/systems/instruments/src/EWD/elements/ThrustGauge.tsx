@@ -159,7 +159,8 @@ export class ThrustGauge extends View<ThrustGaugeProps> {
 
   private readonly thrustPercentReverse = Derived.from(
     ([n1, thrustLimitIdle, thrustLimitRev]) =>
-      Math.min(1, Math.max(0, (n1 - thrustLimitIdle) / (-thrustLimitRev - thrustLimitIdle))) * 100,
+      // N1 is positive in reverse; only the throttle's N1 reads negative there.
+      Math.min(1, Math.max(0, (n1 - thrustLimitIdle) / (thrustLimitRev - thrustLimitIdle))) * 100,
     this.n1,
     this.thrustLimitIdle,
     this.thrustLimitRev,
@@ -458,7 +459,7 @@ export class ThrustGauge extends View<ThrustGaugeProps> {
               visible={Derived.from(
                 ([revDeploying, revDeployed, engineState]) => revDeploying || revDeployed || engineState === 1,
                 this.revDeploying,
-                this.revDeploying,
+                this.revDeployed,
                 this.engineState,
               )}
               class="GaugeComponent GaugeThrustFill"

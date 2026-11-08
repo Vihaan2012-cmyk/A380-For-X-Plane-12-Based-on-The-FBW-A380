@@ -5,8 +5,8 @@ use systems::hydraulic::flap_slat::ValveBlock;
 use systems::shared::{AdirsMeasurementOutputs, PositionPickoffUnit};
 
 use systems::simulation::{
-    InitContext, SimulationElement, SimulationElementVisitor, SimulatorWriter, UpdateContext,
-    VariableIdentifier, Write,
+    InitContext, Read, SimulationElement, SimulationElementVisitor, SimulatorReader,
+    SimulatorWriter, UpdateContext, VariableIdentifier, Write,
 };
 
 use uom::si::{angle::degree, f64::*, length::foot, velocity::knot};
@@ -51,6 +51,9 @@ struct SlatFlapControlComputer {
     slat_flap_actual_position_word_id: VariableIdentifier,
     slat_actual_position_word_id: VariableIdentifier,
     flap_actual_position_word_id: VariableIdentifier,
+    // The overhead FLAPS n and SLATS n reset buttons (FCOM PRO-SUP-24-27).
+    flaps_reset_pulled_id: VariableIdentifier,
+    slats_reset_pulled_id: VariableIdentifier,
 
     flaps_channel: FlapsChannel,
     slats_channel: SlatsChannel,
@@ -91,6 +94,10 @@ impl SlatFlapControlComputer {
                 .get_identifier(format!("SFCC_{num}_SLAT_ACTUAL_POSITION_WORD")),
             flap_actual_position_word_id: context
                 .get_identifier(format!("SFCC_{num}_FLAP_ACTUAL_POSITION_WORD")),
+            flaps_reset_pulled_id: context
+                .get_identifier(format!("ELEC_SFCC_{num}_FLAPS_BREAKER_OPEN")),
+            slats_reset_pulled_id: context
+                .get_identifier(format!("ELEC_SFCC_{num}_SLATS_BREAKER_OPEN")),
 
             flaps_channel: FlapsChannel::new(),
             slats_channel: SlatsChannel::new(),
@@ -400,6 +407,13 @@ impl SimulationElement for SlatFlapControlComputer {
     fn accept<T: SimulationElementVisitor>(&mut self, visitor: &mut T) {
         self.csu_monitor.accept(visitor);
         visitor.visit(self);
+    }
+
+    fn read(&mut self, reader: &mut SimulatorReader) {
+        let flaps_pulled: bool = reader.read(&self.flaps_reset_pulled_id);
+        let slats_pulled: bool = reader.read(&self.slats_reset_pulled_id);
+        self.flaps_channel.set_powered(!flaps_pulled);
+        self.slats_channel.set_powered(!slats_pulled);
     }
 
     fn write(&self, writer: &mut SimulatorWriter) {

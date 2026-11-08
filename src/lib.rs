@@ -181,6 +181,7 @@ mod hud;
 // [slot modules: weight_balance] Payload mass and MSFS's centre of gravity on X-Plane.
 mod mass_balance;
 mod weight_balance;
+mod inertia;
 // [slot modules: efb] The fbw/efb/ interface for a third-party EFB.
 mod efb;
 mod gse;
@@ -1501,6 +1502,7 @@ struct Plugin {
     hud: hud::Hud,
     // [slot fields: weight_balance] Payload and CG onto X-Plane's flight model.
     weight_balance: weight_balance::WeightBalance,
+    inertia: inertia::Inertia,
     // [slot fields: mapdata] The terrain worker's inputs and outputs, and TCAS targets.
     mapdata: mapdata::MapData,
     maintenance_log: maintenance_log::MaintenanceLog,
@@ -1511,6 +1513,8 @@ struct Plugin {
     // the main thread, played through XPLM's PCM bus from this tick.
     sound: sound::Sound,
     sound_pack: Option<sound_pack::SoundPack>,
+    /// The sound panicked once; it stays off so the systems keep running.
+    sound_failed: bool,
     sound_levels: sound_levels::SoundLevels,
     // [slot fields: extra_backend] Lighting presets, aircraft presets.
     extra_backend: extra_backend::ExtraBackend,
@@ -2001,6 +2005,7 @@ impl Plugin {
         let hud = hud::Hud::new(&mut vars, xplm);
         // [slot new: weight_balance]
         let weight_balance = weight_balance::WeightBalance::new(&mut vars, xplm);
+        let inertia = inertia::Inertia::new(xplm);
         // [slot new: mapdata]
         let mapdata = mapdata::MapData::new(xplm);
         let maintenance_log = maintenance_log::MaintenanceLog::new(&mut vars, xplm);
@@ -2179,6 +2184,7 @@ impl Plugin {
             hud,
             // [slot init: weight_balance]
             weight_balance,
+            inertia,
             // [slot init: mapdata]
             mapdata,
             maintenance_log,
@@ -2208,6 +2214,7 @@ impl Plugin {
             // [slot init: sound]
             sound,
             sound_pack,
+            sound_failed: false,
             sound_levels,
             // [slot init: extra_backend]
             extra_backend,
@@ -2849,6 +2856,7 @@ impl Plugin {
         // the fuel have written this tick's weights.
         if !crate::xp_writes_skip("weight") {
             self.weight_balance.update(&mut self.vars, xplm, delta);
+            self.inertia.update(xplm, delta, self.weight_balance.masses.as_ref());
         }
         crate::perf::lap("tick-after-systems: doors");
         // [slot tick-after-systems: doors] The hydraulic cargo doors' clips.
@@ -2990,11 +2998,21 @@ impl Plugin {
         crate::perf::lap("tick-after-systems: sound");
         // [slot tick-after-systems: sound] After the scripts, so a
         // PLAY_INSTRUMENT_SOUND queued this tick plays this tick.
-        self.sound.update(&mut self.vars);
-        if let Some(pack) = self.sound_pack.as_mut() {
-            pack.update(&mut self.vars, xplm, delta);
+        // Sound is never worth the aircraft: a panic here stops the sound, not the systems.
+        if !self.sound_failed {
+            let (sound, pack, vars) = (&mut self.sound, &mut self.sound_pack, &mut self.vars);
+            let ok = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                sound.update(vars);
+                if let Some(pack) = pack.as_mut() {
+                    pack.update(vars, xplm, delta);
+                }
+            }));
+            if ok.is_err() {
+                self.sound_failed = true;
+                log(&format!("sound panicked and is off for this flight: {}", last_panic()));
+            }
         }
-        self.sound_levels.update(&mut self.vars);
+        self.sound_levels.update(&mut self.vars, delta);
         crate::perf::lap("tick-after-systems: key_events");
         // [slot tick-after-systems: key_events] Events with several arguments
         // (TRIGGER_KEY_EVENT, key_events::push).
@@ -3724,6 +3742,7 @@ fn publish_native_without_xphfbw(vars: &Vars, time: f64) {
 
 fn value_of(refcon: *mut c_void) -> f64 {
     diag::DATAREF_READS.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    perf::DATAREF_READS.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
     let (kind, index) = slot_of(refcon);
     unsafe {
         let plugin = &raw const PLUGIN;
@@ -3800,7 +3819,7 @@ unsafe extern "C" fn flight_loop(
         let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| plugin.tick(delta)));
         diag::TICK_NS.fetch_add(started.elapsed().as_nanos() as u64, std::sync::atomic::Ordering::Relaxed);
         if result.is_err() {
-            log("systems panicked; the simulation is stopped");
+            log(&format!("systems panicked; the simulation is stopped: {}", last_panic()));
             let plugin = &raw mut PLUGIN;
             *plugin = None;
         }
@@ -3856,6 +3875,27 @@ fn flush_log_queue() {
     }
 }
 
+static LAST_PANIC: std::sync::Mutex<String> = std::sync::Mutex::new(String::new());
+
+/// Where and why the last panic on any thread happened, for the log line that reports it.
+pub fn last_panic() -> String {
+    LAST_PANIC.lock().map(|s| s.clone()).unwrap_or_default()
+}
+
+fn install_panic_hook() {
+    static ONCE: std::sync::Once = std::sync::Once::new();
+    ONCE.call_once(|| {
+        let previous = std::panic::take_hook();
+        std::panic::set_hook(Box::new(move |info| {
+            let thread = std::thread::current().name().unwrap_or("unnamed").to_owned();
+            if let Ok(mut s) = LAST_PANIC.lock() {
+                *s = format!("{info} (thread {thread}, section {})", perf::current_section());
+            }
+            previous(info);
+        }));
+    });
+}
+
 /// # Safety
 /// X-Plane calls this once, on the main thread, with three 256 byte buffers.
 #[no_mangle]
@@ -3867,13 +3907,16 @@ pub unsafe extern "C" fn XPluginStart(
     write_into(name, "A380 systems");
     write_into(signature, "msfs2xp.fbw.a380.systems");
     write_into(description, "A380 for X-Plane 12 (Ported from FBW A380): systems");
+    install_panic_hook();
+    // Before remember_main_thread: it caches XPLMGetSystemPath, which is an HFS
+    // `Macintosh HD:...` path on a Mac until native paths are on.
+    #[cfg(not(windows))]
+    xp::use_native_paths();
     xp::remember_main_thread();
 
     let Some(xplm) = Xplm::load() else { return 0 };
     let xplm_ref = &raw mut XPLM;
     *xplm_ref = Some(xplm);
-    #[cfg(not(windows))]
-    xp::use_native_paths();
     diag::start();
     log(&format!("starting on {} {}, X-Plane at {:?}", std::env::consts::OS, std::env::consts::ARCH, xp::system_path()));
     #[cfg(feature = "js")]

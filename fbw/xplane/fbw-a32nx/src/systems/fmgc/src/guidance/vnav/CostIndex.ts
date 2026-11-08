@@ -31,12 +31,11 @@ export class CostIndex {
     const Vt = Common.machToTAS(mach, theta);
     const thrust = FlightModel.getDrag(config.flightModelParameters, weight, mach, delta, false, false, FlapConf.CLEAN);
 
-    // Divide by 2 to get thrust per engine
-    const correctedThrust = thrust / delta2 / 2;
-    // Since table 1506 describes corrected thrust as a fraction of max thrust, divide it
-    const correctedN1 = EngineModel.reverseTableInterpolation(
-      config.engineModelParameters.table1506,
+    const correctedThrust = thrust / delta2 / config.engineModelParameters.numberOfEngines;
+    const correctedN1 = EngineModel.getCorrectedN1ForThrustFraction(
+      config.engineModelParameters,
       mach,
+      altitude,
       correctedThrust / config.engineModelParameters.maxThrust,
     );
 

@@ -392,6 +392,35 @@ fn register_anti_ice(r: &mut Registry) {
 
     register_rain_removal(r, &mut n, "l_windshield", "L WINDSHIELD");
     register_rain_removal(r, &mut n, "r_windshield", "R WINDSHIELD");
+
+    register_aicu(r, &mut n, 1, "engines 2 and 4, the outer wing valves and the captain's windows");
+    register_aicu(r, &mut n, 2, "engines 1 and 3, the inner wing valves and the first officer's windows");
+}
+
+/// FCOM DSC-30-10-10: two anti-ice control units, each controlling its own engines' anti-ice valves, one of the
+/// two redundant valves per wing and its side's window heat.
+fn register_aicu(r: &mut Registry, n: &mut u16, k: u16, controls: &str) {
+    let component_id = format!("30_ice.aicu_{k}");
+    *n += 1;
+    let fid = failure_id(Area::FireIce, ATA_ICE_RAIN, *n);
+    r.component(ComponentDef {
+        id: component_id.clone(),
+        area: Area::FireIce,
+        ata: ATA_ICE_RAIN,
+        name: format!("Anti-ice control unit {k} (AICU {k})"),
+        params: vec![ParamDef { name: "lost".into(), meaning: "both channels lost: 0 healthy .. 1 off".into(), healthy: 0.0 }],
+        failures: vec![fid],
+    });
+    r.failure(FailureDef {
+        id: fid,
+        area: Area::FireIce,
+        ata: ATA_ICE_RAIN,
+        name: format!("AICU {k} lost"),
+        component: component_id,
+        model_field: "deep::fire_ice::live AICU state".into(),
+        magnitude: "0..1, 1 = both channels off".into(),
+        effect: format!("AICU {k} stops controlling {controls}: its engine anti-ice valves open (they open when unpowered), its windows lose heat, and with the other AICU lost too the wing anti-ice is lost"),
+    });
 }
 
 fn register_bleed_anti_ice(r: &mut Registry, n: &mut u16, zone: &str, title: &str) {

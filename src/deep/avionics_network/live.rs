@@ -78,7 +78,7 @@
 
 use super::consequences::{Availability, FunctionMonitor};
 use super::faults::{EndSystemFaults, LinkFaults, ModuleFaults, PartitionFaults, SwitchFaults};
-use super::graph::{NetworkFaults, NetworkGraph};
+use super::graph::{GraphCache, NetworkFaults, NetworkGraph};
 use super::registry::key_safe;
 use super::topology::{
     a380_reference_topology, ModuleKind, NetworkSide, NetworkTopology, NodeId,
@@ -351,6 +351,11 @@ pub struct LiveAvionicsNetwork {
     fws_partition: (usize, usize),
     fws_customization_db_rejected_id: u64,
     fws_atqc_db_rejected_id: u64,
+    /// Each module failed for a reason other than its bus, for FlyByWire's own network model.
+    module_failed: Vec<bool>,
+    /// Last tick's routing answers and the switch, cable and babbling faults they were worked out for.
+    graph_cache: Option<GraphCache>,
+    routing_key: Vec<u64>,
 }
 
 impl Default for LiveAvionicsNetwork {
@@ -435,7 +440,10 @@ impl LiveAvionicsNetwork {
             .enumerate()
             .map(|(b, &name)| LiveBay {
                 key: key_safe(name),
-                bay: Bay::new(SUPPLY_AIR_K),
+                bay: Bay::sized(
+                    SUPPLY_AIR_K,
+                    topology.end_systems.iter().filter(|es| es.bay == name).map(|es| if matches!(es.kind, ModuleKind::Iom) { IOM_HEAT_W } else { CPIOM_HEAT_W }).sum(),
+                ),
                 modules: topology
                     .end_systems
                     .iter()
@@ -465,7 +473,7 @@ impl LiveAvionicsNetwork {
         // buses so neither bus carries a whole bay. The property (no single
         // bus loss empties a bay) is real; this particular assignment is
         // GENERIC.
-        let module_bus = (0..topology.end_systems.len()).map(|i| i % 2).collect();
+        let module_bus = topology.end_systems.iter().map(|e| e.bus).collect();
 
         let trips = vec![OverheatTrip::default(); topology.end_systems.len()];
         let monitors = consequences::reference_function_monitors();
@@ -493,6 +501,9 @@ impl LiveAvionicsNetwork {
             fws_partition: (fws_module, fws_partition_idx),
             fws_customization_db_rejected_id,
             fws_atqc_db_rejected_id,
+            graph_cache: None,
+            routing_key: Vec::new(),
+            module_failed: Vec::new(),
         }
     }
 
@@ -552,14 +563,18 @@ impl LiveAvionicsNetwork {
     /// fault set `graph`/`message`/`consequences` consume, with bus power
     /// from `deep::electrical`'s solved buses and the bay overheat trips
     /// from this tick's ventilation.
-    fn network_faults(&self, truth: &Truth, faults: &Faults) -> NetworkFaults {
+    /// Also returns every value the graph's answers depend on (switch, port, cable and babbling faults).
+    fn network_faults(&self, truth: &Truth, faults: &Faults) -> (NetworkFaults, Vec<u64>) {
         let mut nf = NetworkFaults::default();
+        let mut key = Vec::with_capacity(self.routing_key.len());
 
         for side in NetworkSide::BOTH {
             for (i, s) in self.ids.switches[side.index()].iter().enumerate() {
                 let mut sf = SwitchFaults { failure: faults.get(s.failure), ..Default::default() };
+                key.push(sf.failure.to_bits());
                 for &(neighbour, id) in &s.ports {
                     let m = faults.get(id);
+                    key.push(m.to_bits());
                     if m > 0.0 {
                         sf.port_failure.insert(neighbour, m);
                     }
@@ -570,6 +585,7 @@ impl LiveAvionicsNetwork {
             }
             for &((a, b), id) in &self.ids.segments[side.index()] {
                 let open = faults.get(id);
+                key.push(open.to_bits());
                 if open > 0.0 {
                     nf.set_segment(side, a, b, LinkFaults { open });
                 }
@@ -578,6 +594,7 @@ impl LiveAvionicsNetwork {
 
         for (i, m) in self.ids.modules.iter().enumerate() {
             let babbling = faults.get(m.babbling);
+            key.push(babbling.to_bits());
             if babbling > 0.0 {
                 nf.end_systems.insert(i, EndSystemFaults { babbling });
             }
@@ -603,7 +620,7 @@ impl LiveAvionicsNetwork {
             );
         }
 
-        nf
+        (nf, key)
     }
 }
 
@@ -612,9 +629,20 @@ impl Area for LiveAvionicsNetwork {
         "avionics_network"
     }
 
+    /// Routing and bay temperatures change over seconds; a third of the frames is plenty.
+    fn tick_every(&self) -> u32 {
+        3
+    }
+
     fn tick(&mut self, truth: &Truth, faults: &Faults) {
         let dt = truth.dt_s;
         self.now_s += dt;
+        self.module_failed = (0..self.topology.end_systems.len())
+            .map(|i| {
+                let m = &self.ids.modules[i];
+                [m.hardware, m.config, m.power].iter().any(|&id| faults.get(id) >= FULLY_FAILED) || self.trips[i].frac() >= 1.0
+            })
+            .collect();
 
         // ---- Bay cooling, then the supervisors watching it -------------
         // Heat comes from the modules that were up at the end of the last
@@ -670,8 +698,13 @@ impl Area for LiveAvionicsNetwork {
         }
 
         // ---- Route both networks with this tick's fault set ------------
-        let nf = self.network_faults(truth, faults);
-        let graph = NetworkGraph::memoized(&self.topology);
+        let (nf, routing_key) = self.network_faults(truth, faults);
+        let graph = match self.graph_cache.take() {
+            Some(cache) if routing_key == self.routing_key => NetworkGraph::from_cache(&self.topology, cache),
+            Some(cache) => NetworkGraph::from_cache(&self.topology, cache.forget()),
+            None => NetworkGraph::memoized(&self.topology),
+        };
+        self.routing_key = routing_key;
 
         let module_available: Vec<bool> =
             (0..self.topology.end_systems.len()).map(|i| nf.module(i).is_available()).collect();
@@ -799,6 +832,7 @@ impl Area for LiveAvionicsNetwork {
         for monitor in &mut self.monitors {
             monitor.step(&self.topology, &graph, &nf, dt, self.now_s);
         }
+        self.graph_cache = Some(graph.into_cache());
         let (function_availability, function_age_s) = self
             .monitors
             .iter()
@@ -848,6 +882,20 @@ impl Area for LiveAvionicsNetwork {
         out("DEEP_AVNCS_COOLG_PROT_FAULT", if self.coolg_prot_fault.iter().any(|&m| m > 0.0) { 1.0 } else { 0.0 });
 
         // --- the variables `registry.rs` triggers ECAM alerts on ---------
+        // FlyByWire's own AFDX model (avionics_data_communication_network.rs) reads these failure indications:
+        // switch n of network A is FlyByWire's n, of network B its n + 10; the modules keep their names.
+        for side in NetworkSide::BOTH {
+            for (i, spec) in self.topology.switches[side.index()].iter().enumerate() {
+                let n: u32 = spec.name.rsplit('-').next().and_then(|t| t.parse().ok()).unwrap_or(0);
+                let id = if side == NetworkSide::B { n + 10 } else { n };
+                let failed = !s.switch_available[side.index()].get(i).copied().unwrap_or(true);
+                out(&format!("AFDX_SWITCH_{id}_FAILURE"), f64::from(failed));
+            }
+        }
+        for (i, es) in self.topology.end_systems.iter().enumerate() {
+            let (kind, name) = es.name.split_once('-').unwrap_or(("", es.name));
+            out(&format!("{kind}_{name}_FAILURE"), f64::from(self.module_failed.get(i).copied().unwrap_or(false)));
+        }
         out("AFDX_NETWORK_A_AVAILABLE", f64::from(s.network_available[0]));
         out("AFDX_NETWORK_B_AVAILABLE", f64::from(s.network_available[1]));
         for (i, es) in self.topology.end_systems.iter().enumerate() {
@@ -1176,6 +1224,18 @@ mod tests {
             late["AVNCS_MODULE_CPIOM_F1_AVAILABLE"], 1.0,
             "the aft bay's modules must be untouched"
         );
+    }
+
+    #[test]
+    fn failed_switches_and_modules_reach_flybywires_network_by_its_numbers() {
+        let index = FaultIndex::build();
+        let mut area = LiveAvionicsNetwork::new();
+        let faults = Faults::from_pairs([(index.id("AFDX switch AFDX-B-3 failure"), 1.0), (index.id("CPIOM-D1 hardware failure"), 1.0)]);
+        let published = run(&mut area, &powered(), &faults, 2.0);
+        assert_eq!(published["AFDX_SWITCH_13_FAILURE"], 1.0);
+        assert_eq!(published["AFDX_SWITCH_3_FAILURE"], 0.0);
+        assert_eq!(published["CPIOM_D1_FAILURE"], 1.0);
+        assert_eq!(published["IOM_A1_FAILURE"], 0.0);
     }
 
     #[test]

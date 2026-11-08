@@ -71,7 +71,7 @@ pub fn listener_error_patches() -> Vec<SourcePatch> {
         .map(|bundle| SourcePatch {
             path: format!("/Pages/VCockpit/Instruments/A380X/{bundle}"),
             find: "        this._missed = true;\n        return;\n      }\n      this._deliver(value);\n    }\n    replay() {".to_string(),
-            replace: "        this._missed = true;\n        return;\n      }\n      try {\n        this._deliver(value);\n      } catch (e) {\n        console.error(e);\n      }\n    }\n    replay() {".to_string(),
+            replace: "        this._missed = true;\n        return;\n      }\n      try {\n        this._deliver(value);\n      } catch (err) {\n        console.error(err);\n      }\n    }\n    replay() {".to_string(),
             reason: "a bus handler's error stays with that handler".to_string(),
         })
         .collect()
@@ -80,7 +80,9 @@ pub fn listener_error_patches() -> Vec<SourcePatch> {
 pub fn apply(patches: &[SourcePatch], clean: &str, mut text: String, mut log: impl FnMut(bool, &str)) -> String {
     for patch in patches.iter().filter(|p| p.path.eq_ignore_ascii_case(clean)) {
         let (spans, _) = locate(&text, &patch.find);
-        if spans.len() == 1 {
+        if spans.is_empty() && text.matches(patch.replace.as_str()).count() == 1 {
+            log(true, &format!("{}: {} (already in the source)", patch.path, patch.reason));
+        } else if spans.len() == 1 {
             text.replace_range(spans[0].clone(), &patch.replace);
             log(true, &format!("{}: {}", patch.path, patch.reason));
         } else {
@@ -548,6 +550,15 @@ mod tests {
     }
 
     #[test]
+    fn a_patch_already_in_the_source_counts_as_applied() {
+        let p = patch("a(); y", "try { a(); } catch (err) {} y");
+        let mut ok = Vec::new();
+        let out = apply(&[p], "/a.js", "x; try { a(); } catch (err) {} y;".to_string(), |good, _| ok.push(good));
+        assert_eq!(out, "x; try { a(); } catch (err) {} y;");
+        assert_eq!(ok, vec![true]);
+    }
+
+    #[test]
     fn every_static_patch_matches_the_installed_pages_once() {
         let Some(root) = std::env::var_os("FBW_HTML_UI") else { return };
         let bad: Vec<String> = crate::static_source_patches()
@@ -555,7 +566,7 @@ mod tests {
             .filter_map(|p| {
                 let text = std::fs::read_to_string(std::path::Path::new(&root).join(p.path.trim_start_matches('/'))).unwrap_or_default();
                 let n = count(&text, &p.find);
-                (n != 1).then(|| format!("{} x{n}: {}", p.path, p.reason))
+                (n != 1 && !(n == 0 && text.matches(p.replace.as_str()).count() == 1)).then(|| format!("{} x{n}: {}", p.path, p.reason))
             })
             .collect();
         assert!(bad.is_empty(), "{}", bad.join("\n"));

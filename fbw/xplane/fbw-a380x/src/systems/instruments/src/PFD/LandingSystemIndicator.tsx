@@ -1,4 +1,6 @@
 // @ts-strict-ignore
+import { FGVars } from '../MsfsAvionicsCommon/providers/FGDataPublisher';
+import { SimVarString } from '@flybywiresim/fbw-sdk';
 import {
   BusSignal,
   View,
@@ -145,10 +147,43 @@ class LandingSystemInfo extends View<{ bus: Bus; isVisible: Readable<boolean> }>
 
   private destRef = UI.ref<SVGTextElement>();
 
+  private navIdent = '';
+
+  private fls = 0;
+
+  private flsIdent = [0, 0];
+
+  private flsSlope = 0;
+
   afterRender(node: ViewNode): void {
     super.afterRender(node);
 
     const sub = this.props.bus.inbox<PFDSimvars>();
+    const fg = this.props.bus.inbox<FGVars>();
+    fg.topic('fg.fls')
+      .distinct()
+      .listen((fls) => {
+        this.fls = fls;
+        this.updateContents();
+      });
+    fg.topic('fg.fls.ident0')
+      .distinct()
+      .listen((v) => {
+        this.flsIdent[0] = v;
+        this.updateContents();
+      });
+    fg.topic('fg.fls.ident1')
+      .distinct()
+      .listen((v) => {
+        this.flsIdent[1] = v;
+        this.updateContents();
+      });
+    fg.topic('fg.fls.slope')
+      .distinct()
+      .listen((v) => {
+        this.flsSlope = v;
+        this.updateContents();
+      });
 
     sub
       .topic('hasDme')
@@ -162,7 +197,7 @@ class LandingSystemInfo extends View<{ bus: Bus; isVisible: Readable<boolean> }>
       .topic('navIdent')
       .distinct()
       .listen((navIdent) => {
-        this.identText.set(navIdent);
+        this.navIdent = navIdent;
         this.updateContents();
       });
 
@@ -184,12 +219,19 @@ class LandingSystemInfo extends View<{ bus: Bus; isVisible: Readable<boolean> }>
   }
 
   private updateContents() {
-    const freqTextSplit = (Math.round(this.navFreq * 1000) / 1000).toString().split('.');
-    this.freqTextLeading.set(freqTextSplit[0] === '0' ? '' : freqTextSplit[0]);
-    if (freqTextSplit[1]) {
-      this.freqTextTrailing.set(`.${freqTextSplit[1].padEnd(2, '0')}`);
-    } else {
+    if (this.fls >= 2) {
+      this.identText.set(SimVarString.unpack(this.flsIdent));
+      this.freqTextLeading.set(`${this.flsSlope.toFixed(1)}°`);
       this.freqTextTrailing.set('');
+    } else {
+      this.identText.set(this.navIdent);
+      const freqTextSplit = (Math.round(this.navFreq * 1000) / 1000).toString().split('.');
+      this.freqTextLeading.set(freqTextSplit[0] === '0' ? '' : freqTextSplit[0]);
+      if (freqTextSplit[1]) {
+        this.freqTextTrailing.set(`.${freqTextSplit[1].padEnd(2, '0')}`);
+      } else {
+        this.freqTextTrailing.set('');
+      }
     }
 
     let distLeading = '';
@@ -275,6 +317,12 @@ class LocalizerIndicator extends View<{ bus: Bus; instrument: PanelInstrument }>
     const sub = this.props.bus.inbox<PFDSimvars>();
 
     const navRadialSub = sub.topic('navRadialError').listen(this.handleNavRadialError.bind(this), true);
+
+    this.props.bus
+      .inbox<FGVars>()
+      .topic('fg.fls')
+      .distinct()
+      .listen((fls) => this.locDiamond.target.setAttribute('d', fls >= 2 ? 'm65.129 130.51 3.7776 2.5198 3.7776-2.5198-3.7776-2.5198z m1.6998 0 2.0777 1.3859 2.0777-1.3859-2.0777-1.3859z' : 'm65.129 130.51 3.7776 2.5198 3.7776-2.5198-3.7776-2.5198z'));
 
     sub
       .topic('hasLoc')
@@ -386,6 +434,12 @@ class GlideSlopeIndicator extends View<{ bus: Bus; instrument: PanelInstrument }
           this.lagFilter.reset();
         }
       });
+
+    this.props.bus
+      .inbox<FGVars>()
+      .topic('fg.fls')
+      .distinct()
+      .listen((fls) => this.glideSlopeDiamond.target.setAttribute('d', fls >= 1 ? 'm109.7 77.043-2.5184 3.7798 2.5184 3.7798 2.5184-3.7798z m0 1.7008-1.3851 2.0789 1.3851 2.0789 1.3851-2.0789z' : 'm109.7 77.043-2.5184 3.7798 2.5184 3.7798 2.5184-3.7798z'));
 
     sub.topic('glideSlopeError').listen((gs) => {
       if (this.hasGlideSlope) {
@@ -622,9 +676,14 @@ class LsTitle extends View<{ bus: Bus }> {
 
   private readonly hasLoc = BusSignal.from(this.sub.topic('hasLoc'), false);
 
+  private readonly fls = BusSignal.from(this.props.bus.inbox<FGVars>().topic('fg.fls'), 0);
+
+  private readonly title = this.fls.derive((fls) => (fls >= 1 ? 'FLS' : 'ILS'));
+
   private readonly ilsTitleShown = Derived.from(
-    ([hasLoc, lsButton]) => hasLoc && lsButton,
+    ([hasLoc, fls, lsButton]) => (hasLoc || fls >= 1) && lsButton,
     this.hasLoc,
+    this.fls,
     this.lsButton,
   );
 
@@ -650,7 +709,7 @@ class LsTitle extends View<{ bus: Bus }> {
   render(): ViewNode {
     return (
       <text class="FontLargest Magenta MiddleAlign" ref={this.lsTitle} x="104" y="126">
-        ILS
+        {this.title}
       </text>
     );
   }

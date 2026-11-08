@@ -2,6 +2,7 @@
 //
 // SPDX-License-Identifier: GPL-3.0
 
+import { A380EnginePerformance } from './A380EnginePerformance';
 import {
   AircraftConfig,
   EngineModelParameters,
@@ -57,7 +58,8 @@ const flightModelParams: FlightModelParameters = {
 const engineModelParams: EngineModelParameters = {
   maxThrust: 80_213,
   numberOfEngines: 4,
-  fuelBurnFactor: 2.8,
+  fuelBurnFactor: 1,
+  performance: A380EnginePerformance,
   cn1ClimbLimit: [
     [-2000, 30.8, 56.87, 80.28, 72.0],
     [2000, 20.99, 48.157, 82.58, 74.159],

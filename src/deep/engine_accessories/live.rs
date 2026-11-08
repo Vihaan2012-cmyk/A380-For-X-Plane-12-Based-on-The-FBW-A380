@@ -862,9 +862,10 @@ struct ReverserNames {
     position: String,
     uncommanded: String,
     position_disagree: String,
-    /// `E-ENG-DESIGN.md` Pattern 25: the reverse-thrust lever selection
-    /// itself, independent of the sleeve's actual position.
+    /// The isolation valve is open: deploy ordered, or the valve failed open.
     energized: String,
+    /// FCOM ENG 2(3) REVERSER ENERGIZED: energized without a deploy order on ground, or with the tertiary lock failed in flight.
+    energized_fault: String,
     /// Pattern 24: the control loop's own self-monitoring.
     ctl_fault: String,
     /// Pattern 28: how many of the three locks are failing to hold, 0..3.
@@ -885,6 +886,7 @@ impl ReverserNames {
             uncommanded: format!("A32NX_ENG_{eng_number}_REV_UNCOMMANDED"),
             position_disagree: format!("A32NX_ENG_{eng_number}_REV_POSITION_DISAGREE"),
             energized: format!("A32NX_ENG_{eng_number}_REV_ENERGIZED"),
+            energized_fault: format!("A32NX_ENG_{eng_number}_REV_ENERGIZED_FAULT"),
             mel_inop: format!("A32NX_ENG_{eng_number}_REV_MEL_INOP"),
             ctl_fault: format!("A32NX_ENG_{eng_number}_REV_CTL_FAULT"),
             lock_degraded_count: format!("A32NX_ENG_{eng_number}_REV_LOCK_DEGRADED_COUNT"),
@@ -905,6 +907,10 @@ struct ReverserUnit {
     /// What the sleeve was commanded to this frame -- cached because
     /// `publish` has no access to the commands.
     commanded: bool,
+    /// The secondary lock (isolation valve) fails to hold: hydraulics reach the actuator unordered.
+    isolation_open: bool,
+    tertiary_unlocked: bool,
+    on_ground: bool,
 }
 
 impl ReverserUnit {
@@ -916,10 +922,13 @@ impl ReverserUnit {
             model: ThrustReverser::new(),
             state: ReverserState::default(),
             commanded: false,
+            isolation_open: false,
+            tertiary_unlocked: false,
+            on_ground: true,
         }
     }
 
-    fn step(&mut self, commanded: bool, hydraulic_frac: f64, faults: &Faults, dt: f64) {
+    fn step(&mut self, commanded: bool, on_ground: bool, hydraulic_frac: f64, faults: &Faults, dt: f64) {
         let lock = |hold: u64, jam: u64| LockFaults { fails_to_hold: faults.get(hold), jam: faults.get(jam) };
         let rev_faults = ReverserFaults {
             lock_a: lock(self.ids.lock_hold[0], self.ids.lock_jam[0]),
@@ -929,6 +938,9 @@ impl ReverserUnit {
             control_fault: faults.get(self.ids.control_fault),
         };
         self.commanded = commanded;
+        self.on_ground = on_ground;
+        self.isolation_open = rev_faults.lock_b.fails_to_hold > 0.0;
+        self.tertiary_unlocked = rev_faults.lock_c.fails_to_hold > 0.0;
         self.state = self.model.step(commanded, hydraulic_frac, &rev_faults, dt);
     }
 }
@@ -1486,7 +1498,7 @@ impl EngineChain {
         // owns the pressures and `deep::electrical` the buses, and neither
         // publishes an EBHA-local pressure.
         let hydraulic_frac = (truth.hydraulic_pressure_pa[0].max(truth.hydraulic_pressure_pa[1]) / HYDRAULIC_NOMINAL_PA).clamp(0.0, 1.0);
-        rev.step(commands.reverser_deploy_commanded[rev.slot], hydraulic_frac, faults, dt);
+        rev.step(commands.reverser_deploy_commanded[rev.slot], truth.on_ground, hydraulic_frac, faults, dt);
     }
 
     // ---- Monitors that `publish` reads. -----------------------------------
@@ -1794,7 +1806,10 @@ impl crate::deep::live::Area for EngineAccessoriesLive {
                 // premise is out of date, the integration baseline this
                 // worktree already carries wires it), independent of the
                 // sleeve's actual position.
-                out(&rev.names.energized, b(rev.commanded));
+                let energized = rev.commanded || rev.isolation_open;
+                out(&rev.names.energized, b(energized));
+                let fault = if rev.on_ground { energized && !rev.commanded } else { energized && rev.tertiary_unlocked };
+                out(&rev.names.energized_fault, b(fault));
                 out(&rev.names.ctl_fault, b(rev.state.control_fault_active));
                 out(&rev.names.lock_degraded_count, f64::from(rev.state.lock_degraded_count));
                 // Pattern 26: `crate::mel::deferred_state` reads the MEL's
@@ -2714,6 +2729,36 @@ mod tests {
         let out = run(&mut live, &deploying_truth, &Faults::default(), 10.0);
         assert!(out["A32NX_ENG_2_REV_POSITION"] > 0.95, "Truth::controls.reverser_deploy_commanded must drive deployment even when self.commands disagrees");
         assert!(out["A32NX_ENG_3_REV_POSITION"] > 0.95);
+    }
+
+    #[test]
+    fn reverse_thrust_on_the_ground_is_no_reverser_energized_fault() {
+        let reg = registry();
+        let ids = ReverserIds::resolve(&reg, 2);
+        let (truth, commands) = running();
+        let ground = Truth { on_ground: true, ..truth.clone() };
+        let reversing = Truth { controls: Controls { reverser_deploy_commanded: [true, true], ..ground.controls }, ..ground.clone() };
+
+        let mut live = EngineAccessoriesLive::new();
+        live.commands = commands;
+        let out = run(&mut live, &reversing, &Faults::default(), 5.0);
+        assert_eq!(out.get("A32NX_ENG_2_REV_ENERGIZED"), Some(&1.0));
+        assert_eq!(out.get("A32NX_ENG_2_REV_ENERGIZED_FAULT"), Some(&0.0), "a deploy order is not a fault");
+
+        let mut live = EngineAccessoriesLive::new();
+        live.commands = commands;
+        let out = run(&mut live, &ground, &Faults::from_pairs([(ids.lock_hold[1], 1.0)]), 5.0);
+        assert_eq!(out.get("A32NX_ENG_2_REV_ENERGIZED_FAULT"), Some(&1.0), "isolation valve open without an order");
+
+        let flying = Truth { on_ground: false, ..truth };
+        let mut live = EngineAccessoriesLive::new();
+        live.commands = commands;
+        let out = run(&mut live, &flying, &Faults::from_pairs([(ids.lock_hold[1], 1.0)]), 5.0);
+        assert_eq!(out.get("A32NX_ENG_2_REV_ENERGIZED_FAULT"), Some(&0.0), "in flight the tertiary lock must also fail");
+        let mut live = EngineAccessoriesLive::new();
+        live.commands = commands;
+        let out = run(&mut live, &flying, &Faults::from_pairs([(ids.lock_hold[1], 1.0), (ids.lock_hold[2], 1.0)]), 5.0);
+        assert_eq!(out.get("A32NX_ENG_2_REV_ENERGIZED_FAULT"), Some(&1.0));
     }
 
     // -----------------------------------------------------------------

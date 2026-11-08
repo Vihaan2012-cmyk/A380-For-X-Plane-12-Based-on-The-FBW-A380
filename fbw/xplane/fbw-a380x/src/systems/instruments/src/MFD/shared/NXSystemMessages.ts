@@ -122,6 +122,7 @@ export const NXSystemMessages = {
   rwyLsDisagree: new TypeIIMessage('RUNWAY / LS DISAGREE', true), // TODO
   setHoldSpeed: new TypeIIMessage('SET HOLD SPD'),
   tdReached: new TypeIIMessage('T/D REACHED'),
+  noFlsForThisAppr: new TypeIIMessage('NO FLS FOR THIS APPR'),
   spdLimExceeded: new TypeIIMessage('SPD LIMIT EXCEEDED', true),
   toSpeedTooLow: new TypeIIMessage('T.O SPEED TOO LOW - CHECK TOW & T.O DATA', true),
   vToDisagree: new TypeIIMessage('V1/VR/V2 DISAGREE', true),

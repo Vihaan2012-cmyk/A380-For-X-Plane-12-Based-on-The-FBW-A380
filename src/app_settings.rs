@@ -105,6 +105,8 @@ impl std::fmt::Debug for MaskedText {
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct AppSettings {
+    /// `xphfbw.fbwInertia`: X-Plane's moments of inertia from FlyByWire's cfg and the load (`inertia.rs`).
+    pub fbw_inertia: bool,
     /// `xphfbw.ilsSource` is SCENERY: localizers come from X-Plane's own
     /// navaid files, scenery packs included, instead of the navigation data.
     pub ils_from_scenery: bool,
@@ -170,6 +172,7 @@ pub struct AppSettings {
 impl Default for AppSettings {
     fn default() -> Self {
         Self {
+            fbw_inertia: false,
             ils_from_scenery: false,
             registration: String::new(),
             msn: String::new(),
@@ -249,6 +252,7 @@ fn parse(map: &Map<String, Value>) -> AppSettings {
     let defaults = AppSettings::default();
     let copilot_mode = as_bool(map, "copilotMode", false);
     AppSettings {
+        fbw_inertia: as_bool(map, "fbwInertia", defaults.fbw_inertia),
         ils_from_scenery: as_text(map, "ilsSource").eq_ignore_ascii_case("SCENERY"),
         registration: as_text(map, "registration").to_ascii_uppercase(),
         msn: as_text(map, "msn"),
@@ -494,6 +498,10 @@ pub fn glass_selection_raw() -> String {
         .and_then(|t| serde_json::from_str::<Value>(&t).ok())
         .and_then(|v| v.get("glass").and_then(Value::as_str).map(str::to_string))
         .unwrap_or_default()
+}
+
+pub fn fbw_inertia() -> bool {
+    current().fbw_inertia
 }
 
 pub fn current() -> AppSettings {

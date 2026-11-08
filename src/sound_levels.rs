@@ -23,6 +23,19 @@ pub enum Group {
 
 const GROUPS: [Group; 6] = [Group::Engines, Group::Airframe, Group::Weather, Group::Cockpit, Group::Atc, Group::Cabin];
 
+/// Each group's level at 100 %: the pack mixed for its own aircraft sits well under FlyByWire's callouts and chimes.
+const BASE_GAIN: [f32; 6] = [2.2, 2.0, 1.2, 1.4, 1.0, 1.0];
+
+/// 3D range (min, max m) for the groups heard outside, so the far default chase view is in earshot; None keeps the pack's.
+const RANGE: [Option<(f32, f32)>; 6] = [Some((60., 3000.)), Some((40., 1200.)), None, None, None, None];
+
+/// FMOD_STUDIO_EVENT_PROPERTY_MINIMUM_DISTANCE and _MAXIMUM_DISTANCE (fmod_studio_common.h).
+const PROPERTY_MINIMUM_DISTANCE: i32 = 3;
+const PROPERTY_MAXIMUM_DISTANCE: i32 = 4;
+
+/// How often new event instances are found and set.
+const REAPPLY_S: f64 = 0.5;
+
 pub const SETTINGS: [&str; 8] = [
     "SOUND_LEVEL_MASTER",
     "SOUND_LEVEL_ENGINES",
@@ -89,6 +102,7 @@ type GetStudio = unsafe extern "C" fn() -> *mut c_void;
 type GetEventById = unsafe extern "C" fn(*mut c_void, *const Guid, *mut *mut c_void) -> i32;
 type GetInstanceList = unsafe extern "C" fn(*mut c_void, *mut *mut c_void, i32, *mut i32) -> i32;
 type SetVolume = unsafe extern "C" fn(*mut c_void, f32) -> i32;
+type SetProperty = unsafe extern "C" fn(*mut c_void, i32, f32) -> i32;
 
 #[cfg(windows)]
 extern "system" {
@@ -101,6 +115,7 @@ struct Fmod {
     by_id: GetEventById,
     instances: GetInstanceList,
     set_volume: SetVolume,
+    set_property: Option<SetProperty>,
 }
 
 impl Fmod {
@@ -122,6 +137,7 @@ impl Fmod {
                 by_id: std::mem::transmute::<*mut c_void, GetEventById>(f("FMOD_Studio_System_GetEventByID")?),
                 instances: std::mem::transmute::<*mut c_void, GetInstanceList>(f("FMOD_Studio_EventDescription_GetInstanceList")?),
                 set_volume: std::mem::transmute::<*mut c_void, SetVolume>(f("FMOD_Studio_EventInstance_SetVolume")?),
+                set_property: f("FMOD_Studio_EventInstance_SetProperty").map(|p| std::mem::transmute::<*mut c_void, SetProperty>(p)),
             })
         }
     }
@@ -139,6 +155,7 @@ impl Fmod {
                 by_id: std::mem::transmute::<*mut c_void, GetEventById>(f(c"FMOD_Studio_System_GetEventByID")?),
                 instances: std::mem::transmute::<*mut c_void, GetInstanceList>(f(c"FMOD_Studio_EventDescription_GetInstanceList")?),
                 set_volume: std::mem::transmute::<*mut c_void, SetVolume>(f(c"FMOD_Studio_EventInstance_SetVolume")?),
+                set_property: f(c"FMOD_Studio_EventInstance_SetProperty").map(|p| std::mem::transmute::<*mut c_void, SetProperty>(p)),
             })
         }
     }
@@ -151,6 +168,7 @@ pub struct SoundLevels {
     fmod: Option<Fmod>,
     applied: [f32; 6],
     resolved: bool,
+    since_s: f64,
 }
 
 impl SoundLevels {
@@ -167,14 +185,15 @@ impl SoundLevels {
             descriptions: Vec::new(),
             applied: [1.0; 6],
             resolved: false,
+            since_s: REAPPLY_S,
         }
     }
 
-    pub fn update(&mut self, vars: &mut Vars) {
+    pub fn update(&mut self, vars: &mut Vars, delta: f64) {
         let level = |vars: &mut Vars, i: usize| (vars.read(&self.ids[i]) / 100.).clamp(0., 1.) as f32;
         let master = level(vars, 0);
         FBW_GAIN.store((master * level(vars, 7)).to_bits(), Ordering::Relaxed);
-        let wanted: [f32; 6] = std::array::from_fn(|g| master * level(vars, g + 1));
+        let wanted: [f32; 6] = std::array::from_fn(|g| master * level(vars, g + 1) * BASE_GAIN[g]);
         let Some(fmod) = &self.fmod else { return };
         if !self.resolved {
             let system = unsafe { (fmod.studio)() };
@@ -194,18 +213,27 @@ impl SoundLevels {
             crate::log(&format!("sound levels: {} of the pack's {} events found", self.descriptions.len(), self.events.len()));
             self.resolved = true;
         }
-        if wanted.iter().all(|&w| w == 1.0) && self.applied.iter().all(|&a| a == 1.0) {
+        // Instances come and go as the .snd starts and stops events, so new ones are found twice a second.
+        self.since_s += delta;
+        if wanted == self.applied && self.since_s < REAPPLY_S {
             return;
         }
+        self.since_s = 0.;
         let mut list = [std::ptr::null_mut(); 32];
         for (d, group) in &self.descriptions {
-            let volume = wanted[GROUPS.iter().position(|g| g == group).unwrap_or(0)];
+            let g = GROUPS.iter().position(|x| x == group).unwrap_or(0);
             let mut n = 0;
             if unsafe { (fmod.instances)(*d, list.as_mut_ptr(), list.len() as i32, &mut n) } != 0 {
                 continue;
             }
             for &instance in &list[..n.clamp(0, list.len() as i32) as usize] {
-                unsafe { (fmod.set_volume)(instance, volume) };
+                unsafe { (fmod.set_volume)(instance, wanted[g]) };
+                if let (Some(set), Some((min, max))) = (fmod.set_property, RANGE[g]) {
+                    unsafe {
+                        set(instance, PROPERTY_MINIMUM_DISTANCE, min);
+                        set(instance, PROPERTY_MAXIMUM_DISTANCE, max);
+                    }
+                }
             }
         }
         self.applied = wanted;

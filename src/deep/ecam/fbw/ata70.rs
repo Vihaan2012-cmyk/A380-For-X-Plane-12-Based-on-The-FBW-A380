@@ -968,8 +968,8 @@ pub fn wire(v: &mut Vec<FbwProc>) {
                 "ENG n REVERSER ENERGIZED",
                 Level::Advisory,
                 sd_page::ENG,
-                var(&format!("A32NX_ENG_{eng}_REV_ENERGIZED")).on(),
-                "the reverse-thrust lever is selected for this engine, independent of the sleeve's actual position",
+                var(&format!("A32NX_ENG_{eng}_REV_ENERGIZED_FAULT")).on(),
+                "FCOM: on ground energized without a deploy order, in flight energized with the tertiary lock failed",
             )
             .confirm(0.0)
             .inhibit(&[phase::AT_OR_ABOVE_80_KT, phase::AT_OR_ABOVE_V1, phase::LIFT_OFF, phase::AT_OR_ABOVE_400_FT, phase::TOUCH_DOWN]),

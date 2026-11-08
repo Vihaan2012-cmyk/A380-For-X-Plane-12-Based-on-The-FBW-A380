@@ -21,11 +21,13 @@ CABIN_PREFIXES = ("a380_cockpit_", "a380_cabin_")
 OUT_OF_SIGHT = {
     "a380_engdress_trent.obj", "a380_engdress_gp.obj", "a380_engine_covers.obj", "a380_engine_covers_gp.obj",
     "a380_sep_scars.obj", "a380_evac_slides.obj", "a380_door_arms.obj", "a380_walkaround.obj",
+    "a380_exterior_005.obj", "a380_exterior_009.obj", "a380_exterior_009_hail.obj",
 }
 EYE = "fbw/anim/eye_in_flight_deck"
 CABIN = "fbw/anim/cabin_hidden"
 CABIN_GATE = f"ANIM_hide 0.5 1.5 {CABIN}"
 ACFS = ("A380.acf",)
+RAIN_FLAG = 0x2000
 
 
 def z_range(path):
@@ -116,9 +118,11 @@ def main(aircraft_dir, backup_dir, dry=False):
         data = path.read_bytes()
         text = data.decode("latin-1")
         index = {v.strip(): k for k, v in re.findall(r"^P _obja/(\d+)/_v10_att_file_stl (.+)$", text, re.M)}
+        flags = {k: int(v) for k, v in re.findall(r"^P _obja/(\d+)/_obj_flags (\d+)", text, re.M)}
         changed = 0
         for n, d in plan.items():
-            if n in index:
+            # X-Plane refuses a hide dataref on an object that shows outside rain (flag 0x2000).
+            if n in index and not flags.get(index[n], 0) & RAIN_FLAG:
                 data, c = set_hide(data, index[n], d)
                 changed += c
         path.write_bytes(data)

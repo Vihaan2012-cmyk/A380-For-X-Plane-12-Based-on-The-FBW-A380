@@ -305,21 +305,9 @@ impl Circuits {
 /// for — a real circuit's.
 pub const PANEL_ONLY_BASE: usize = 10_000;
 
-/// The A380X cockpit model's own overhead/avionics-bay circuit-breaker panel
-/// (`a380_cockpit.gltf`, node names `CB_*`), checked against every
-/// [`parse_circuits`] type and `Name:` field in [`SYSTEMS_CFG`]: none match.
-/// FlyByWire's simplified MSFS electrical model has no `CIRCUIT_*` for ATC,
-/// FMC, CIDS, GCU or any other of these labels — real A380 avionics-bay
-/// breakers systems.cfg never represents as their own circuit (CB-002).
-///
-/// Each still gets its own writable, default-closed breaker dataref here
-/// (`CIRCUIT BREAKER CLOSED:<PANEL_ONLY_BASE + index>`) so the modelled
-/// geometry (60 `CB_*` nodes minus the 8 unlabelled `CB_EMPTYn` spare/blank
-/// positions below) can be made clickable in X-Plane; pulling one currently
-/// gates nothing further downstream (nothing in [`Circuits`] knows about a
-/// number outside [`SYSTEMS_CFG`], and `powered`/`breaker_closed` already
-/// handle an unknown number safely). Wiring a real consumer to one of these
-/// is stage 3 work (see the module doc and CB-002), not this list.
+/// The overhead RESET buttons (FCOM PRO-SUP-24-00), node names `CB_*` in the cockpit model.
+/// Each has a writable, default-closed dataref `CIRCUIT BREAKER CLOSED:<PANEL_ONLY_BASE + index>`;
+/// `breakers::reset_buttons` gives every one its computer and keeps it in step with `L:A32NX_RESET_PANEL_<name>`.
 ///
 /// Keep this exact order and spelling in sync with the converter's own copy
 /// (`msfs2xp-aircraft/src/main.rs` `PANEL_CB_NODES`) — the two crates don't

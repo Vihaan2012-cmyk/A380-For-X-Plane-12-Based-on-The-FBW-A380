@@ -10,13 +10,20 @@ use super::{FlapsConf, SlatFlapControlComputerMisc};
 pub(super) struct SlatsChannel {
     demanded_angle: Angle,
     feedback_angle: Angle,
+    powered: bool,
 }
 impl SlatsChannel {
     pub(super) fn new() -> Self {
         Self {
             demanded_angle: Angle::new::<degree>(0.),
             feedback_angle: Angle::new::<degree>(0.),
+            powered: true,
         }
+    }
+
+    /// Off while its overhead reset button is pulled: its motor brake holds and it commands nothing.
+    pub(super) fn set_powered(&mut self, powered: bool) {
+        self.powered = powered;
     }
 
     // Returns a slat demanded angle in FPPU reference degree (feedback sensor)
@@ -55,6 +62,9 @@ impl SlatsChannel {
 // are held in position and can't move.
 impl ValveBlock for SlatsChannel {
     fn get_pob_status(&self) -> SolenoidStatus {
+        if !self.powered {
+            return SolenoidStatus::DeEnergised;
+        }
         let demanded_angle = self.get_demanded_angle();
         let feedback_angle = self.get_feedback_angle();
         let in_target_position =
@@ -66,6 +76,9 @@ impl ValveBlock for SlatsChannel {
     }
 
     fn get_command_status(&self) -> Option<ChannelCommand> {
+        if !self.powered {
+            return None;
+        }
         let demanded_angle = self.get_demanded_angle();
         let feedback_angle = self.get_feedback_angle();
         let in_target_position = SlatFlapControlComputerMisc::in_positioning_threshold_range(

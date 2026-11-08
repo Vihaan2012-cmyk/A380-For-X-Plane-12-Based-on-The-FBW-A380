@@ -23,9 +23,10 @@ import {
   MathUtils,
   PathVector,
   NdPwpSymbolTypeFlags,
+  SimVarString,
 } from '@flybywiresim/fbw-sdk';
 
-import { Coordinates, distanceTo } from 'msfs-geo';
+import { Coordinates, distanceTo, placeBearingDistance } from 'msfs-geo';
 import { FmsSymbolsData } from '../../FmsSymbolsPublisher';
 import { MapParameters } from '../utils/MapParameters';
 import { NDSimvars } from '../../NDSimvarPublisher';
@@ -39,6 +40,22 @@ import { PseudoWaypointLayer } from './PseudoWaypointLayer';
 import { GenericFcuEvents } from '../../types/GenericFcuEvents';
 import { MapOptions } from '../../types/MapOptions';
 import { GenericTawsEvents } from '../../types/GenericTawsEvents';
+import { PaintUtils } from './PaintUtils';
+
+/** The FMS's FLS beam, published by aircraft that have one (A380 FGDataPublisher). */
+interface FlsBeamTopics {
+  'fg.fls.beam': number;
+  'fg.fls.anchorLat': number;
+  'fg.fls.anchorLong': number;
+  'fg.fls.course': number;
+  'fg.fls.anchorPseudo': number;
+  'fg.fls.ident0': number;
+  'fg.fls.ident1': number;
+}
+
+/** FCOM DSC-22-FMS: the FLS beam is a magenta dotted line 80 NM long. */
+const FLS_BEAM_NM = 80;
+const FLS_DOTS = [3, 7];
 
 // TODO move this somewhere better, need to move TCAS stuff into fbw-sdk
 enum TaRaIntrusion {
@@ -131,6 +148,14 @@ export class CanvasMap extends View<CanvasMapProps> {
 
   private lastFrameTimestamp: number = 0;
 
+  private readonly fls = { beam: 0, lat: 0, long: 0, course: 0, pseudo: 0, ident: [0, 0], ls: false };
+
+  /** Something on the map changed since the canvas was last drawn. */
+  private dirty = true;
+
+  /** The view the canvas was last drawn for. */
+  private drawn = { lat: 0, long: 0, rotation: 0, range: 0, radius: 0, bias: 0, mode: -2, at: 0 };
+
   afterRender(node: ViewNode) {
     super.afterRender(node);
 
@@ -196,6 +221,7 @@ export class CanvasMap extends View<CanvasMapProps> {
     });
 
     sub.topic('vectorsActive').listen((data: PathVector[]) => {
+      this.dirty = true;
       this.vectors[EfisVectorsGroup.ACTIVE].length = 0;
       if (data) {
         this.vectors[EfisVectorsGroup.ACTIVE].push(...data);
@@ -203,6 +229,7 @@ export class CanvasMap extends View<CanvasMapProps> {
     });
 
     sub.topic('vectorsActiveEosid').listen((data: PathVector[]) => {
+      this.dirty = true;
       this.vectors[EfisVectorsGroup.ACTIVE_EOSID].length = 0;
       if (data) {
         this.vectors[EfisVectorsGroup.ACTIVE_EOSID].push(...data);
@@ -210,6 +237,7 @@ export class CanvasMap extends View<CanvasMapProps> {
     });
 
     sub.topic('vectorsDashed').listen((data: PathVector[]) => {
+      this.dirty = true;
       this.vectors[EfisVectorsGroup.DASHED].length = 0;
       if (data) {
         this.vectors[EfisVectorsGroup.DASHED].push(...data);
@@ -217,6 +245,7 @@ export class CanvasMap extends View<CanvasMapProps> {
     });
 
     sub.topic('vectorsTemporary').listen((data: PathVector[]) => {
+      this.dirty = true;
       this.vectors[EfisVectorsGroup.TEMPORARY].length = 0;
       if (data) {
         this.vectors[EfisVectorsGroup.TEMPORARY].push(...data);
@@ -224,6 +253,7 @@ export class CanvasMap extends View<CanvasMapProps> {
     });
 
     sub.topic('vectorsMissed').listen((data: PathVector[]) => {
+      this.dirty = true;
       this.vectors[EfisVectorsGroup.MISSED].length = 0;
       if (data) {
         this.vectors[EfisVectorsGroup.MISSED].push(...data);
@@ -231,6 +261,7 @@ export class CanvasMap extends View<CanvasMapProps> {
     });
 
     sub.topic('vectorsAlternate').listen((data: PathVector[]) => {
+      this.dirty = true;
       this.vectors[EfisVectorsGroup.ALTERNATE].length = 0;
       if (data) {
         this.vectors[EfisVectorsGroup.ALTERNATE].push(...data);
@@ -238,10 +269,45 @@ export class CanvasMap extends View<CanvasMapProps> {
     });
 
     sub.topic('vectorsSecondary').listen((data: PathVector[]) => {
+      this.dirty = true;
       this.vectors[EfisVectorsGroup.SECONDARY].length = 0;
       if (data) {
         this.vectors[EfisVectorsGroup.SECONDARY].push(...data);
       }
+    });
+
+    const fls = this.props.bus.inbox<FlsBeamTopics & GenericFcuEvents>();
+    fls.topic('fg.fls.beam').listen((v) => {
+      this.fls.beam = v;
+      this.dirty = true;
+    });
+    fls.topic('fg.fls.anchorLat').listen((v) => {
+      this.fls.lat = v;
+      this.dirty = true;
+    });
+    fls.topic('fg.fls.anchorLong').listen((v) => {
+      this.fls.long = v;
+      this.dirty = true;
+    });
+    fls.topic('fg.fls.course').listen((v) => {
+      this.fls.course = v;
+      this.dirty = true;
+    });
+    fls.topic('fg.fls.anchorPseudo').listen((v) => {
+      this.fls.pseudo = v;
+      this.dirty = true;
+    });
+    fls.topic('fg.fls.ident0').listen((v) => {
+      this.fls.ident[0] = v;
+      this.dirty = true;
+    });
+    fls.topic('fg.fls.ident1').listen((v) => {
+      this.fls.ident[1] = v;
+      this.dirty = true;
+    });
+    fls.topic('efisLsActive').listen((v) => {
+      this.fls.ls = v;
+      this.dirty = true;
     });
 
     sub.topic('traffic').listen((data: NdTraffic[]) => {
@@ -278,6 +344,7 @@ export class CanvasMap extends View<CanvasMapProps> {
   }
 
   private handleNewSymbols(symbols: NdSymbol[]) {
+    this.dirty = true;
     this.symbols.length = 0;
     this.symbols.push(...symbols);
 
@@ -334,6 +401,7 @@ export class CanvasMap extends View<CanvasMapProps> {
   }
 
   private handleNewTraffic(newTraffic: NdTraffic[]) {
+    this.dirty = true;
     this.traffic.length = 0; // Reset traffic display
     if (this.mapMode.get() !== EfisNdMode.PLAN) {
       newTraffic.forEach((intruder: NdTraffic) => {
@@ -411,7 +479,44 @@ export class CanvasMap extends View<CanvasMapProps> {
     this.trafficLayer.data = this.traffic; // Populate with new traffic
   }
 
+  /**
+   * Whether the canvas needs drawing again: new data, or the view moved by half a pixel, turned by a tenth of a
+   * degree or changed scale. Redrawing an unchanged map made Chromium repaint the whole ND every frame.
+   */
+  private needsDraw(now: number): boolean {
+    const d = this.drawn;
+    const view = {
+      lat: this.mapCenterLat.get(),
+      long: this.mapCenterLong.get(),
+      rotation: this.mapRotation.get(),
+      range: this.mapRangeRadius.get(),
+      radius: this.mapPixelRadius.get(),
+      bias: this.mapCenterYBias.get(),
+      mode: this.mapMode.get(),
+    };
+    const [x, y] = this.mapParams.coordinatesToXYy({ lat: d.lat, long: d.long });
+    const moved = Math.hypot(x, y - view.bias);
+    const turned = Math.abs(((view.rotation - d.rotation + 540) % 360) - 180);
+    const changed =
+      this.dirty ||
+      !(moved < 0.5) ||
+      turned > 0.1 ||
+      view.range !== d.range ||
+      view.radius !== d.radius ||
+      view.bias !== d.bias ||
+      view.mode !== d.mode ||
+      now - d.at > 1000;
+    if (changed) {
+      this.drawn = { ...view, at: now };
+      this.dirty = false;
+    }
+    return changed;
+  }
+
   private handleFrame(_deltaTime: number) {
+    if (!this.needsDraw(this.lastFrameTimestamp)) {
+      return;
+    }
     const canvas = this.canvasRef.target;
     const context = canvas.getContext('2d');
 
@@ -449,6 +554,7 @@ export class CanvasMap extends View<CanvasMapProps> {
         context.stroke();
       }
     }
+    this.paintFlsBeam(context, size);
     // reset line dash
     context.setLineDash(NO_DASHES);
 
@@ -466,6 +572,41 @@ export class CanvasMap extends View<CanvasMapProps> {
 
     this.trafficLayer.paintShadowLayer(context, size, size);
     this.trafficLayer.paintColorLayer(context, size, size);
+  }
+
+  /** Shown with an NPA and LS on, to 80 NM range in ARC or PLAN and 160 NM in ROSE NAV (FCOM DSC-22-FMS). */
+  private paintFlsBeam(context: CanvasRenderingContext2D, size: number) {
+    const mode = this.mapMode.get();
+    const radius = this.mapRangeRadius.get();
+    const range = mode === EfisNdMode.ARC ? radius : radius * 2;
+    const shown =
+      ((mode === EfisNdMode.ARC || mode === EfisNdMode.PLAN) && range <= 80) ||
+      (mode === EfisNdMode.ROSE_NAV && range <= 160);
+    if (this.fls.beam < 1 || !this.fls.ls || !shown) {
+      return;
+    }
+    const anchor = { lat: this.fls.lat, long: this.fls.long };
+    const [ax, ay] = this.mapParams.coordinatesToXYy(anchor);
+    const [ex, ey] = this.mapParams.coordinatesToXYy(placeBearingDistance(anchor, this.fls.course + 180, FLS_BEAM_NM));
+    const [x, y] = [ax + size / 2, ay + size / 2];
+    context.beginPath();
+    context.strokeStyle = '#ff94ff';
+    context.lineWidth = 1.75;
+    context.setLineDash(FLS_DOTS);
+    context.moveTo(x, y);
+    context.lineTo(ex + size / 2, ey + size / 2);
+    context.stroke();
+    context.setLineDash(NO_DASHES);
+    if (this.fls.pseudo >= 1) {
+      context.beginPath();
+      context.moveTo(x - 7, y);
+      context.lineTo(x, y - 7);
+      context.lineTo(x + 7, y);
+      context.lineTo(x, y + 7);
+      context.closePath();
+      context.stroke();
+      PaintUtils.paintText(true, context, x + 15, y + 17, SimVarString.unpack(this.fls.ident), '#ff94ff');
+    }
   }
 
   private drawVector(context: CanvasRenderingContext2D, vector: PathVector, group: EfisVectorsGroup) {

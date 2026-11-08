@@ -316,6 +316,10 @@ export class Navigation implements NavigationProvider {
     return this._accuracyHigh.get();
   }
 
+  public isGpsPrimary(): boolean {
+    return this.gpsPrimary.get();
+  }
+
   public getBaroCorrectedAltitude(): number | null {
     return this.baroAltitude.get();
   }

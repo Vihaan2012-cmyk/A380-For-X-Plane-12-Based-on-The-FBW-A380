@@ -1688,7 +1688,7 @@ export class FlightManagementComputer implements FmcInterface {
     const allFmcResetsPulled =
       Vars.read('L:A32NX_RESET_PANEL_FMC_A', VarUnit.Bool) &&
       Vars.read('L:A32NX_RESET_PANEL_FMC_B', VarUnit.Bool) &&
-      Vars.read('L:A32NX_RESET_PANEL_FMC_B', VarUnit.Bool);
+      Vars.read('L:A32NX_RESET_PANEL_FMC_C', VarUnit.Bool);
     const allFmcInop =
       !Vars.read('L:A32NX_FMC_A_IS_HEALTHY', VarUnit.Bool) &&
       !Vars.read('L:A32NX_FMC_B_IS_HEALTHY', VarUnit.Bool) &&
@@ -1747,6 +1747,7 @@ export class FlightManagementComputer implements FmcInterface {
 
         const destPred = this.guidanceController.vnavDriver.getDestinationPrediction();
         this.acInterface.updateDestinationPredictions(destPred);
+        this.acInterface.updateFlsBeam();
         this.acInterface.updateIlsCourse(this.navigation.getNavaidTuner().getMmrRadioTuningStatus(1));
         this.acInterface.updatePerfSpeeds();
         this.acInterface.checkCruiseLevelChangeDueToFcu(throttledDt);

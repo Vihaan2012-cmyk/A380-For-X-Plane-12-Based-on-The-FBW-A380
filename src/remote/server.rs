@@ -226,7 +226,7 @@ pub fn serve(tag: &str, parent: Option<u32>) -> Result<(), String> {
             TICKS_SERVED.fetch_add(1, Ordering::Relaxed);
             if ticked.is_err() {
                 failed = true;
-                block.set_message("the systems panicked during a tick; they are stopped");
+                block.set_message(&format!("the systems panicked during a tick; they are stopped: {}", crate::last_panic()));
                 block.header().state.store(wire::STATE_FAILED, Ordering::Relaxed);
             }
         }

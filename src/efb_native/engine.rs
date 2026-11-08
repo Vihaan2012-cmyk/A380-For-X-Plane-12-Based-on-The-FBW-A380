@@ -1978,6 +1978,7 @@ impl<B: Backend> Efb<B> {
                 lp_editing: 0,
                 lp_armed: self.lp_armed,
                 preview: false,
+                ..Default::default()
             };
             efb_pages::ground::ground_content(&m)
         }

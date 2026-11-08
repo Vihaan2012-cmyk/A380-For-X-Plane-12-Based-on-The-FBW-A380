@@ -108,7 +108,8 @@ pub fn read_inputs(io: &mut dyn Io) -> SimInputs {
         transponder_code: n(io, "TRANSPONDER CODE:1"),
         selected_altitude: io.get("AUTOPILOT ALTITUDE LOCK VAR:3", "feet"),
         rmp_mode_active_3: io.get("L:FBW_RMP_MODE_ACTIVE_3", "enum"),
-        cpiom_d1_available: io.get("L:A32NX_CPIOM_D1_AVAIL", "bool") != 0.,
+        // The ATC application sits in CPIOM D1; its overhead ATC reset button stops it (FCOM PRO-SUP-24-46).
+        cpiom_d1_available: io.get("L:A32NX_CPIOM_D1_AVAIL", "bool") != 0. && io.get("L:A32NX_RESET_PANEL_ATC", "bool") == 0.,
         cpiom_d3_available: io.get("L:A32NX_CPIOM_D3_AVAIL", "bool") != 0.,
         ac_bus_1: on(io, "L:A32NX_ELEC_AC_1_BUS_IS_POWERED"),
         atc_button_pressed: on(io, "L:A32NX_DCDU_ATC_MSG_ACK"),

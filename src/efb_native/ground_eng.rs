@@ -103,6 +103,10 @@ enum Later {
 #[derive(Default)]
 pub struct GroundEngineer {
     pub present: bool,
+    /// The chocks-on-arrival switch is off.
+    pub no_arrival_chocks: bool,
+    /// Set when it meets the aircraft on the stand; the services page takes it.
+    pub arrived: bool,
     coming: Option<f64>,
     pub phase: String,
     pub log: Vec<(String, String)>,
@@ -406,8 +410,13 @@ impl GroundEngineer {
                     self.flown = false;
                     self.arrival = None;
                     self.present = true;
-                    self.set_chocks(true);
-                    self.say("arrival");
+                    self.arrived = true;
+                    if self.no_arrival_chocks {
+                        self.say("on_headset");
+                    } else {
+                        self.set_chocks(true);
+                        self.say("arrival");
+                    }
                 }
                 _ => {}
             }

@@ -208,7 +208,8 @@ pub enum Action {
     /// N positions, each with the code run on reaching it; `current` gives
     /// the position now. Momentary switches spring back to `rest` on release.
     States { codes: Vec<String>, current: String, knob: bool, horizontal: bool, momentary: Option<(usize, Option<f64>)> },
-    Rotary { cw: String, ccw: String, push: Option<String>, pull: Option<String>, pushpull_anim: Option<String> },
+    /// `hold_hz`: a continuous knob, turning again at this rate while held.
+    Rotary { cw: String, ccw: String, push: Option<String>, pull: Option<String>, pushpull_anim: Option<String>, hold_hz: Option<f64> },
     /// A lever dragged through its range.
     Lever,
 }
@@ -238,6 +239,18 @@ pub struct Control {
 
 fn get<'a>(l: &'a Leaf, k: &str) -> Option<&'a str> {
     l.get(k).map(str::trim)
+}
+
+/// How often a held continuous knob turns again (MSFS repeats its click increment while the mouse is down).
+const CONTINUOUS_KNOB_HZ: f64 = 6.0;
+
+/// `code` with the first `<from> <sign>` step replaced by `<to> <sign>`.
+pub fn with_step(code: &str, from: f64, to: f64, sign: &str) -> String {
+    let toks: Vec<&str> = code.split_whitespace().collect();
+    let at = toks.windows(2).position(|w| w[1] == sign && w[0].parse::<f64>().is_ok_and(|v| v == from));
+    let Some(at) = at else { return code.to_string() };
+    let to = format!("{to}");
+    toks.iter().enumerate().map(|(k, t)| if k == at { to.as_str() } else { t }).collect::<Vec<_>>().join(" ")
 }
 
 fn nonempty<'a>(l: &'a Leaf, k: &str) -> Option<&'a str> {
@@ -424,12 +437,19 @@ fn control_of(l: &Leaf) -> Option<Control> {
         }
         "ASOBO_GT_Interaction_WheelAndContinuousLeft" | "ASOBO_GT_Knob_Infinite" | "ASOBO_GT_Knob_Infinite_Push" | "ASOBO_GT_Knob_Infinite_PushPull" => {
             // The wheel's step is the one a click should take.
-            let cw = code("WHEEL_CLOCKWISE_CODE").or_else(|| code("CLOCKWISE_CODE"));
-            let ccw = code("WHEEL_ANTICLOCKWISE_CODE").or_else(|| code("ANTICLOCKWISE_CODE"));
+            // A continuous knob's turn code carries its click INCREMENT; one X-Plane step is a wheel notch.
+            let wheel = num(l, "INCREMENT").zip(num(l, "WHEEL_INCREMENT")).filter(|(i, w)| w > i && code("WHEEL_CLOCKWISE_CODE").is_none());
+            let step = |c: Option<String>, sign: &str| match (c, wheel) {
+                (Some(c), Some((i, w))) => Some(with_step(&c, i, w, sign)),
+                (c, _) => c,
+            };
+            let cw = step(code("WHEEL_CLOCKWISE_CODE").or_else(|| code("CLOCKWISE_CODE")), "+");
+            let ccw = step(code("WHEEL_ANTICLOCKWISE_CODE").or_else(|| code("ANTICLOCKWISE_CODE")), "-");
+            let hold_hz = (t == "ASOBO_GT_Interaction_WheelAndContinuousLeft").then_some(CONTINUOUS_KNOB_HZ);
             let (push, pull) = if t == "ASOBO_GT_Knob_Infinite_PushPull" { push_pull_codes(l) } else { (None, None) };
             let pushpull_anim = nonempty(l, "ANIM_NAME_PUSHPULL").filter(|_| push.is_some() || pull.is_some()).map(str::to_string);
             let action = match (cw, ccw) {
-                (Some(cw), Some(ccw)) => Ok(Action::Rotary { cw, ccw, push, pull, pushpull_anim }),
+                (Some(cw), Some(ccw)) => Ok(Action::Rotary { cw, ccw, push, pull, pushpull_anim, hold_hz }),
                 _ => Err("knob without turn code".to_string()),
             };
             let look = match t {
@@ -508,7 +528,7 @@ fn control_of(l: &Leaf) -> Option<Control> {
                     // state plus 1 (`GET p0 + (>B:<ie>_Set)`) and SET_CODE runs
                     // SET_STATE_EXTERNAL with that value; the state reads 0..100.
                     let set9 = set_from_r9.clone().unwrap_or_default();
-                    c.action = Ok(Action::Rotary { cw: format!("{current} 1 + sp9 {set9}"), ccw: format!("{current} 1 - sp9 {set9}"), push: None, pull: None, pushpull_anim: None });
+                    c.action = Ok(Action::Rotary { cw: format!("{current} 1 + sp9 {set9}"), ccw: format!("{current} 1 - sp9 {set9}"), push: None, pull: None, pushpull_anim: None, hold_hz: None });
                     c.look = Look::Code { code: current.clone(), length: 100.0 };
                 }
                 "" if t == "ASOBO_Interaction_Push_Event_Base_Template" && get_state.is_some() && set.is_some() => {
@@ -1028,6 +1048,10 @@ pub struct Script {
     pub pushpull_anim: Option<String>,
     pub repeat: Option<String>,
     pub repeat_hz: Option<f64>,
+    /// A continuous knob: held, it turns again in the held direction at this rate.
+    pub turn_hold_hz: Option<f64>,
+    /// Run once at load: a momentary switch's position variable set to its rest.
+    pub init: Option<String>,
     pub knob: bool,
     pub horizontal: bool,
 }
@@ -1568,6 +1592,11 @@ fn resolve(c: &Control, extra_look: Option<&Look>) -> Result<Binding, String> {
                 let result = if cur.contains("r[") { "s[#s] or r[0] or 0" } else { "s[#s] or 0" };
                 (format!("{}\n{cur}local now = math.floor(({result}) + 0.5)\n{table}if codes[now + 1] then codes[now + 1]({{}}, {{}}) end", locals_for(&cur)), hz)
             });
+            // A spring-loaded switch starts at its rest, not at position 0 (the rudder trim knob read as held left).
+            let init = momentary.and_then(|(rest, _)| {
+                let var = current.strip_prefix('(').and_then(|c| c.strip_suffix(')')).filter(|v| v.starts_with("L:") && !v.contains(' '))?;
+                to_lua(&format!("{rest} (>{var})"), &id).ok()
+            });
             let script = Script {
                 up: Some(go(1)),
                 down: Some(go(-1)),
@@ -1575,6 +1604,7 @@ fn resolve(c: &Control, extra_look: Option<&Look>) -> Result<Binding, String> {
                 down_release: back,
                 repeat: again.as_ref().map(|a| a.0.clone()),
                 repeat_hz: again.map(|a| a.1),
+                init,
                 knob,
                 horizontal,
                 ..Default::default()
@@ -1585,7 +1615,7 @@ fn resolve(c: &Control, extra_look: Option<&Look>) -> Result<Binding, String> {
             });
             Ok(mk(Click::Script(script), look, targets))
         }
-        Action::Rotary { cw, ccw, push, pull, pushpull_anim } => {
+        Action::Rotary { cw, ccw, push, pull, pushpull_anim, hold_hz } => {
             let (cw_lua, ccw_lua) = (to_lua(&cw, &id)?, to_lua(&ccw, &id)?);
             let turn_targets = targets_of(&[&cw, &ccw]);
             if turn_targets.0.is_empty() && turn_targets.1.is_empty() {
@@ -1618,7 +1648,7 @@ fn resolve(c: &Control, extra_look: Option<&Look>) -> Result<Binding, String> {
                     return Ok(mk(Click::Axis { dref: d, v0: lo, v1: hi, step, knob: true, horizontal: false }, Some(look), targets));
                 }
             }
-            let script = Script { up: Some(wrap_fn(&cw_lua)), down: Some(wrap_fn(&ccw_lua)), knob: true, ..Default::default() };
+            let script = Script { up: Some(wrap_fn(&cw_lua)), down: Some(wrap_fn(&ccw_lua)), knob: true, turn_hold_hz: hold_hz, ..Default::default() };
             Ok(mk(Click::Script(script), looks, targets))
         }
     }

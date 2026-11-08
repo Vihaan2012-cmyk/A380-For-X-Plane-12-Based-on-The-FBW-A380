@@ -11,7 +11,7 @@ const MAX_LOD: f32 = 3.0;
 /// Device texels per metre of glass and the glass centre in the OBJ frame
 /// (`a380_cockpit_003.obj`, the same frame as `pilots_head_*`). The FCU, rudder
 /// trim and battery strips stretch their pages unevenly and are left out.
-const GLASS: &[(&str, f32, [f32; 3])] = &[
+pub(crate) const GLASS: &[(&str, f32, [f32; 3])] = &[
     ("SCREEN_DU_PFDL", 4897., [-0.559, 2.690, -32.932]),
     ("SCREEN_DU_NDL", 4897., [-0.369, 2.690, -32.932]),
     ("SCREEN_DU_PFDR", 4897., [0.556, 2.690, -32.932]),
@@ -29,6 +29,22 @@ const GLASS: &[(&str, f32, [f32; 3])] = &[
     ("SCREEN_DU_RMP_2", 17700., [0.182, 2.398, -32.383]),
     ("SCREEN_DU_RMP_3", 17700., [0.238, 3.576, -31.987]),
 ];
+
+/// Whether a point in the OBJ frame is inside the view, `margin` in tangent units around its edges.
+/// `tan_half` is (horizontal, vertical) tan of half the field of view; head angles in degrees.
+pub fn in_view(eye: [f32; 3], psi_deg: f32, the_deg: f32, tan_half: (f32, f32), point: [f32; 3], margin: f32) -> bool {
+    let (psi, the) = (psi_deg.to_radians(), the_deg.to_radians());
+    let f = [psi.sin() * the.cos(), the.sin(), -psi.cos() * the.cos()];
+    let r = [psi.cos(), 0., psi.sin()];
+    let u = [-psi.sin() * the.sin(), the.cos(), psi.cos() * the.sin()];
+    let v = [point[0] - eye[0], point[1] - eye[1], point[2] - eye[2]];
+    let dot = |a: [f32; 3]| a[0] * v[0] + a[1] * v[1] + a[2] * v[2];
+    let z = dot(f);
+    if z <= 0.05 {
+        return false;
+    }
+    (dot(r) / z).abs() <= tan_half.0 + margin && (dot(u) / z).abs() <= tan_half.1 + margin
+}
 
 /// Device texels behind one monitor pixel.
 pub fn minification(texels_per_m: f32, distance_m: f32, focal_px: f32) -> f32 {
@@ -94,6 +110,17 @@ mod tests {
         let focal = 3.08 * 1440. * 0.5;
         let lod = prefilter_lod(minification(GLASS[0].1, distance, focal));
         assert!((lod - 1.1).abs() < 0.15, "{lod}");
+    }
+
+    #[test]
+    fn the_pfd_is_in_view_looking_ahead_and_out_of_it_looking_out_the_side_window() {
+        let eye = [-0.524f32, 3.158, -32.07];
+        let pfd = GLASS[0].2;
+        let fov = (35f32.to_radians().tan(), 22f32.to_radians().tan());
+        assert!(in_view(eye, 0., -15., fov, pfd, 0.1));
+        assert!(!in_view(eye, -90., 0., fov, pfd, 0.1), "left window");
+        assert!(!in_view(eye, 0., 60., fov, pfd, 0.1), "overhead");
+        assert!(in_view(eye, 40., -20., fov, GLASS[5].2, 0.1), "SD from a glance right and down");
     }
 
     #[test]

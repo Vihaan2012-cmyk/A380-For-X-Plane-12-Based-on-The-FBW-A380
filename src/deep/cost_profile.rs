@@ -45,11 +45,13 @@ mod tests {
         const FRAMES: usize = 600;
         for profile in profiles().into_iter().filter(|p| ["cruise", "ground_apu", "takeoff_roll"].contains(&p.name)) {
             let mut areas = areas();
-            let truth0 = (profile.truth)();
+            // The audit profiles buy simulated time with long frames; the sim runs about 40 fps.
+            let truth0 = crate::deep::live::Truth { dt_s: 0.025, ..(profile.truth)() };
             let faults = Faults::default();
             let mut last = PublishedFrame::default();
             let mut tick = vec![0f64; areas.len()];
             let mut publish = vec![0f64; areas.len()];
+            let mut digest = vec![0u64; areas.len()];
             let mut derived_total = 0f64;
             let mut published_count = 0usize;
             for frame in 0..WARM + FRAMES {
@@ -75,7 +77,11 @@ mod tests {
                 published.begin();
                 for (i, area) in areas.iter().enumerate() {
                     let t = Instant::now();
-                    area.publish(&mut |k, v| published.set(k, v));
+                    let h = &mut digest[i];
+                    area.publish(&mut |k, v| {
+                        *h = h.rotate_left(5) ^ v.to_bits();
+                        published.set(k, v)
+                    });
                     if measure {
                         publish[i] += t.elapsed().as_secs_f64();
                     }
@@ -85,12 +91,12 @@ mod tests {
                 last = published;
             }
             let per = |s: f64| s * 1e3 / FRAMES as f64;
-            let mut rows: Vec<(f64, f64, &str)> = areas.iter().enumerate().map(|(i, a)| (per(tick[i]), per(publish[i]), a.name())).collect();
+            let mut rows: Vec<(f64, f64, &str, u64)> = areas.iter().enumerate().map(|(i, a)| (per(tick[i]), per(publish[i]), a.name(), digest[i])).collect();
             rows.sort_by(|a, b| (b.0 + b.1).total_cmp(&(a.0 + a.1)));
             let total: f64 = rows.iter().map(|r| r.0 + r.1).sum::<f64>() + per(derived_total);
             println!("\n{}: {total:.3} ms per frame ({published_count} published values), derived {:.3}", profile.name, per(derived_total));
-            for (t, p, name) in rows {
-                println!("  {:>7.3} tick {:>7.3} publish  {name}", t, p);
+            for (t, p, name, d) in rows {
+                println!("  {:>7.3} tick {:>7.3} publish  {name:<20} {d:016x}", t, p);
             }
         }
     }

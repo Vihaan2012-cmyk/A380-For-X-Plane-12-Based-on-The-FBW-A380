@@ -345,7 +345,86 @@ impl Filter {
 // ---------------------------------------------------------------------------
 
 const SWEEPS: usize = 10;
-const BISECT_ITERS: usize = 28;
+/// Bracket width the root search stops at, Pa: what 28 halvings of the bracket used to reach.
+const ROOT_TOL_PA: f64 = 0.25;
+const ROOT_MAX_ITERS: usize = 80;
+
+/// First bracket step out from the last pressure, Pa; each further step is four times the last.
+const WARM_STEP_PA: f64 = 2_000.0;
+
+/// The root of a residual that rises with pressure, searched outward from `guess` (last sweep's pressure), or the
+/// search bracket's floor or ceiling when the root lies beyond it.
+fn solve_node(r: &dyn Fn(f64) -> f64, guess: f64) -> f64 {
+    let (lo_limit, hi_limit) = (PRESSURE_BRACKET_LO_PA, PRESSURE_BRACKET_HI_PA);
+    let p0 = guess.clamp(lo_limit, hi_limit);
+    let r0 = r(p0);
+    let (mut near, mut r_near, mut step) = (p0, r0, WARM_STEP_PA);
+    if r0 <= 0.0 {
+        loop {
+            let x = (p0 + step).min(hi_limit);
+            let r_x = r(x);
+            if r_x >= 0.0 {
+                return root_in_bracket(r, near, x, r_near, r_x);
+            }
+            if x >= hi_limit {
+                return hi_limit;
+            }
+            (near, r_near, step) = (x, r_x, step * 4.0);
+        }
+    }
+    loop {
+        let x = (p0 - step).max(lo_limit);
+        let r_x = r(x);
+        if r_x <= 0.0 {
+            return root_in_bracket(r, x, near, r_x, r_near);
+        }
+        if x <= lo_limit {
+            return lo_limit;
+        }
+        (near, r_near, step) = (x, r_x, step * 4.0);
+    }
+}
+
+/// The root of a residual that rises with pressure, given `r(lo) <= 0 <= r(hi)`: Illinois false position, halving
+/// instead whenever a step fails to halve the bracket, so it is never slower than bisection by more than one step in two.
+fn root_in_bracket(r: &dyn Fn(f64) -> f64, mut lo: f64, mut hi: f64, mut r_lo: f64, mut r_hi: f64) -> f64 {
+    let (mut true_lo, mut true_hi) = (r_lo, r_hi);
+    let mut last_kept = 0i8;
+    let mut bisect_next = false;
+    for _ in 0..ROOT_MAX_ITERS {
+        let width = hi - lo;
+        if width <= ROOT_TOL_PA {
+            break;
+        }
+        let secant = (lo * r_hi - hi * r_lo) / (r_hi - r_lo);
+        let x = if bisect_next || !(secant > lo && secant < hi) { 0.5 * (lo + hi) } else { secant };
+        let r_x = r(x);
+        if r_x <= 0.0 {
+            lo = x;
+            r_lo = r_x;
+            true_lo = r_x;
+            if last_kept == 1 {
+                r_hi *= 0.5;
+            }
+            last_kept = 1;
+        } else {
+            hi = x;
+            r_hi = r_x;
+            true_hi = r_x;
+            if last_kept == -1 {
+                r_lo *= 0.5;
+            }
+            last_kept = -1;
+        }
+        bisect_next = hi - lo > 0.5 * width;
+    }
+    // The final bracket's straight line through its true residuals, not its midpoint, which would bias a slow decay.
+    if true_hi > true_lo {
+        (lo * true_hi - hi * true_lo) / (true_hi - true_lo)
+    } else {
+        0.5 * (lo + hi)
+    }
+}
 /// Solver pressure bracket, gauge Pa: generous vs. a 5000 psi service system
 /// (about -6 to +8700 psi) so the true root is always inside it; not a
 /// physical limit, just the bisection's search range.
@@ -358,6 +437,8 @@ pub struct Network {
     /// Line indices touching each node, precomputed once (topology is fixed
     /// after construction; only `open_fraction`/`leak_area_m2` change).
     adjacency: Vec<Vec<usize>>,
+    /// The other nodes each node's lines reach, so a node whose neighbours have not moved is not solved again.
+    neighbours: Vec<Vec<usize>>,
     /// Fluid the last `step` failed to account for, m^3 (positive =
     /// destroyed): the sum over nodes of net inflow minus what the node's
     /// compliance stored. Zero when every node converged; nonzero when a
@@ -376,7 +457,22 @@ impl Network {
                 adjacency[j].push(li);
             }
         }
-        Self { nodes, lines, adjacency, last_imbalance_m3: 0.0 }
+        let neighbours = (0..nodes.len())
+            .map(|i| {
+                let mut near: Vec<usize> = adjacency[i]
+                    .iter()
+                    .flat_map(|&li| [lines[li].from, lines[li].to])
+                    .filter_map(|e| match e {
+                        Endpoint::Node(j) if j != i => Some(j),
+                        _ => None,
+                    })
+                    .collect();
+                near.sort_unstable();
+                near.dedup();
+                near
+            })
+            .collect();
+        Self { nodes, lines, adjacency, neighbours, last_imbalance_m3: 0.0 }
     }
 
     /// One implicit step. `injections_m3_s[i]` is the external flow into
@@ -423,8 +519,18 @@ impl Network {
         let cap: Vec<f64> = self.nodes.iter().enumerate().map(|(i, nd)| nd.capacitance(p_old[i])).collect();
         let mut pressures: Vec<f64> = p_old.clone();
 
+        // A node's residual reads only its neighbours' pressures, so it is solved again only once one has moved.
+        let mut clock = 1usize;
+        let mut changed_at = vec![1usize; n];
+        let mut solved_at = vec![0usize; n];
         for _ in 0..SWEEPS {
+            let mut moved = false;
             for i in 0..n {
+                if solved_at[i] != 0 && self.neighbours[i].iter().all(|&j| changed_at[j] <= solved_at[i]) {
+                    continue;
+                }
+                let before = pressures[i];
+
                 let residual = |p_i: f64| -> f64 {
                     let mut q = injections_m3_s.get(i).copied().unwrap_or(0.0);
                     if let Some(Some(f)) = pressure_dependent.get(i) {
@@ -435,26 +541,17 @@ impl Network {
                     }
                     cap[i] * (p_i - p_old[i]) / dt - q
                 };
-                let (mut lo, mut hi) = (PRESSURE_BRACKET_LO_PA, PRESSURE_BRACKET_HI_PA);
-                let r_lo = residual(lo);
-                let r_hi = residual(hi);
-                if r_lo > 0.0 {
-                    pressures[i] = lo; // true root below the bracket; sit at the floor
-                    continue;
+                let p_new = solve_node(&residual, before);
+                pressures[i] = p_new;
+                clock += 1;
+                solved_at[i] = clock;
+                if p_new.to_bits() != before.to_bits() {
+                    changed_at[i] = clock;
+                    moved = true;
                 }
-                if r_hi < 0.0 {
-                    pressures[i] = hi; // true root above the bracket; sit at the ceiling
-                    continue;
-                }
-                for _ in 0..BISECT_ITERS {
-                    let mid = 0.5 * (lo + hi);
-                    if residual(mid) <= 0.0 {
-                        lo = mid;
-                    } else {
-                        hi = mid;
-                    }
-                }
-                pressures[i] = 0.5 * (lo + hi);
+            }
+            if !moved {
+                break;
             }
         }
 

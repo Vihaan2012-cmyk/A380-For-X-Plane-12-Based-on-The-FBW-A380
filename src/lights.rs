@@ -315,6 +315,9 @@ struct MsfsLight {
 
 /// X-Plane's battery arrays are this long.
 const XP_BATTERIES: usize = 8;
+const XP_BUSES: usize = 6;
+/// The acf's nominal battery voltage (`_nom_bat_volt`).
+const XP_BUS_VOLTS: f32 = 28.0;
 
 pub struct Lights {
     // X-Plane exterior light datarefs.
@@ -333,6 +336,13 @@ pub struct Lights {
     xp_battery_on: Option<DataRef>,
     xp_battery_charge: Option<DataRef>,
     xp_battery_full_wh: [f32; XP_BATTERIES],
+    xp_battery_max_wh: Option<DataRef>,
+    xp_bus_volts: Option<DataRef>,
+    /// Logged once a flight: an exterior light switched on while X-Plane's own bus is dead.
+    dark_bus_logged: bool,
+    dark_bus_s: f64,
+    /// Our DC buses; while any is powered X-Plane's own buses are held live for its light objects.
+    our_dc_buses: [VariableIdentifier; 3],
     // Window heat / wipers.
     window_heat_on: Option<DataRef>,
     wiper_speed_switch: Option<DataRef>,
@@ -483,6 +493,11 @@ impl Lights {
             xp_battery_on: xplm.find("sim/cockpit2/electrical/battery_on"),
             xp_battery_charge: xplm.find("sim/cockpit/electrical/battery_charge_watt_hr"),
             xp_battery_full_wh: [0.0; XP_BATTERIES],
+            xp_battery_max_wh: xplm.find("sim/aircraft/electrical/battery_watt_hr_max"),
+            xp_bus_volts: xplm.find("sim/cockpit2/electrical/bus_volts"),
+            dark_bus_logged: false,
+            dark_bus_s: 0.0,
+            our_dc_buses: ["ELEC_DC_1_BUS_IS_POWERED", "ELEC_DC_2_BUS_IS_POWERED", "ELEC_DC_ESS_BUS_IS_POWERED"].map(|n| vars.get(n.to_string())),
             window_heat_on: xplm.find("sim/cockpit2/ice/ice_window_heat_on"),
             wiper_speed_switch: xplm.find("sim/cockpit2/switches/wiper_speed_switch"),
 
@@ -654,9 +669,11 @@ impl Lights {
         if let Some(d) = self.xp_battery_charge {
             let mut wh = [0.0f32; XP_BATTERIES];
             let n = xplm.get_vf(d, &mut wh).min(XP_BATTERIES);
+            // The acf's own capacity, so a battery X-Plane loaded flat is filled too.
+            let capacity = self.xp_battery_max_wh.map_or(0.0, |m| xplm.get_f(m));
             for i in 0..n {
                 let full = &mut self.xp_battery_full_wh[i];
-                *full = full.max(wh[i]);
+                *full = full.max(wh[i]).max(capacity);
                 if wh[i] < *full * 0.9 {
                     xplm.set_vf_at(d, i, *full);
                 }
@@ -669,6 +686,38 @@ impl Lights {
         let commands = COMMANDS.lock().map(|mut q| std::mem::take(&mut *q)).unwrap_or_default();
 
         self.keep_xp_batteries_up(xplm);
+        // X-Plane's own buses read 0 V with its batteries on and charged, which keeps its light objects dark; while our
+        // buses are powered, its buses are set live after its electrical step, before the frame draws.
+        if let Some(d) = self.xp_bus_volts {
+            if self.our_dc_buses.iter().any(|id| vars.read(id) != 0.) {
+                xplm.set_vf(d, &[XP_BUS_VOLTS; XP_BUSES]);
+            }
+        }
+        // X-Plane draws its own exterior light objects only off a live bus of its own.
+        if !self.dark_bus_logged {
+            let lit = [self.beacon_on, self.navigation_lights_on, self.strobe_lights_on].iter().any(|d| d.is_some_and(|d| xplm.get_i(d) != 0));
+            let mut volts = [0.0f32; 4];
+            let n = self.xp_bus_volts.map_or(0, |d| xplm.get_vf(d, &mut volts));
+            let dark = lit && n > 0 && volts[..n.min(4)].iter().all(|v| *v < 10.0);
+            self.dark_bus_s = if dark { self.dark_bus_s + delta } else { 0.0 };
+            if self.dark_bus_s > 5.0 {
+                self.dark_bus_logged = true;
+                let ints = |name: &str, k: usize| xplm.find(name).map(|d| { let mut v = vec![0i32; k]; let n = xplm.get_vi(d, &mut v); v.truncate(n); v });
+                let floats = |name: &str, k: usize| xplm.find(name).map(|d| { let mut v = vec![0f32; k]; let n = xplm.get_vf(d, &mut v); v.truncate(n); v });
+                let one = |name: &str| xplm.find(name).map(|d| xplm.get_i(d));
+                crate::log(&format!(
+                    "lights: an exterior light is on but X-Plane's own buses read {:?} V, so X-Plane draws it dark; battery on {:?}, charge {:?} Wh, battery volts {:?}, override_electrical {:?}, battery failures {:?} {:?} {:?}",
+                    &volts[..n.min(4)],
+                    ints("sim/cockpit2/electrical/battery_on", 3),
+                    floats("sim/cockpit/electrical/battery_charge_watt_hr", 3),
+                    floats("sim/cockpit2/electrical/battery_voltage_actual_volts", 3),
+                    one("sim/operation/override/override_electrical"),
+                    one("sim/operation/failures/rel_batter0"),
+                    one("sim/operation/failures/rel_batter1"),
+                    one("sim/operation/failures/rel_batter2"),
+                ));
+            }
+        }
         let strobe_auto = self.strobe_auto(xplm);
         for (group, dataref, auto) in [
             (&mut self.beacon, self.beacon_on, None),

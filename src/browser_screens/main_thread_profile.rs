@@ -251,7 +251,10 @@ fn open_this_thread() -> *mut c_void {
 /// On the main thread, on its own stack.
 pub fn start() {
     static WANTED: OnceLock<bool> = OnceLock::new();
-    if !*WANTED.get_or_init(|| std::env::var("FBW_MAIN_THREAD_PROFILE").is_ok_and(|v| v == "1")) {
+    let from_settings = || {
+        crate::xp::system_path().and_then(|r| crate::efb_settings::load(&r).get("xphfbw.mainThreadProfile").map(|v| v.as_bool() == Some(true) || v.as_str() == Some("true")))
+    };
+    if !*WANTED.get_or_init(|| std::env::var("FBW_MAIN_THREAD_PROFILE").is_ok_and(|v| v == "1") || from_settings().unwrap_or(false)) {
         return;
     }
     let Ok(mut running) = RUNNING.lock() else { return };

@@ -4395,6 +4395,9 @@ struct A380HydraulicBrakeSteerComputerUnit {
     // `allow_autobrake_arming`, `update_steering_demands`).
     powered_by: ElectricalBusType,
     is_powered: bool,
+    // The overhead BSCS 1 and BSCS 2 reset buttons: with both pulled the computer is off (FCOM PRO-SUP-24-32).
+    bscs_reset_pulled_ids: [VariableIdentifier; 2],
+    bscs_reset_pulled: [bool; 2],
 
     autobrake_controller: A380AutobrakeController,
     parking_brake_demand: bool,
@@ -4485,6 +4488,11 @@ impl A380HydraulicBrakeSteerComputerUnit {
 
             powered_by: Self::POWERED_BY,
             is_powered: false,
+            bscs_reset_pulled_ids: [
+                context.get_identifier("ELEC_BSCS_1_BREAKER_OPEN".to_owned()),
+                context.get_identifier("ELEC_BSCS_2_BREAKER_OPEN".to_owned()),
+            ],
+            bscs_reset_pulled: [false; 2],
 
             parking_brake_demand: true,
             left_brake_pilot_input: Ratio::new::<ratio>(0.0),
@@ -4832,11 +4840,15 @@ impl SimulationElement for A380HydraulicBrakeSteerComputerUnit {
     }
 
     fn receive_power(&mut self, buses: &impl ElectricalBuses) {
-        self.is_powered = buses.is_powered(self.powered_by);
+        self.is_powered = buses.is_powered(self.powered_by)
+            && !(self.bscs_reset_pulled[0] && self.bscs_reset_pulled[1]);
     }
 
     fn read(&mut self, reader: &mut SimulatorReader) {
         self.parking_brake_demand = reader.read(&self.park_brake_lever_pos_id);
+        for k in 0..2 {
+            self.bscs_reset_pulled[k] = reader.read(&self.bscs_reset_pulled_ids[k]);
+        }
 
         // An unpowered BSCU cannot compute antiskid, so it cannot be active
         // even with the cockpit switch on; this cascades through the

@@ -312,6 +312,8 @@ pub struct WindowHeatFaults {
     pub film_defect: f64,
     pub controller_fault: f64,
     pub sensor_fault: f64,
+    /// Its controller has no power: no heat at all.
+    pub unpowered: bool,
 }
 
 pub struct WindowHeat {
@@ -352,7 +354,7 @@ impl WindowHeat {
         // fail to regulate -- it commands full, unconditional heat
         // (a stuck contactor/failed control-logic scenario), the
         // dangerous failure mode for a film heater, not "fails off".
-        let commanded_on = if controller_ok { sensed_c < WINDOW_TARGET_C } else { true };
+        let commanded_on = !faults.unpowered && if controller_ok { sensed_c < WINDOW_TARGET_C } else { true };
         let nameplate_power_w = if commanded_on { WINDOW_RATED_W } else { 0.0 };
 
         let bulk_heater_w_m2 = nameplate_power_w / WINDOW_AREA_M2;

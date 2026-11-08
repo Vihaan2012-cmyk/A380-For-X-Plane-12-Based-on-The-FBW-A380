@@ -916,6 +916,11 @@ pub trait Area {
     /// given.
     fn tick(&mut self, truth: &Truth, faults: &Faults);
 
+    /// Tick on every nth frame with the frames' summed dt; it still publishes every frame.
+    fn tick_every(&self) -> u32 {
+        1
+    }
+
     /// Publish what the rest of the aircraft can see: the variables this
     /// area's `registry.rs` names in its ECAM triggers, plus anything the
     /// EFB's Study pages read. Called after every area has ticked.
@@ -1077,12 +1082,14 @@ pub struct Deep {
     /// tick, in area order. Only magnitudes above zero are kept, so this is
     /// empty on a healthy aircraft and the plugin pays nothing for it.
     derived: Vec<DerivedFailure>,
+    /// Per area: frames since its last tick, and their summed dt.
+    pending: Vec<(u32, f64)>,
 }
 
 impl Deep {
     /// Every area that has a live system, constructed cold.
     pub fn new() -> Self {
-        Self { areas: Vec::new(), truth: Truth::default(), last_published: PublishedFrame::default(), derived: Vec::new() }
+        Self { areas: Vec::new(), truth: Truth::default(), last_published: PublishedFrame::default(), derived: Vec::new(), pending: Vec::new() }
     }
 
     pub fn with_area(mut self, area: Box<dyn Area>) -> Self {
@@ -1115,9 +1122,18 @@ impl Deep {
     pub fn tick(&mut self, truth: Truth, faults: &Faults, out: &mut dyn FnMut(&str, f64)) {
         self.truth = truth;
         self.truth.published = std::mem::take(&mut self.last_published);
-        for area in &mut self.areas {
-            area.tick(&self.truth, faults);
+        self.pending.resize(self.areas.len(), (0, 0.0));
+        let dt = self.truth.dt_s;
+        for (area, pending) in self.areas.iter_mut().zip(self.pending.iter_mut()) {
+            pending.0 += 1;
+            pending.1 += dt;
+            if pending.0 >= area.tick_every() {
+                self.truth.dt_s = pending.1;
+                area.tick(&self.truth, faults);
+                *pending = (0, 0.0);
+            }
         }
+        self.truth.dt_s = dt;
         // The areas' verdicts on FlyByWire's own components, collected
         // after every area has ticked and before any has published, so a
         // verdict is this frame's and not half of one. See

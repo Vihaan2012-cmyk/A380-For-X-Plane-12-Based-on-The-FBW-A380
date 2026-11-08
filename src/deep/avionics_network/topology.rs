@@ -105,6 +105,8 @@ pub struct EndSystemSpec {
     /// ARINC 653 partitions (applications) hosted on this module. A pure
     /// IOM with no application layer still gets one driver partition.
     pub partitions: Vec<&'static str>,
+    /// The DC main it is fed from, 0 for DC 1 (and the essential side) or 1 for DC 2.
+    pub bus: usize,
 }
 
 #[derive(Clone, Debug)]
@@ -270,6 +272,7 @@ pub fn a380_reference_topology() -> NetworkTopology {
             bay: "AVIONICS_BAY_FWD",
             attach: [map_switch(3), map_switch(3)],
             partitions: vec!["FWS", "ECAM"],
+            bus: 0,
         },
         EndSystemSpec {
             name: "CPIOM-A1",
@@ -277,6 +280,7 @@ pub fn a380_reference_topology() -> NetworkTopology {
             bay: "AVIONICS_BAY_FWD",
             attach: [map_switch(7), map_switch(7)],
             partitions: vec!["PRIM", "FG"],
+            bus: 1,
         },
         EndSystemSpec {
             name: "CPIOM-F1",
@@ -284,6 +288,7 @@ pub fn a380_reference_topology() -> NetworkTopology {
             bay: "AVIONICS_BAY_AFT",
             attach: [map_switch(5), map_switch(5)],
             partitions: vec!["FUEL"],
+            bus: 0,
         },
         EndSystemSpec {
             name: "IOM-A1",
@@ -291,6 +296,7 @@ pub fn a380_reference_topology() -> NetworkTopology {
             bay: "AVIONICS_BAY_FWD",
             attach: [map_switch(1), map_switch(1)],
             partitions: vec!["IO_DRIVER"],
+            bus: 1,
         },
         EndSystemSpec {
             name: "IOM-A5",
@@ -298,6 +304,210 @@ pub fn a380_reference_topology() -> NetworkTopology {
             bay: "AVIONICS_BAY_AFT",
             attach: [map_switch(3), map_switch(3)],
             partitions: vec!["IO_DRIVER"],
+            bus: 0,
+        },
+        // The rest of FlyByWire's modules (avionics_data_communication_network.rs io_modules/cpio_modules):
+        // their switches and buses from that table, CPIOM B's applications from its air conditioning, the
+        // other CPIOMs' functions by their letter (FCOM DSC-42). Their bays are GENERIC.
+        EndSystemSpec {
+            name: "IOM-A2",
+            kind: ModuleKind::Iom,
+            bay: "AVIONICS_BAY_FWD",
+            attach: [map_switch(2), map_switch(2)],
+            partitions: vec!["IO_DRIVER"],
+            bus: 1,
+        },
+        EndSystemSpec {
+            name: "IOM-A3",
+            kind: ModuleKind::Iom,
+            bay: "AVIONICS_BAY_FWD",
+            attach: [map_switch(1), map_switch(1)],
+            partitions: vec!["IO_DRIVER"],
+            bus: 0,
+        },
+        EndSystemSpec {
+            name: "IOM-A4",
+            kind: ModuleKind::Iom,
+            bay: "AVIONICS_BAY_FWD",
+            attach: [map_switch(2), map_switch(2)],
+            partitions: vec!["IO_DRIVER"],
+            bus: 1,
+        },
+        EndSystemSpec {
+            name: "IOM-A6",
+            kind: ModuleKind::Iom,
+            bay: "AVIONICS_BAY_FWD",
+            attach: [map_switch(4), map_switch(4)],
+            partitions: vec!["IO_DRIVER"],
+            bus: 1,
+        },
+        EndSystemSpec {
+            name: "IOM-A7",
+            kind: ModuleKind::Iom,
+            bay: "AVIONICS_BAY_FWD",
+            attach: [map_switch(3), map_switch(3)],
+            partitions: vec!["IO_DRIVER"],
+            bus: 0,
+        },
+        EndSystemSpec {
+            name: "IOM-A8",
+            kind: ModuleKind::Iom,
+            bay: "AVIONICS_BAY_FWD",
+            attach: [map_switch(4), map_switch(4)],
+            partitions: vec!["IO_DRIVER"],
+            bus: 1,
+        },
+        EndSystemSpec {
+            name: "CPIOM-A2",
+            kind: ModuleKind::Cpiom(CpiomType::A),
+            bay: "AVIONICS_BAY_AFT",
+            attach: [map_switch(5), map_switch(5)],
+            partitions: vec!["BLEED"],
+            bus: 0,
+        },
+        EndSystemSpec {
+            name: "CPIOM-A3",
+            kind: ModuleKind::Cpiom(CpiomType::A),
+            bay: "AVIONICS_BAY_AFT",
+            attach: [map_switch(5), map_switch(5)],
+            partitions: vec!["BLEED"],
+            bus: 0,
+        },
+        EndSystemSpec {
+            name: "CPIOM-A4",
+            kind: ModuleKind::Cpiom(CpiomType::A),
+            bay: "AVIONICS_BAY_AFT",
+            attach: [map_switch(6), map_switch(6)],
+            partitions: vec!["BLEED"],
+            bus: 1,
+        },
+        EndSystemSpec {
+            name: "CPIOM-B1",
+            kind: ModuleKind::Cpiom(CpiomType::B),
+            bay: "AVIONICS_BAY_AFT",
+            attach: [map_switch(7), map_switch(7)],
+            partitions: vec!["AGS", "CPCS", "TCS", "VCS"],
+            bus: 0,
+        },
+        EndSystemSpec {
+            name: "CPIOM-B2",
+            kind: ModuleKind::Cpiom(CpiomType::B),
+            bay: "AVIONICS_BAY_AFT",
+            attach: [map_switch(5), map_switch(5)],
+            partitions: vec!["AGS", "CPCS", "TCS", "VCS"],
+            bus: 0,
+        },
+        EndSystemSpec {
+            name: "CPIOM-B3",
+            kind: ModuleKind::Cpiom(CpiomType::B),
+            bay: "AVIONICS_BAY_AFT",
+            attach: [map_switch(5), map_switch(5)],
+            partitions: vec!["AGS", "CPCS", "TCS", "VCS"],
+            bus: 0,
+        },
+        EndSystemSpec {
+            name: "CPIOM-B4",
+            kind: ModuleKind::Cpiom(CpiomType::B),
+            bay: "AVIONICS_BAY_AFT",
+            attach: [map_switch(6), map_switch(6)],
+            partitions: vec!["AGS", "CPCS", "TCS", "VCS"],
+            bus: 1,
+        },
+        EndSystemSpec {
+            name: "CPIOM-C2",
+            kind: ModuleKind::Cpiom(CpiomType::C),
+            bay: "AVIONICS_BAY_FWD",
+            attach: [map_switch(4), map_switch(4)],
+            partitions: vec!["FWS"],
+            bus: 1,
+        },
+        EndSystemSpec {
+            name: "CPIOM-D1",
+            kind: ModuleKind::Cpiom(CpiomType::D),
+            bay: "AVIONICS_BAY_FWD",
+            attach: [map_switch(3), map_switch(3)],
+            partitions: vec!["ATC"],
+            bus: 0,
+        },
+        EndSystemSpec {
+            name: "CPIOM-D3",
+            kind: ModuleKind::Cpiom(CpiomType::D),
+            bay: "AVIONICS_BAY_FWD",
+            attach: [map_switch(3), map_switch(3)],
+            partitions: vec!["ATC"],
+            bus: 0,
+        },
+        EndSystemSpec {
+            name: "CPIOM-E1",
+            kind: ModuleKind::Cpiom(CpiomType::E),
+            bay: "AVIONICS_BAY_AFT",
+            attach: [map_switch(5), map_switch(5)],
+            partitions: vec!["ELEC"],
+            bus: 0,
+        },
+        EndSystemSpec {
+            name: "CPIOM-E2",
+            kind: ModuleKind::Cpiom(CpiomType::E),
+            bay: "AVIONICS_BAY_AFT",
+            attach: [map_switch(6), map_switch(6)],
+            partitions: vec!["ELEC"],
+            bus: 1,
+        },
+        EndSystemSpec {
+            name: "CPIOM-F2",
+            kind: ModuleKind::Cpiom(CpiomType::F),
+            bay: "AVIONICS_BAY_AFT",
+            attach: [map_switch(6), map_switch(6)],
+            partitions: vec!["FUEL"],
+            bus: 1,
+        },
+        EndSystemSpec {
+            name: "CPIOM-F3",
+            kind: ModuleKind::Cpiom(CpiomType::F),
+            bay: "AVIONICS_BAY_AFT",
+            attach: [map_switch(5), map_switch(5)],
+            partitions: vec!["FUEL"],
+            bus: 0,
+        },
+        EndSystemSpec {
+            name: "CPIOM-F4",
+            kind: ModuleKind::Cpiom(CpiomType::F),
+            bay: "AVIONICS_BAY_AFT",
+            attach: [map_switch(6), map_switch(6)],
+            partitions: vec!["FUEL"],
+            bus: 1,
+        },
+        EndSystemSpec {
+            name: "CPIOM-G1",
+            kind: ModuleKind::Cpiom(CpiomType::G),
+            bay: "AVIONICS_BAY_AFT",
+            attach: [map_switch(7), map_switch(7)],
+            partitions: vec!["GEAR"],
+            bus: 0,
+        },
+        EndSystemSpec {
+            name: "CPIOM-G2",
+            kind: ModuleKind::Cpiom(CpiomType::G),
+            bay: "AVIONICS_BAY_AFT",
+            attach: [map_switch(6), map_switch(6)],
+            partitions: vec!["GEAR"],
+            bus: 1,
+        },
+        EndSystemSpec {
+            name: "CPIOM-G3",
+            kind: ModuleKind::Cpiom(CpiomType::G),
+            bay: "AVIONICS_BAY_AFT",
+            attach: [map_switch(7), map_switch(7)],
+            partitions: vec!["GEAR"],
+            bus: 1,
+        },
+        EndSystemSpec {
+            name: "CPIOM-G4",
+            kind: ModuleKind::Cpiom(CpiomType::G),
+            bay: "AVIONICS_BAY_AFT",
+            attach: [map_switch(6), map_switch(6)],
+            partitions: vec!["GEAR"],
+            bus: 1,
         },
     ];
 
@@ -380,9 +590,8 @@ mod tests {
     fn switch_ports_lists_neighbours_then_attached_end_systems() {
         let t = a380_reference_topology();
         let ports = t.switch_ports(NetworkSide::A, 2); // switch "3"
-        // switch 2 (id 3) neighbours [0,3,4,6,7] plus CPIOM-C1 and IOM-A5
-        // (both attach[0] == 2).
-        assert_eq!(ports.len(), 5 + 2);
+        // switch 2 (id 3) neighbours [0,3,4,6,7] plus CPIOM-C1, IOM-A5, IOM-A7, CPIOM-D1 and CPIOM-D3.
+        assert_eq!(ports.len(), 5 + 5);
         assert!(ports.contains(&NodeId::End(0)));
         assert!(ports.contains(&NodeId::End(4)));
     }

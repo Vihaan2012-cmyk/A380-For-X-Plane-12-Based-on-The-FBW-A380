@@ -2198,7 +2198,9 @@ void A380PrimComputerFg::step()
       &A380PrimComputerFg_DWork.sf_MATLABFunction_pq0);
     rtb_y_av = (rtb_y_gn && (((rtb_y != 0U) && A380PrimComputerFg_B.BusAssignment_i.fg_logic.mode_sync_active) || (tmp &&
       A380PrimComputerFg_DWork.Delay_DSTATE_c.longitudinal_modes.gs_trk_active &&
-      A380PrimComputerFg_DWork.Delay_DSTATE_c.lateral_modes.loc_trk_active && rtb_LowerRelop1)));
+      A380PrimComputerFg_DWork.Delay_DSTATE_c.lateral_modes.loc_trk_active && rtb_LowerRelop1 &&
+      // xp: LAND tracks ILS or GLS beams only (FCOM DSC-22-FG); the MMR marks FLS deviations with a negative frequency.
+      (A380PrimComputerFg_U.in.data.bus_inputs.ils_1_bus.ils_frequency_mhz.Data >= 0.0F))));
     A380PrimComputerFg_MATLABFunction_a(rtb_y_av, A380PrimComputerFg_U.in.data.time.dt,
       A380PrimComputerFg_P.ConfirmNode_isRisingEdge_ok, A380PrimComputerFg_P.ConfirmNode_timeDelay_gg, &rtb_LowerRelop1,
       &A380PrimComputerFg_DWork.sf_MATLABFunction_it);

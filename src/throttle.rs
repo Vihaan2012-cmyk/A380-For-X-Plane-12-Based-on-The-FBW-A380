@@ -173,11 +173,25 @@ pub fn angle_for_axis(table: &LookupTable, value: f64, has_reverser: bool) -> f6
     }
 }
 
+/// A plain throttle's forward travel at idle, CLB, FLX/MCT and TOGA: manual thrust gets the first 70 %.
+const XPLANE_FORWARD: [(f64, f64); 4] = [(0., IDLE_HI), (0.70, (CLB_LO + CLB_HI) / 2.), (0.85, (FLX_LO + FLX_HI) / 2.), (1., TOGA_HI)];
+
+fn piecewise(points: &[(f64, f64)], x: f64, forward: bool) -> f64 {
+    let pts: Vec<(f64, f64)> = points.iter().map(|p| if forward { (p.0, p.1) } else { (p.1, p.0) }).collect();
+    let x = x.clamp(pts[0].0, pts[pts.len() - 1].0);
+    for w in pts.windows(2) {
+        if x <= w[1].0 {
+            return w[0].1 + (x - w[0].0) / (w[1].0 - w[0].0) * (w[1].1 - w[0].1);
+        }
+    }
+    pts[pts.len() - 1].1
+}
+
 /// X-Plane's throttle, -1 full reverse to 1 full forward, as FlyByWire's axis.
 pub fn axis_for_xplane(ratio: f64) -> f64 {
     let r = ratio.clamp(-1., 1.);
     if r >= 0. {
-        IDLE_HI + r * (TOGA_HI - IDLE_HI)
+        piecewise(&XPLANE_FORWARD, r, true)
     } else {
         IDLE_LO + (-r) * (REV_LO - IDLE_LO)
     }
@@ -186,7 +200,7 @@ pub fn axis_for_xplane(ratio: f64) -> f64 {
 /// The inverse: FlyByWire's axis as X-Plane's throttle.
 pub fn xplane_for_axis(axis: f64) -> f64 {
     if axis >= IDLE_HI {
-        ((axis - IDLE_HI) / (TOGA_HI - IDLE_HI)).clamp(0., 1.)
+        piecewise(&XPLANE_FORWARD, axis, false).clamp(0., 1.)
     } else if axis <= IDLE_LO {
         -((axis - IDLE_LO) / (REV_LO - IDLE_LO)).clamp(0., 1.)
     } else {
@@ -754,6 +768,14 @@ mod tests {
         for r in [-1.0, -0.4, 0.0, 0.3, 0.8, 1.0] {
             assert!(close(xplane_for_axis(axis_for_xplane(r)), r), "{r}");
         }
+    }
+
+    #[test]
+    fn a_plain_throttle_reaches_climb_thrust_at_seventy_percent_of_its_travel() {
+        let t = thrust_lever_angle_table();
+        assert!(close(angle_for_axis(&t, axis_for_xplane(0.70), true), TLA_CLIMB));
+        assert!(close(angle_for_axis(&t, axis_for_xplane(0.85), true), TLA_FLEX_MCT));
+        assert!(angle_for_axis(&t, axis_for_xplane(0.5), true) < TLA_CLIMB, "half travel is still manual thrust");
     }
 
     #[test]

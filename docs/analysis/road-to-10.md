@@ -82,7 +82,7 @@ Items marked *sim* need X-Plane test flights to finish.
 - #11 FWS 1+2 fault on a first runway start, ND flight plan dead; #12 black screens on a second
   session; #13 rudder trim knob blacks MFD/ND/OIS/EFB.
 
-## 9. acsys (separate product)
+## 9. EasyAcft (separate product, formerly acsys)
 
-- Whole-aircraft systems library for X-Plane: Rust core, C header, TOML aircraft files + C API,
-  rustc-style checker, MPL-2.0, clean room. Plan document still to write.
+- Built at `E:/EasyAcft`: whole-aircraft systems library for X-Plane, Rust core, C header, TOML
+  aircraft files, rustc-style checker, Studio, and an importer that reads this plugin.

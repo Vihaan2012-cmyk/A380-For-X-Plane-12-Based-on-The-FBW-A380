@@ -721,6 +721,10 @@ impl Prims {
         // writes those from the same sim data here, so both paths agree.
         let course = self.names.get(vars, "A32NX_FM_LS_COURSE");
         self.ils[i] = ils_bus(&self.nav, course);
+        // FLS deviations carry a negative frequency, which keeps the FG out of LAND (patched A380PrimComputerFg.cpp).
+        if self.names.get(vars, "A32NX_FLS_1_ACTIVE") >= 1. {
+            self.ils[i].ils_frequency_mhz.Data = -1.;
+        }
     }
 
     /// updateRadioReceiver (cpp:1134-1165) with the option off (cpp:1155-1161):
@@ -1301,6 +1305,7 @@ impl Prims {
         let fm = &mut input.adcn_inputs.fms;
         fm.fm_valid = 1;
         fm.active_fms_flight_phase = n.get(vars, "A32NX_FMGC_FLIGHT_PHASE") as i32;
+        // An FLS approach arms like an ILS one (APPR arms LOC and G/S through the FG's LAND arming); LAND itself stays off.
         fm.selected_approach_type = if n.get(vars, "A32NX_FG_RNAV_APP_SELECTED") != 0. { 2 } else { 1 };
         fm.backbeam_selected = 0;
         // localizer.distance (CalculatedRadioReceiver.cpp:1158): the PRIMs'

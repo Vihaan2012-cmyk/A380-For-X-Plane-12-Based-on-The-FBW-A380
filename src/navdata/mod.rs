@@ -45,7 +45,18 @@ use std::sync::Arc;
 use std::thread::JoinHandle;
 use std::time::{Duration, Instant};
 
-pub use db::LoadStats;
+pub use db::{distance_m, LoadStats};
+
+/// Where the aircraft is parked: the airport and, if any, the startup location it sits on.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct Stand {
+    pub icao: String,
+    pub airport: String,
+    pub city: String,
+    pub gate: Option<String>,
+    /// apt.dat's location type: gate, tie_down, hangar or misc.
+    pub kind: String,
+}
 
 /// One facility [`NavData::nearby`] found: its MSFS ICAO, ident, position, whether it is a
 /// terminal (airport) facility, and for a VHF navaid its MSFS `VorType`.
@@ -322,6 +333,28 @@ impl NavData {
                 NearbyHit { icao: db.icao(r).v1(), ident, lat, lon, terminal, vor_kind }
             })
             .collect()
+    }
+
+    /// The airport within 8 km of a position and, when one is within 90 m, its nearest startup location.
+    pub fn stand_at(&self, lat: f64, lon: f64) -> Option<Stand> {
+        let db = self.db.as_ref()?;
+        let mut best: Option<(f64, u32)> = None;
+        db.within(lat, lon, 8_000., |r, d| {
+            if let FacRef::Airport(i) = r {
+                if best.is_none_or(|(bd, _)| d < bd) {
+                    best = Some((d, i));
+                }
+            }
+        });
+        let a = &db.airports[best?.1 as usize];
+        let gates = db.sources.apt_files.get(a.file as usize).and_then(|p| apt::gates(p, a.offset).ok()).unwrap_or_default();
+        let gate = gates
+            .iter()
+            .map(|g| (db::distance_m(lat, lon, g.lat, g.lon), g))
+            .filter(|(d, _)| *d < 90.)
+            .min_by(|a, b| a.0.total_cmp(&b.0))
+            .map(|(_, g)| (g.name.clone(), g.kind.clone()));
+        Some(Stand { icao: a.ident.as_str().to_string(), airport: a.name.clone(), city: a.city.clone(), gate: gate.as_ref().map(|g| g.0.clone()), kind: gate.map(|g| g.1).unwrap_or_default() })
     }
 
     #[allow(dead_code)] // For the runtime and tools.

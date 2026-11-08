@@ -108,6 +108,20 @@ pub struct NetworkGraph<'t> {
 struct Memo {
     paths: RefCell<HashMap<(usize, NodeId, NodeId), Option<Vec<NodeId>>>>,
     loads: RefCell<HashMap<(usize, NodeId, NodeId), PortLoad>>,
+    reach: RefCell<HashMap<(usize, NodeId), Vec<bool>>>,
+}
+
+/// A memoized graph's adjacency and answers, kept between ticks while the routing faults stay the same.
+pub struct GraphCache {
+    adjacency: [HashMap<NodeId, Vec<NodeId>>; 2],
+    memo: Memo,
+}
+
+impl GraphCache {
+    /// The same adjacency with no answers, for a new fault set.
+    pub fn forget(self) -> Self {
+        Self { memo: Memo::default(), ..self }
+    }
 }
 
 impl<'t> NetworkGraph<'t> {
@@ -115,6 +129,16 @@ impl<'t> NetworkGraph<'t> {
     /// the live area's graph, built fresh every tick for that tick's faults.
     pub fn memoized(topology: &'t NetworkTopology) -> Self {
         Self { memo: Some(Memo::default()), ..Self::new(topology) }
+    }
+
+    /// A memoized graph that starts from `cache`'s answers, which must be for this same topology and fault set.
+    pub fn from_cache(topology: &'t NetworkTopology, cache: GraphCache) -> Self {
+        Self { topology, adjacency: cache.adjacency, memo: Some(cache.memo) }
+    }
+
+    /// The adjacency and answers, for [`Self::from_cache`] next tick.
+    pub fn into_cache(self) -> GraphCache {
+        GraphCache { adjacency: self.adjacency, memo: self.memo.unwrap_or_default() }
     }
 
     pub fn new(topology: &'t NetworkTopology) -> Self {
@@ -166,6 +190,17 @@ impl<'t> NetworkGraph<'t> {
     /// networks each frame; one search per source instead of one per pair
     /// was most of this area's frame time.
     pub fn reachable_ends(&self, side: NetworkSide, from: NodeId, faults: &NetworkFaults) -> Vec<bool> {
+        let Some(memo) = &self.memo else { return self.walk_ends(side, from, faults) };
+        let key = (side.index(), from);
+        if let Some(ends) = memo.reach.borrow().get(&key) {
+            return ends.clone();
+        }
+        let ends = self.walk_ends(side, from, faults);
+        memo.reach.borrow_mut().insert(key, ends.clone());
+        ends
+    }
+
+    fn walk_ends(&self, side: NetworkSide, from: NodeId, faults: &NetworkFaults) -> Vec<bool> {
         let mut ends = vec![false; self.topology.end_systems.len()];
         if !self.node_up(side, from, faults) {
             return ends;

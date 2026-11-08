@@ -172,6 +172,9 @@ const WINDOW_KEYS: [&str; 2] = ["L", "R"];
 fn fire(n: u16) -> u64 {
     failure_id(RegArea::FireIce, ATA_FIRE, n)
 }
+/// The first AICU's failure number in this area; AICU 2's follows it.
+const AICU_FAILURE: u16 = 51;
+
 fn ice(n: u16) -> u64 {
     failure_id(RegArea::FireIce, ATA_ICE, n)
 }
@@ -666,7 +669,10 @@ impl FireIceLive {
         // `truth.controls.wing_anti_ice_selected`): a stuck-open valve
         // still floors flow regardless of command, but stuck-*closed* and
         // duct-leak now have a real commanded flow to act against.
-        let wing_command = on(truth.controls.wing_anti_ice_selected);
+        // FCOM DSC-30-10-10: AICU 1 drives the outer wing valves and engines 2 and 4, AICU 2 the inner valves and
+        // engines 1 and 3; an engine valve opens when its AICU is gone, the wing is lost only with both.
+        let aicu_lost = [faults.get(ice(AICU_FAILURE)) >= 1.0, faults.get(ice(AICU_FAILURE + 1)) >= 1.0];
+        let wing_command = on(truth.controls.wing_anti_ice_selected && !(aicu_lost[0] && aicu_lost[1]));
         let wing_beta = cond.beta0(WING_LEADING_EDGE.characteristic_length_m);
         for s in 0..2usize {
             let base = 1 + (s as u16) * 3;
@@ -697,7 +703,7 @@ impl FireIceLive {
                 valve_stuck_open: faults.get(ice(base + 1)),
                 duct_leak: faults.get(ice(base + 2)),
             };
-            let nacelle_command = on(truth.controls.nacelle_anti_ice_selected[e]);
+            let nacelle_command = on(truth.controls.nacelle_anti_ice_selected[e] || aicu_lost[if e % 2 == 1 { 0 } else { 1 }]);
             let out = self.nacelle_anti_ice[e].step(nacelle_command, cond.static_air_c, cond.recovery_c, cond.lwc_kg_m3, nacelle_beta, cond.tas_m_s, cond.ambient_pressure_pa, &f, dt);
             self.nacelle_anti_ice_out[e] = out;
             let natural_ff = self.nacelle_ice_out[e].freezing_fraction;
@@ -729,6 +735,7 @@ impl FireIceLive {
                 film_defect: faults.get(ice(base)),
                 controller_fault: faults.get(ice(base + 1)),
                 sensor_fault: faults.get(ice(base + 2)),
+                unpowered: aicu_lost[w],
             };
             self.window_out[w] = self.windows[w].step(cond.static_air_c, cond.recovery_c, cond.lwc_kg_m3, window_beta, cond.tas_m_s, cond.ambient_pressure_pa, &f, dt);
 
@@ -1312,6 +1319,24 @@ mod tests {
         assert_eq!(stuck_map["ANTI_ICE_WING_L_VALVE_OPEN"], 0.0, "a valve stuck closed must deliver no bleed even though the crew selected anti-ice on");
         assert!(healthy_map["ANTI_ICE_WING_L_VALVE_OPEN"] > 0.0, "the healthy wing must actually flow once selected on");
         assert!(stuck_map["ANTI_ICE_WING_L_SURFACE_C"] < healthy_map["ANTI_ICE_WING_L_SURFACE_C"] - 5.0, "the stuck-closed wing must run colder than the heated one");
+    }
+
+    #[test]
+    fn a_lost_aicu_opens_its_engine_valves_and_drops_its_window_heat_and_both_lose_the_wing() {
+        let truth = icing_truth();
+        let selected = Truth { controls: crate::deep::live::Controls { wing_anti_ice_selected: true, ..truth.controls }, ..truth.clone() };
+        let mut one = live_system();
+        run(one.as_mut(), &selected, &Faults::from_pairs([(ice(AICU_FAILURE), 1.0)]), 300);
+        let m = published(one.as_ref());
+        assert!(m["ANTI_ICE_NACELLE2_VALVE_OPEN"] > 0.0 && m["ANTI_ICE_NACELLE4_VALVE_OPEN"] > 0.0, "AICU 1's engine valves open unpowered");
+        assert_eq!(m["ANTI_ICE_NACELLE1_VALVE_OPEN"], 0.0, "engine 1 belongs to AICU 2");
+        assert!(m["ANTI_ICE_WING_L_VALVE_OPEN"] > 0.0, "one AICU still runs the wing");
+        let mut healthy = live_system();
+        run(healthy.as_mut(), &selected, &Faults::default(), 300);
+        assert!(m["WINDOW_HEAT_L_TEMPERATURE_C"] < published(healthy.as_ref())["WINDOW_HEAT_L_TEMPERATURE_C"] - 5.0, "the captain's windows cool");
+        let mut both = live_system();
+        run(both.as_mut(), &selected, &Faults::from_pairs([(ice(AICU_FAILURE), 1.0), (ice(AICU_FAILURE + 1), 1.0)]), 300);
+        assert_eq!(published(both.as_ref())["ANTI_ICE_WING_L_VALVE_OPEN"], 0.0, "both AICUs lost: no wing anti-ice");
     }
 
     #[test]

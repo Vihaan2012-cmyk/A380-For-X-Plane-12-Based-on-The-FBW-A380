@@ -826,6 +826,8 @@ fn the_rudder_trim_knob_springs_back_and_keeps_trimming_while_held() {
     assert_eq!(sc.repeat_hz, Some(40.0));
     assert!(sc.repeat.as_deref().is_some_and(|a| a.contains("XP_RUDDER_TRIM_RIGHT_PULSE") && a.contains("XP_RUDDER_TRIM_LEFT_PULSE")), "{sc:?}");
     assert!(sc.knob && sc.horizontal);
+    let init = sc.init.as_deref().unwrap_or_default();
+    assert!(init.contains("XMLVAR_RudderTrim") && init.contains("P(s, 1)") && !init.contains("PULSE"), "starts centred, firing nothing: {init}");
 }
 
 #[test]

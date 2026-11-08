@@ -560,6 +560,29 @@ fn wait_for_slot(gate: &Gate, slot: u32) -> bool {
     }
 }
 
+/// The airport map's AMDB request, answered from the plugin's data; it may wait on the AMDB Bridge, on this thread.
+fn amdb_answer(method: &str, url: &str) -> Option<(u16, String)> {
+    let until = std::time::Instant::now() + std::time::Duration::from_secs(120);
+    loop {
+        match crate::oans::plugin::amdb_fetch(method, url, url)? {
+            Some(done) => return Some(done),
+            None if std::time::Instant::now() < until => std::thread::sleep(std::time::Duration::from_millis(50)),
+            None => return Some((504, String::new())),
+        }
+    }
+}
+
+fn http_status(code: u16) -> &'static str {
+    match code {
+        200 => "200 OK",
+        400 => "400 Bad Request",
+        404 => "404 Not Found",
+        503 => "503 Service Unavailable",
+        504 => "504 Gateway Timeout",
+        _ => "500 Internal Server Error",
+    }
+}
+
 fn bridge_route(gate: &Gate, rest: &str, req: &Request) -> Reply {
     match rest {
         "hello" => hello(gate),
@@ -583,6 +606,13 @@ fn bridge_route(gate: &Gate, rest: &str, req: &Request) -> Reply {
                 400 => reply("400 Bad Request", "application/json", text),
                 503 => reply("503 Service Unavailable", "text/plain", text),
                 _ => not_found(),
+            }
+        }
+        "amdb" => {
+            let url = arg(&req.query, "u").unwrap_or_default();
+            match amdb_answer(&req.method, &url) {
+                Some((status, text)) => reply(http_status(status), "application/json", text),
+                None => not_found(),
             }
         }
         "game" => game_string(gate, view_arg(&req.query), &arg(&req.query, "n").unwrap_or_default()),

@@ -2,15 +2,15 @@
 //! `browserDisplays` setting is on. The systems run on a thread of the plugin
 //! (`FBW_SYSTEMS_IN_PROCESS=0` puts them in `fbw_a380_systems_server.exe`) and
 //! `server.rs` stands in for the rest of XPHFBW. The pages draw in our own browsers inside X-Plane's Chromium
-//! (`own_cef.rs`); `FBW_BROWSER_ROUTE=device` uses X-Plane's browser devices
+//! (`own_cef.rs`, Windows and macOS); `FBW_BROWSER_ROUTE=device` uses X-Plane's browser devices
 //! instead (`xplm_WindowContentTypeBrowser`), which X-Plane runs at about 30 Hz.
 
 mod dead_band;
 pub mod server;
-#[cfg(windows)]
+#[cfg(any(windows, target_os = "macos"))]
 pub mod own_cef;
 /// Elsewhere the pages draw on X-Plane's browser devices: `own_route` is false.
-#[cfg(not(windows))]
+#[cfg(not(any(windows, target_os = "macos")))]
 pub mod own_cef {
     use crate::xphfbw_bridge::Session;
 
@@ -41,9 +41,9 @@ pub mod own_cef {
 }
 #[cfg(windows)]
 mod main_thread_profile;
-#[cfg(any(windows, test))]
+#[cfg(any(windows, target_os = "macos", test))]
 mod paint_copy;
-#[cfg(windows)]
+#[cfg(any(windows, target_os = "macos"))]
 mod paint_thread;
 
 use std::collections::HashMap;
@@ -96,7 +96,7 @@ fn api() -> Option<Api> {
 
 pub fn own_route() -> bool {
     static OWN: OnceLock<bool> = OnceLock::new();
-    *OWN.get_or_init(|| cfg!(windows) && std::env::var("FBW_BROWSER_ROUTE").map_or(true, |v| v != "device"))
+    *OWN.get_or_init(|| cfg!(any(windows, target_os = "macos")) && std::env::var("FBW_BROWSER_ROUTE").map_or(true, |v| v != "device"))
 }
 
 /// The setting (or `FBW_BROWSER_DISPLAYS=1`), on an X-Plane that has what the route needs.
@@ -104,11 +104,13 @@ pub fn enabled() -> bool {
     static ON: OnceLock<bool> = OnceLock::new();
     *ON.get_or_init(|| {
         let wanted = std::env::var("FBW_BROWSER_DISPLAYS").map_or_else(|_| !cfg!(windows) || crate::app_settings::load_now().browser_displays, |v| v == "1");
-        if wanted && api().is_none() {
+        // Windows' own route still asks a browser device to start Chromium; macOS's
+        // X-Plane has it running already and needs none.
+        if wanted && api().is_none() && !(cfg!(target_os = "macos") && own_route()) {
             log("this X-Plane has no browser devices (12.4 or later needed); using the app");
             return false;
         }
-        #[cfg(windows)]
+        #[cfg(any(windows, target_os = "macos"))]
         if wanted && own_route() {
             if let Err(e) = xp::system_path().ok_or_else(|| "no X-Plane folder".to_string()).and_then(|root| own_cef::available(&root)) {
                 log(&format!("using the app: {e}"));
@@ -280,6 +282,10 @@ struct State {
     wanted: Vec<own_cef::Wanted>,
     browsers: Option<own_cef::Browsers>,
     boot: usize,
+    #[cfg(target_os = "macos")]
+    cef_checked_at: Option<Instant>,
+    #[cfg(target_os = "macos")]
+    cef_waits: u32,
 }
 
 // The handles are only ever used on X-Plane's main thread.
@@ -458,32 +464,24 @@ pub fn prepare_chromium() {
     }
 }
 
-/// Chromium starts when X-Plane first needs it, so a blank browser device asks for
-/// it; our browsers open once that page has loaded.
-fn tick_own(session: &Session, api: Api) {
+/// Our browsers open once X-Plane's Chromium is up.
+fn tick_own(session: &Session) {
     let Ok(mut s) = state().lock() else { return };
     let s = &mut *s;
     if s.attached_at.is_none() {
         return;
     }
     if s.browsers.is_none() {
-        if s.boot == 0 {
-            let Some(avionics) = s.avionics else { return };
-            own_cef::prepare_chromium_start();
-            let handle = create(&avionics, "A380X_BROWSER_BOOT", "A380X browser start", 16, 16, std::ptr::null_mut());
-            if handle.is_null() {
-                crate::log("browser screens: X-Plane refused the start device");
-                return;
-            }
-            let url = CString::new("about:blank").expect("no nul");
-            unsafe { (api.set_url)(handle, url.as_ptr()) };
-            s.boot = handle as usize;
-        }
-        if !CHROMIUM_UP.load(Ordering::SeqCst) {
+        if !chromium_up(s) {
             return;
         }
         s.browsers = own_cef::open_all(&s.tag, s.port, &s.wanted, fps_cap());
-        crate::log(&format!("browser screens: {} browsers opened in X-Plane's Chromium, our switches {}", s.wanted.len(), if own_cef::chromium_switches_applied() { "applied" } else { "not applied" }));
+        crate::log(&format!(
+            "browser screens: {} browsers opened in X-Plane's Chromium, our switches {}, software compositing {}",
+            s.wanted.len(),
+            if own_cef::chromium_switches_applied() { "applied" } else { "not applied" },
+            if own_cef::chromium_has_switch("disable-gpu-compositing") { "on" } else { "off" }
+        ));
     }
     let spawns = session.slots.header().ready.load(Ordering::Acquire);
     let spawned = spawns != s.spawns_seen;
@@ -495,6 +493,50 @@ fn tick_own(session: &Session, api: Api) {
             crate::log("browser screens: pages reloaded");
         }
     }
+}
+
+/// Chromium starts when X-Plane first needs it, so a blank browser device asks for
+/// it, and is up once that page has loaded.
+#[cfg(windows)]
+fn chromium_up(s: &mut State) -> bool {
+    if s.boot == 0 {
+        let (Some(avionics), Some(api)) = (s.avionics, api()) else { return false };
+        own_cef::prepare_chromium_start();
+        let handle = create(&avionics, "A380X_BROWSER_BOOT", "A380X browser start", 16, 16, std::ptr::null_mut());
+        if handle.is_null() {
+            crate::log("browser screens: X-Plane refused the start device");
+            return false;
+        }
+        let url = CString::new("about:blank").expect("no nul");
+        unsafe { (api.set_url)(handle, url.as_ptr()) };
+        s.boot = handle as usize;
+    }
+    CHROMIUM_UP.load(Ordering::SeqCst)
+}
+
+/// macOS: X-Plane starts its Chromium itself, and CEF's UI thread there can only be
+/// the AppKit main thread this runs on. Checked once a second, as CEF logs each
+/// check made before it is up.
+#[cfg(target_os = "macos")]
+fn chromium_up(s: &mut State) -> bool {
+    if s.cef_checked_at.is_some_and(|t| t.elapsed() < Duration::from_secs(1)) {
+        return false;
+    }
+    s.cef_checked_at = Some(Instant::now());
+    if own_cef::on_ui_thread() {
+        crate::log(&format!("browser screens: X-Plane's Chromium is up and this is its UI thread (after {} checks)", s.cef_waits + 1));
+        return true;
+    }
+    if s.cef_waits % 30 == 0 {
+        crate::log(&format!("browser screens: X-Plane's Chromium is not up on this thread (cef_currently_on(UI) false, {} s); the screens stay dark until it is", s.cef_waits));
+    }
+    s.cef_waits += 1;
+    false
+}
+
+#[cfg(not(any(windows, target_os = "macos")))]
+fn chromium_up(_: &mut State) -> bool {
+    false
 }
 
 pub fn detach() {
@@ -512,17 +554,63 @@ fn url_for(port: u16, index: usize, key: &str) -> CString {
 
 static REFRESH: AtomicBool = AtomicBool::new(false);
 static VIEW_OUTSIDE: AtomicBool = AtomicBool::new(false);
+/// Bit n set: `view_scale::GLASS[n]` is out of the pilot's view.
+static VIEW_HIDDEN: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
 
-/// Whether the pilot is outside, for the screens' paint rates.
+/// Whether a screen is out of the pilot's view this frame.
+pub fn screen_out_of_view(key: &str) -> bool {
+    crate::display::view_scale::GLASS.iter().position(|g| g.0.eq_ignore_ascii_case(key)).is_some_and(|i| VIEW_HIDDEN.load(Ordering::Relaxed) & (1 << i) != 0)
+}
+
+/// Whether the pilot is outside, and which screens the view misses, for the screens' paint rates.
+/// Half-angle tangents of the view from its horizontal field of view and window size; None for nonsense.
+pub fn view_tangents(fov_deg: f32, width: f32, height: f32) -> Option<(f32, f32)> {
+    if !(1. ..170.).contains(&fov_deg) || width < 1. || height < 1. {
+        return None;
+    }
+    let h = (fov_deg.to_radians() / 2.).tan();
+    Some((h, h * height / width))
+}
+
 pub fn note_view(xplm: &crate::xp::Xplm) {
     if !enabled() || !own_route() {
         return;
     }
     #[cfg(windows)]
     main_thread_profile::start();
-    if let Some(d) = xplm.find("sim/graphics/view/view_is_external") {
+    let find = |n: &str| xplm.find(n);
+    if let Some(d) = find("sim/graphics/view/view_is_external") {
         VIEW_OUTSIDE.store(xplm.get_i(d) != 0, Ordering::Relaxed);
     }
+    let get = |n: &str| find(n).map(|d| xplm.get_f(d));
+    let (Some(x), Some(y), Some(z), Some(psi), Some(the)) = (
+        get("sim/graphics/view/pilots_head_x"),
+        get("sim/graphics/view/pilots_head_y"),
+        get("sim/graphics/view/pilots_head_z"),
+        get("sim/graphics/view/pilots_head_psi"),
+        get("sim/graphics/view/pilots_head_the"),
+    ) else {
+        return;
+    };
+    // The flight loop sees whichever pass drew last in projection_matrix_3d, often a shadow pass, so the view's own
+    // field of view and window shape are used instead.
+    let fov = get("sim/graphics/view/field_of_view_deg").unwrap_or(0.);
+    let geti = |n: &str| find(n).map(|d| xplm.get_i(d) as f32);
+    let (Some(w), Some(h)) = (geti("sim/graphics/view/window_width"), geti("sim/graphics/view/window_height")) else {
+        VIEW_HIDDEN.store(0, Ordering::Relaxed);
+        return;
+    };
+    let Some(tan_half) = view_tangents(fov, w, h) else {
+        VIEW_HIDDEN.store(0, Ordering::Relaxed);
+        return;
+    };
+    let mut hidden = 0u32;
+    for (i, g) in crate::display::view_scale::GLASS.iter().enumerate() {
+        if !crate::display::view_scale::in_view([x, y, z], psi, the, tan_half, g.2, 0.3) {
+            hidden |= 1 << i;
+        }
+    }
+    VIEW_HIDDEN.store(hidden, Ordering::Relaxed);
 }
 
 pub fn request_refresh() {
@@ -539,11 +627,11 @@ pub fn tick(session: &Session) {
             crate::log(&format!("browser screens: {line}"));
         }
     }
-    let Some(api) = api() else { return };
     if own_route() {
-        tick_own(session, api);
+        tick_own(session);
         return;
     }
+    let Some(api) = api() else { return };
     publish_underlays();
     let Ok(mut s) = state().lock() else { return };
     let s = &mut *s;
@@ -748,6 +836,15 @@ pub fn stop(avionics: Option<&AvionicsApi>) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_captains_screens_are_in_view_from_the_left_seat_looking_ahead() {
+        let tan = view_tangents(65., 2560., 1440.).expect("a sane view");
+        for g in crate::display::view_scale::GLASS.iter().filter(|g| ["SCREEN_DU_PFDL", "SCREEN_DU_NDL", "SCREEN_DU_EWD", "SCREEN_DU_SD", "SCREEN_DU_MFD"].contains(&g.0)) {
+            assert!(crate::display::view_scale::in_view([-0.55, 3.05, -32.07], 0., -10., tan, g.2, 0.3), "{} counted out of view", g.0);
+        }
+        assert_eq!(view_tangents(0., 2560., 1440.), None);
+    }
 
     fn def(index: u32, screen: &str, url: &str, layer: u32) -> ViewDef {
         ViewDef { index, section: String::new(), gauge_url: url.into(), width: 768, height: 1024, screen: screen.into(), layer }

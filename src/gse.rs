@@ -1716,6 +1716,10 @@ impl Gse {
                 crate::log(&format!("gse: jet bridge {} at {}", if jetway3[k] { "docked" } else { "undocked" }, crate::doors::NAMES[[M1L, M2L, U1L][k]]));
             }
         }
+        let bridge_doors = [M1L, M2L, U1L].map(|d| door_opening[d]);
+        for (d, request) in jetway_door_actions(self.jetway_was, jetway3, bridge_doors, &mut self.jetway_opened) {
+            doors.request(d, request);
+        }
         self.jetway_was = jetway3;
         for (v, docked) in self.jetway_states.iter().zip(jetway3) {
             published::set(*v, if docked { 2. } else { 0. });
@@ -1774,7 +1778,8 @@ impl Gse {
         let ctx = Context { inputs, pose, cg_reference, operator, door_opening, delta };
         for action in self.fleet.step(&ctx, &mut self.library, &mut self.scene) {
             match action {
-                DoorAction::Open(_) | DoorAction::Close(_) => {}
+                DoorAction::Open(d) => doors.request(d, Request::Open),
+                DoorAction::Close(d) => doors.request(d, Request::Close),
                 DoorAction::Set(d, pct) => doors.set_open(d, pct),
             }
         }

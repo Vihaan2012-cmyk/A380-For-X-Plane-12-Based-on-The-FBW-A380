@@ -232,12 +232,15 @@ fn write_number(refcon: *mut c_void, v: f64) {
 }
 
 unsafe extern "C" fn get_i(refcon: *mut c_void) -> c_int {
+    crate::perf::DATAREF_READS.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
     get(Value(refcon as usize)).round() as c_int
 }
 unsafe extern "C" fn get_f(refcon: *mut c_void) -> f32 {
+    crate::perf::DATAREF_READS.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
     get(Value(refcon as usize)) as f32
 }
 unsafe extern "C" fn get_d(refcon: *mut c_void) -> f64 {
+    crate::perf::DATAREF_READS.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
     get(Value(refcon as usize))
 }
 unsafe extern "C" fn set_i(refcon: *mut c_void, v: c_int) {

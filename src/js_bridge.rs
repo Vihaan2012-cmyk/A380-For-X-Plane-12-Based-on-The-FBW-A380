@@ -934,6 +934,7 @@ impl JsHost {
         let aircraft = dir.parent().and_then(|p| p.parent()).map(PathBuf::from).unwrap_or_else(|| dir.clone());
         // [navdata] The facility database, indexed in the background.
         start_navdata();
+        add_provider(Box::new(FailureBroadcast { last: None, since: 0., package: 0 }));
         let env = EnvRefs::new(xplm);
         let scripts = match (std::fs::read_to_string(aircraft.join("panel").join("panel.cfg")), aircraft.join("html_ui")) {
             (Ok(panel_cfg), html_ui) if html_ui.is_dir() => {
@@ -1453,6 +1454,46 @@ pub(crate) fn provider_game_string(name: &str) -> Option<String> {
     PROVIDERS.with(|p| p.borrow_mut().iter_mut().find_map(|provider| provider.game_string(name)))
 }
 
+/// FlyByWire's failure orchestrator: the effective failure set as `FBW_FAILURE_UPDATE`, which the scripts'
+/// FailuresConsumer (FMC, FCU, displays) listens for, when it changes and every few seconds for views that load later.
+struct FailureBroadcast {
+    last: Option<Vec<u64>>,
+    since: f64,
+    package: u64,
+}
+
+const FAILURE_RESEND_S: f64 = 5.;
+
+static START: std::sync::OnceLock<std::time::Instant> = std::sync::OnceLock::new();
+
+impl FailureBroadcast {
+    fn event(&mut self, ids: Vec<u64>, now: f64) -> Option<ProviderEvent> {
+        if self.last.as_ref() == Some(&ids) && now - self.since < FAILURE_RESEND_S {
+            return None;
+        }
+        self.package += 1;
+        let package = serde_json::json!({ "packagedId": self.package, "data": [{ "topic": "FBW_FAILURE_UPDATE", "data": ids }] });
+        self.last = Some(ids);
+        self.since = now;
+        let args = serde_json::json!(["JS_LISTENER_GENERICDATA", "EB_EVENTS", package.to_string()]).to_string();
+        Some(("EVENT_FROM_VIEW_LISTENER".into(), args, None))
+    }
+}
+
+impl CoherentProvider for FailureBroadcast {
+    fn call(&mut self, _name: &str, _args_json: &str) -> Option<CallReply> {
+        None
+    }
+
+    fn take_events(&mut self, views_only: bool) -> Vec<ProviderEvent> {
+        if views_only {
+            return Vec::new();
+        }
+        let now = START.get_or_init(std::time::Instant::now).elapsed().as_secs_f64();
+        self.event(crate::failures::active_ids(), now).into_iter().collect()
+    }
+}
+
 impl CoherentProvider for crate::navdata::NavData {
     fn call(&mut self, name: &str, args_json: &str) -> Option<CallReply> {
         if !crate::navdata::NavData::handles(name) {
@@ -1517,6 +1558,16 @@ fn start_navdata() {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_failure_set_goes_to_the_scripts_when_it_changes_and_again_later() {
+        let mut b = FailureBroadcast { last: None, since: 0., package: 0 };
+        let (_, args, view) = b.event(vec![22_100], 0.).expect("first set");
+        assert!(view.is_none() && args.contains("FBW_FAILURE_UPDATE") && args.contains("22100"), "{args}");
+        assert!(b.event(vec![22_100], 1.).is_none());
+        assert!(b.event(vec![], 2.).is_some_and(|e| e.1.contains("\\\"data\\\":[]")));
+        assert!(b.event(vec![], 8.).is_some(), "resent for views that load later");
+    }
 
     #[test]
     fn bing_map_calls_resolve_instead_of_rejecting_every_frame() {

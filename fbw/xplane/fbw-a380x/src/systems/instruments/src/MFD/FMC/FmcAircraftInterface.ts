@@ -25,6 +25,8 @@ import {
   RaBusEvents,
   RegisteredSimVar,
   EfisSide,
+  SimVarString,
+  Arinc429Word,
 } from '@flybywiresim/fbw-sdk';
 import { FlapConf } from '@fmgc/guidance/vnav/common';
 import { MmrRadioTuningStatus } from '@fmgc/navigation/NavaidTuner';
@@ -33,6 +35,7 @@ import { FmgcFlightPhase } from '@shared/flightphase';
 import { FmgcDataService } from './fmgc';
 import { ADIRS } from '../shared/Adirs';
 import { NXSystemMessages } from '../shared/NXSystemMessages';
+import { computeFlsBeam, FlsBeam, isNonPrecision } from './FlsBeam';
 import { A380OperatingSpeeds, A380SpeedsUtils } from '@shared/OperatingSpeeds';
 import { FlightPhaseManagerEvents } from '@fmgc/flightphase';
 import { FlightPlanService } from '@fmgc/flightplanning/FlightPlanService';
@@ -1897,13 +1900,71 @@ export class FmcAircraftInterface {
   // FIXME remove A32NX_FM_LS_COURSE
   async updateIlsCourse(mmr: MmrRadioTuningStatus) {
     let course = -1;
-    if (mmr.course !== null) {
+    if (this.flsBeam?.lateral) {
+      const runway = this.flightPlanService.active.destinationRunway;
+      course = runway ? (this.flsBeam.course - runway.bearing + runway.magneticBearing + 360) % 360 : -1;
+    } else if (mmr.course !== null) {
       course = mmr.course;
     } else if (mmr.frequency !== null && Vars.read('L:A32NX_RADIO_RECEIVER_LOC_IS_VALID', 'number') === 1) {
       course = Vars.read('fbw/NAV_LOCALIZER_3', 'degrees');
     }
 
     return Vars.write('L:A32NX_FM_LS_COURSE', 'number', course);
+  }
+
+  private flsBeam: FlsBeam | null = null;
+
+  private flsBeamVersion = -1;
+
+  private flsApproach: string | null = null;
+
+  /** The FLS beam of the active approach, for the MMRs (FCOM DSC-22-FMS FLS beam computation). */
+  updateFlsBeam() {
+    const plan = this.flightPlanService.active;
+    if (plan.version !== this.flsBeamVersion) {
+      this.flsBeamVersion = plan.version;
+      this.flsBeam = computeFlsBeam(plan.approach, plan.destinationRunway, plan.destinationAirport?.ident ?? '');
+      const approach = plan.approach?.databaseId ?? null;
+      if (approach !== this.flsApproach) {
+        this.flsApproach = approach;
+        if (plan.approach && !this.flsBeam && isNonPrecision(plan.approach.type)) {
+          this.fmc.addMessageToQueue(NXSystemMessages.noFlsForThisAppr, undefined, undefined);
+        }
+      }
+    }
+    const b = this.flsBeam;
+    Vars.write('L:A32NX_FM_FLS_STATE', 'number', b ? (b.lateral ? 2 : 1) : 0);
+    Vars.write('L:A32NX_FM_FLS_ANCHOR_LAT', 'number', b?.anchor.lat ?? 0);
+    Vars.write('L:A32NX_FM_FLS_ANCHOR_LONG', 'number', b?.anchor.long ?? 0);
+    Vars.write('L:A32NX_FM_FLS_ANCHOR_ALT', 'number', b?.anchorAltitude ?? 0);
+    Vars.write('L:A32NX_FM_FLS_COURSE', 'number', b?.course ?? 0);
+    Vars.write('L:A32NX_FM_FLS_SLOPE', 'number', b?.slope ?? 0);
+    Vars.write('L:A32NX_FM_FLS_ANCHOR_PSEUDO', 'number', b?.pseudo ? 1 : 0);
+    // Destination ISA deviation from the APPR temperature, ISA when none is entered (FCOM cold weather correction).
+    const approachTemp = this.flightPlanService.active.performanceData.approachTemperature.get();
+    const elevation = this.flightPlanService.active.destinationAirport?.location.alt ?? b?.anchorAltitude ?? 0;
+    const isaDev = approachTemp !== null && approachTemp !== undefined ? approachTemp - (15 - 0.0019812 * elevation) : 0;
+    Vars.write('L:A32NX_FM_FLS_ISA_DEV', 'number', Math.min(0, isaDev));
+    // FLS capability per FCOM LIM-22-20, only for an NPA in descent or approach.
+    const valid = (name: string) => new Arinc429Word(Vars.read(name, 'number')).isNormalOperation();
+    const adrs = [1, 2, 3].filter((n) => valid(`L:A32NX_ADIRS_ADR_${n}_COMPUTED_AIRSPEED`)).length;
+    const irs = [1, 2, 3].filter((n) => valid(`L:A32NX_ADIRS_IR_${n}_LATITUDE`)).length;
+    const nav = this.fmc.navigation;
+    const phase = Vars.read('L:A32NX_FMGC_FLIGHT_PHASE', 'number');
+    let capability = 0;
+    if (b && (phase === FmgcFlightPhase.Descent || phase === FmgcFlightPhase.Approach)) {
+      if (nav.isGpsPrimary() && adrs >= 2 && irs >= 2) {
+        capability = 3;
+      } else if (nav.isAccuracyHigh() && adrs >= 1 && irs >= 1) {
+        capability = 2;
+      } else if (adrs >= 1 && irs >= 1) {
+        capability = 1;
+      }
+    }
+    Vars.write('L:A32NX_FM_FLS_CAPABILITY', 'number', capability);
+    const ident = SimVarString.pack(b?.ident ?? '', 9);
+    Vars.write('L:A32NX_FM_FLS_IDENT_0', 'string', ident[0].toString());
+    Vars.write('L:A32NX_FM_FLS_IDENT_1', 'string', ident[1].toString());
   }
 
   private hasTooSteepPathAhead = false;

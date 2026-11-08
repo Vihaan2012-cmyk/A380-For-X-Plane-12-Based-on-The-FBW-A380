@@ -1013,8 +1013,90 @@ fn build_catalog() -> Vec<BreakerDef> {
     ata34(&mut v);
     ata34_ra_antennas(&mut v);
     ata36(&mut v);
+    reset_buttons(&mut v);
     absorbed_systems_cfg(&mut v);
     v
+}
+
+// ---------------------------------------------------------------------
+// The overhead RESET buttons (FCOM PRO-SUP-24-00 list of computer reset
+// procedures) that are `circuits::PANEL_CB_NODES` positions: pulled, the
+// computer is off, pushed, it boots again.
+#[allow(clippy::too_many_arguments)]
+fn reset(id: &'static str, name: &'static str, ata: u16, bus: Bus, node: &'static str, basis: &'static str, consumers: &'static [&'static str], failures: &'static [u64]) -> BreakerDef {
+    BreakerDef { panel_node: Some(node), ..d(id, name, ata, bus, AVIONICS_LRU_W / bus.nominal_voltage(), basis, consumers, failures) }
+}
+
+fn leak(s: String) -> &'static str {
+    Box::leak(s.into_boxed_str())
+}
+
+fn reset_buttons(v: &mut Vec<BreakerDef>) {
+    let (dc1, dc2, ess) = (Bus::Msfs(8), Bus::Msfs(9), Bus::Msfs(10));
+    // FlyByWire's own software halts on these ten buttons' L:A32NX_RESET_PANEL_<name> (ResetPanelPublisher.ts).
+    let fbw = "FlyByWire halts this software while L:A32NX_RESET_PANEL_<name> is set (ResetPanelPublisher.ts)";
+    v.push(reset("aesu-1", "AESU 1", 34, ess, "CB_AESU1", fbw, &["AESU 1: SURV SYS 1 (TAWS, TCAS, XPDR, WXR)"], &[]));
+    v.push(reset("aesu-2", "AESU 2", 34, dc2, "CB_AESU2", fbw, &["AESU 2: SURV SYS 2 (TAWS, TCAS, XPDR, WXR)"], &[]));
+    v.push(reset("arpt-nav", "ARPT NAV", 34, ess, "CB_ARPT_NAV", fbw, &["Airport navigation (OANS)"], &[]));
+    v.push(reset("atc", "ATC", 46, dc1, "CB_ATC", "FCOM PRO-SUP-24-46 ATC reset: CPDLC and ADS connections and the mailbox are lost; the datalink's ATC application stops (datalink_native.rs)", &["ATC datalink application (CPIOM D1)"], &[]));
+    for (k, bus) in [ess, dc2, dc1].into_iter().enumerate() {
+        let n = k + 1;
+        v.push(reset(leak(format!("cids-{n}")), leak(format!("CIDS {n}")), 23, bus, leak(format!("CB_CIDS{n}")), "FCOM PRO-SUP-24-23 CIDS 1(2)(3) reset; deep 23_com.cids_n", &["CIDS computer"], Box::leak(vec![21_023_000 + n as u64].into_boxed_slice())));
+    }
+    // FlyByWire's air conditioning uses each side's application in CPIOM B1 (B2) and falls back to B3 (B4).
+    let side = "FBW air_conditioning/mod.rs: side n uses cpiom_b[n] and falls back to cpiom_b[n + 2]";
+    for (app, ids) in [("cpcs", [21_046u64, 21_047, 21_048, 21_049]), ("tcs", [21_038, 21_039, 21_040, 21_041]), ("vcs", [21_042, 21_043, 21_044, 21_045])] {
+        let up = app.to_ascii_uppercase();
+        for s in 0..2 {
+            let failures: &'static [u64] = Box::leak(vec![ids[s], ids[s + 2]].into_boxed_slice());
+            v.push(reset(leak(format!("{app}-{}", s + 1)), leak(format!("{up} {}", s + 1)), 21, if s == 0 { dc1 } else { dc2 }, leak(format!("CB_{up}{}", s + 1)), side, &["CPIOM B application in both of its side's modules"], failures));
+        }
+    }
+    v.push(reset("dtlnk-router", "DATALINK ROUTER", 46, ess, "CB_DTLNKROUTER", "deep 23_com.atsu_datalink_router", &["ATSU/datalink router"], &[21_023_011]));
+    for (x, bus) in [("A", ess), ("B", dc2), ("C", dc1)] {
+        v.push(reset(leak(format!("fmc-{}", x.to_ascii_lowercase())), leak(format!("FMC {x}")), 22, bus, leak(format!("CB_FMC_{x}")), fbw, &["Flight management computer"], &[]));
+    }
+    v.push(reset("fqms-1", "FQMS 1", 28, ess, "CB_FQMS1", "deep 28_fuel.computer.fqms.1", &["Fuel quantity and management system, channel 1"], &[19_028_115]));
+    v.push(reset("fqms-2", "FQMS 2", 28, dc2, "CB_FQMS2", "deep 28_fuel.computer.fqms.2", &["Fuel quantity and management system, channel 2"], &[19_028_116]));
+    v.push(reset("fws-1", "FWS 1", 31, ess, "CB_FWS1", fbw, &["Flight warning system 1"], &[]));
+    v.push(reset("fws-2", "FWS 2", 31, dc2, "CB_FWS2", fbw, &["Flight warning system 2"], &[]));
+    v.push(reset("nss-avncs", "NSS AVNCS", 46, dc1, "CB_NSS_AVNCS", fbw, &["NSS avionics server units"], &[]));
+    v.push(reset("nss-flt-ops", "NSS FLT OPS", 46, dc2, "CB_NSS_FLT_OPS", fbw, &["NSS flight operations server unit"], &[]));
+    v.push(reset("avs-1", "AVS 1", 21, dc1, "CB_AVS1", "FCOM PRO-SUP-24-21 AVS 1(2) reset; deep 21_vent primary extraction fans", &["Avionics bay primary extraction fans"], &[9_021_004, 9_021_001]));
+    for k in 1..=2 {
+        v.push(BreakerDef {
+            plugin_var: Some(leak(format!("ELEC_BSCS_{k}_BREAKER_OPEN"))),
+            ..reset(leak(format!("bscs-{k}")), leak(format!("BSCS {k}")), 32, if k == 1 { ess } else { dc2 }, leak(format!("CB_BSCS{k}")), "FCOM PRO-SUP-24-32 BSCS reset note 1: both reset, all steering is lost and braking degrades; FBW BSCU gated on both buttons (hydraulic/mod.rs)", &["Brake and steering control system: with the other one also pulled, no antiskid, autobrake or nosewheel steering"], &[])
+        });
+    }
+    for k in 1..=2 {
+        for (part, node) in [("FLAPS", if k == 1 { "CB_FLAPS1" } else { "CB_FLAPS2" }), ("SLATS", if k == 1 { "CB_SLATS1" } else { "CB_SLAT2" })] {
+            v.push(BreakerDef {
+                plugin_var: Some(leak(format!("ELEC_SFCC_{k}_{part}_BREAKER_OPEN"))),
+                ..reset(leak(format!("{}-{k}", part.to_ascii_lowercase())), leak(format!("{part} {k}")), 27, if k == 1 { ess } else { dc2 }, node, "FCOM PRO-SUP-24-27 FLAPS/SLATS 1(2) reset; FBW SFCC channel's motor brake de-energised, as unpowered (hydraulic/sfcc)", &["Slat/flap control computer channel: its drive motor held, the other channel moves the surfaces"], &[])
+            });
+        }
+    }
+    use crate::deep::api::{failure_id, Area};
+    const AICU: [u64; 2] = [failure_id(Area::FireIce, 30, 51), failure_id(Area::FireIce, 30, 52)];
+    v.push(reset("aicu-1", "AICU 1", 30, ess, "CB_AICU1", "FCOM DSC-30-10-10 and PRO-SUP-24-30 AICU reset; deep fire_ice AICU 1", &["Anti-ice control unit 1: ENG 2 and 4 anti-ice valves, outer wing valves, captain's window heat"], &AICU[..1]));
+    v.push(reset("aicu-2", "AICU 2", 30, dc2, "CB_AICU2", "FCOM DSC-30-10-10 and PRO-SUP-24-30 AICU reset; deep fire_ice AICU 2", &["Anti-ice control unit 2: ENG 1 and 3 anti-ice valves, inner wing valves, first officer's window heat"], &AICU[1..]));
+    v.push(reset("avs-2", "AVS 2", 21, dc2, "CB_AVS2", "FCOM PRO-SUP-24-21 AVS 1(2) reset; deep 21_vent standby extraction fans", &["Avionics bay standby extraction fans"], &[9_021_005, 9_021_002]));
+    // FCOM DSC-24: the emergency GCU monitors and controls the RAT; without it the emergency generator gives nothing.
+    v.push(reset("gcu", "EMER GCU", 24, ess, "CB_GCU", "FCOM DSC-24 emergency GCU; the deep RAT's no-output failure (24_elec.rat)", &["Emergency generator control unit (RAT generator)"], &[1_024_959]));
+    const SDF: [u64; 3] = [failure_id(Area::Sensors, 26, 143), failure_id(Area::Sensors, 26, 144), failure_id(Area::Sensors, 26, 145)];
+    for k in 0..3 {
+        v.push(reset(leak(format!("sdf-{}", k + 1)), leak(format!("SDF {}", k + 1)), 26, [ess, dc2, dc1][k], leak(format!("CB_SDF{}", k + 1)), "FCOM PRO-SUP-24-26 SDF 1(2)(3) reset; deep 26_fire.sdf_channels", &["Smoke detection function channel: all three off, no detector alarms"], &SDF[k..k + 1]));
+    }
+    // FCOM PRO-SPO: with its EIPM reset button pulled the engine's FADEC stays powered from the aircraft, which
+    // the FADEC model already assumes at all times.
+    for (node, eng, m) in [("CB_ENG1_EIPM2", 1, 2), ("CB_ENG2_EIPM1", 2, 1), ("CB_ENG3_EIPM2", 3, 2), ("CB_ENG4_EIPM1", 4, 1)] {
+        v.push(BreakerDef { gates_none: true, ..reset(leak(format!("eng{eng}-eipm-{m}")), leak(format!("ENG {eng} EIPM {m}")), 73, if m == 1 { dc1 } else { dc2 }, node, "FCOM DSC-70-20-10 and PRO-SPO: pulled, its FADEC is permanently powered from the aircraft", &["Engine interface and power management: aircraft power to the FADEC"], &[]) });
+    }
+    v.push(BreakerDef { gates_none: true, ..reset("scs-1", "SCS 1", 21, dc1, "CB_SCS1", "FCOM PRO-SUP-24-21 SCS reset: supplemental (galley) cooling; no cooling model behind it", &["Supplemental cooling system 1"], &[]) });
+    v.push(BreakerDef { gates_none: true, ..reset("scs-2", "SCS 2", 21, dc2, "CB_SCS2", "FCOM PRO-SUP-24-21 SCS reset: supplemental (galley) cooling; no cooling model behind it", &["Supplemental cooling system 2"], &[]) });
+    v.push(BreakerDef { gates_none: true, ..reset("dsms", "DSMS", 52, ess, "CB_DSMS", "FCOM: doors and slides management system; no DSMS model behind it", &["Doors and slides management system"], &[]) });
+    v.push(BreakerDef { gates_none: true, ..reset("pax-bband", "PAX BBAND", 44, dc2, "CB_PAX_BBAND", "passenger broadband; no model behind it", &["Passenger broadband connectivity"], &[]) });
 }
 
 static CATALOG: std::sync::OnceLock<Vec<BreakerDef>> = std::sync::OnceLock::new();
@@ -1060,6 +1142,10 @@ struct Live {
     current_id: VariableIdentifier,
     cause_id: VariableIdentifier,
     plugin_var_id: Option<VariableIdentifier>,
+    /// A reset button's own L:A32NX_RESET_PANEL_<name>, kept in step with the breaker both ways: the cockpit
+    /// button and FlyByWire's software use it, the C/B page and the Study panel the breaker.
+    reset_var_id: Option<VariableIdentifier>,
+    reset_written: bool,
     bus_potential_id: Option<VariableIdentifier>,
     /// The consumer's own real, live-drawn current, for the handful of
     /// breakers wired to one (`real_current_var`) -- read every tick
@@ -1406,7 +1492,8 @@ impl Breakers {
             let ambient_id = vars.get(format!("BAY_{}_TEMPERATURE_C", bay_for(def)));
             vars.write(&ambient_id, crate::physics::electrical::REFERENCE_AMBIENT_C);
             by_id.insert(def.id, i);
-            live.push(Live { def_index: i, number, closed_id, current_id, cause_id, plugin_var_id, bus_potential_id, real_current_id, ambient_id, heat: 0. });
+            let reset_var_id = def.panel_node.map(|node| vars.get(format!("RESET_PANEL_{}", node.trim_start_matches("CB_"))));
+            live.push(Live { def_index: i, number, closed_id, current_id, cause_id, plugin_var_id, reset_var_id, reset_written: false, bus_potential_id, real_current_id, ambient_id, heat: 0. });
         }
         Self { defs, live, by_id }
     }
@@ -1469,7 +1556,17 @@ impl Breakers {
         // a closed breaker never un-arms a failure the crew armed.
         let mut open_failures = std::collections::BTreeMap::new();
         for i in 0..self.live.len() {
+            if let Some(id) = &self.live[i].reset_var_id {
+                let pulled = vars.read(id) != 0.;
+                if pulled != self.live[i].reset_written {
+                    self.set_closed(vars, i, !pulled);
+                }
+            }
             let closed = self.closed(vars, i);
+            if let Some(id) = &self.live[i].reset_var_id {
+                vars.write(id, if closed { 0. } else { 1. });
+                self.live[i].reset_written = !closed;
+            }
             let def = &self.defs[self.live[i].def_index];
             if !closed {
                 for &fail in def.failures {
@@ -1627,7 +1724,8 @@ mod tests {
             assert!(def.rating_a.is_finite(), "{} has a non-finite rating", def.id);
             assert!(!def.consumers.is_empty(), "{} lists no consumers", def.id);
             assert!(!def.basis.is_empty(), "{} has no rating basis", def.id);
-            assert!(!def.failures.is_empty() || def.plugin_var.is_some() || def.circuit.is_some() || def.gates_none || def.pending_patch.is_some(), "{} gates nothing and is not marked gates_none/pending_patch", def.id);
+            // A reset button's L:A32NX_RESET_PANEL_<name> is itself the gate the software reads.
+            assert!(!def.failures.is_empty() || def.plugin_var.is_some() || def.circuit.is_some() || def.panel_node.is_some() || def.gates_none || def.pending_patch.is_some(), "{} gates nothing and is not marked gates_none/pending_patch", def.id);
             match def.bus {
                 Bus::Msfs(n) => assert!(MSFS_BUSES.iter().any(|(m, _, _)| *m == n), "{}: msfs bus {n} not in MSFS_BUSES", def.id),
                 Bus::Named(_, v) => assert!(v > 0., "{}: named bus has non-positive nominal voltage", def.id),
@@ -1642,16 +1740,20 @@ mod tests {
 
     #[test]
     fn failure_ids_are_unique_across_the_whole_catalog() {
-        let mut ids: Vec<u64> = catalog().iter().flat_map(|d| d.failures.iter().copied()).collect();
-        ids.sort_unstable();
-        let before = ids.len();
-        ids.dedup();
-        assert_eq!(ids.len(), before, "the same failure id is bridged from two different breakers");
+        // A reset button stops software whose computer may also have its own supply breaker, so the two sets are checked apart.
+        for resets in [false, true] {
+            let mut ids: Vec<u64> = catalog().iter().filter(|d| d.panel_node.is_some() == resets).flat_map(|d| d.failures.iter().copied()).collect();
+            ids.sort_unstable();
+            let before = ids.len();
+            ids.dedup();
+            assert_eq!(ids.len(), before, "the same failure id is bridged from two different breakers");
+        }
     }
 
     #[test]
     fn every_bridged_failure_id_is_registered_in_failures_rs() {
-        let registered: std::collections::BTreeSet<u64> = crate::failures::a380_failures().into_iter().map(|(id, _)| id).chain(crate::failures::COMPUTER_FAILURES.iter().map(|(id, _)| *id)).collect();
+        let deep = crate::deep::registry().failures.into_iter().map(|f| f.id);
+        let registered: std::collections::BTreeSet<u64> = crate::failures::a380_failures().into_iter().map(|(id, _)| id).chain(crate::failures::COMPUTER_FAILURES.iter().map(|(id, _)| *id)).chain(deep).collect();
         for def in catalog() {
             for &f in def.failures {
                 assert!(registered.contains(&f), "{} bridges unknown failure id {f}", def.id);
@@ -1699,6 +1801,73 @@ mod tests {
         b.apply_requests(&mut vars);
         b.pre_systems(&mut vars, &mut circuits);
         assert!(!crate::failures::active_ids().contains(&24_000), "resetting TR 1 should clear failure 24000");
+    }
+
+    #[test]
+    fn a_pulled_reset_button_fails_its_computer_and_pushing_it_back_recovers() {
+        let _g = crate::failures::tests::serial();
+        let mut vars = TestVars::default();
+        let mut circuits = crate::circuits::Circuits::new(&mut vars);
+        let _f = crate::failures::Failures::new();
+        let mut b = Breakers::new(&mut vars);
+        for (id, fails) in [("avs-1", vec![9_021_004, 9_021_001]), ("cpcs-1", vec![21_046, 21_048]), ("aicu-2", vec![crate::deep::api::failure_id(crate::deep::api::Area::FireIce, 30, 52)]), ("cids-3", vec![21_023_003])] {
+            request_pull(id.to_owned());
+            b.apply_requests(&mut vars);
+            b.pre_systems(&mut vars, &mut circuits);
+            let active = crate::failures::active_ids();
+            assert!(fails.iter().all(|f| active.contains(f)), "{id} pulled: {active:?}");
+            request_reset(id.to_owned());
+            b.apply_requests(&mut vars);
+            b.pre_systems(&mut vars, &mut circuits);
+            let active = crate::failures::active_ids();
+            assert!(fails.iter().all(|f| !active.contains(f)), "{id} pushed: {active:?}");
+        }
+    }
+
+    #[test]
+    fn a_reset_button_and_its_breaker_move_together_whichever_is_used() {
+        let _g = crate::failures::tests::serial();
+        let mut vars = TestVars::default();
+        let mut circuits = crate::circuits::Circuits::new(&mut vars);
+        let _f = crate::failures::Failures::new();
+        let mut b = Breakers::new(&mut vars);
+        let fmc = vars.get("RESET_PANEL_FMC_A".to_owned());
+        request_pull("fmc-a".to_owned());
+        b.apply_requests(&mut vars);
+        b.pre_systems(&mut vars, &mut circuits);
+        assert_eq!(vars.read(&fmc), 1., "the C/B page pulls the cockpit button");
+        vars.write(&fmc, 0.);
+        b.pre_systems(&mut vars, &mut circuits);
+        let i = b.by_id["fmc-a"];
+        assert!(b.closed(&mut vars, i), "the cockpit button pushed back closes the breaker");
+        let cids = vars.get("RESET_PANEL_CIDS2".to_owned());
+        vars.write(&cids, 1.);
+        b.pre_systems(&mut vars, &mut circuits);
+        assert!(crate::failures::active_ids().contains(&21_023_002), "the cockpit button pulled fails CIDS 2");
+    }
+
+    #[test]
+    fn every_reset_button_drives_one_breaker() {
+        let mut seen = std::collections::HashMap::new();
+        for def in catalog() {
+            if let Some(node) = def.panel_node {
+                assert!(crate::circuits::panel_cb_number(node).is_some(), "{} names unknown node {node}", def.id);
+                assert!(seen.insert(node, def.id).is_none(), "{node} on two breakers");
+            }
+        }
+        let missing: Vec<&&str> = crate::circuits::PANEL_CB_NODES.iter().filter(|n| !seen.contains_key(**n)).collect();
+        assert!(missing.is_empty(), "reset buttons with no breaker: {missing:?}");
+    }
+
+    #[test]
+    fn the_reset_buttons_deep_failures_are_the_catalogues() {
+        let reg = crate::deep::registry();
+        let ids = |comp: &str| reg.components.iter().find(|c| c.id == comp).map(|c| c.failures.clone()).unwrap_or_default();
+        let by = |id: &str| catalog().iter().find(|d| d.id == id).unwrap().failures.to_vec();
+        assert_eq!([by("sdf-1"), by("sdf-2"), by("sdf-3")].concat(), ids("26_fire.sdf_channels"));
+        assert_eq!([by("aicu-1"), by("aicu-2")].concat(), [ids("30_ice.aicu_1"), ids("30_ice.aicu_2")].concat());
+        assert_eq!(by("gcu"), ids("24_elec.rat"));
+        assert_eq!(by("fqms-1"), ids("28_fuel.computer.fqms.1"));
     }
 
     /// An open breaker's failure is the breaker's consequence, not something

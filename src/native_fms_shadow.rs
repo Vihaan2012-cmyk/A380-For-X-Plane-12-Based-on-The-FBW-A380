@@ -87,6 +87,11 @@ impl fms_host::facilities::Facilities for SharedNavDb {
 }
 
 static NAVDB: OnceLock<Db> = OnceLock::new();
+
+/// The airport and stand at a position, once the navigation database has loaded.
+pub fn stand_at(lat: f64, lon: f64) -> Option<crate::navdata::Stand> {
+    FACILITIES.get()?.with(|d| d.stand_at(lat, lon))
+}
 static FACILITIES: OnceLock<Arc<SharedNavDb>> = OnceLock::new();
 static NAVDB_STARTED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 

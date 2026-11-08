@@ -1147,13 +1147,11 @@ mod tests {
         // One AC bus live each side: each circuit keeps exactly the pump on
         // the bus that survived, which is why the pair is split across two.
         let ac1_and_ac4 = Truth { dt_s: 0.02, ac_bus_volts: [115.0, 0.0, 0.0, 115.0], dc_bus_volts: [28.0, 28.0], ..Truth::default() };
-        // A pump on a charged, dead-ended circuit idles between strokes, so
-        // "runs" is read as the peak over a ten second window.
+        // A pump on a charged, dead-ended circuit sits destroked, so "runs" is read as the peak from a cold start.
         let mut area = HydraulicsLive::new();
-        run(&mut area, &ac1_and_ac4, &Faults::default(), 20.0);
         let mut out = BTreeMap::new();
         let (mut green_a_peak, mut yellow_b_peak) = (0.0_f64, 0.0_f64);
-        for _ in 0..500 {
+        for _ in 0..1500 {
             out = run(&mut area, &ac1_and_ac4, &Faults::default(), 0.02);
             green_a_peak = green_a_peak.max(out["HYD_GREEN_ELEC_PUMP_A_FLOW_L_MIN"]);
             yellow_b_peak = yellow_b_peak.max(out["HYD_YELLOW_ELEC_PUMP_B_FLOW_L_MIN"]);
@@ -1168,10 +1166,15 @@ mod tests {
         // Control power is per circuit: losing DC 2 stops both green pumps
         // and leaves yellow's alone.
         let no_dc2 = Truth { dt_s: 0.02, ac_bus_volts: [115.0; 4], dc_bus_volts: [28.0, 0.0], ..Truth::default() };
-        let out = run(&mut HydraulicsLive::new(), &no_dc2, &Faults::default(), 30.0);
+        let mut area = HydraulicsLive::new();
+        let mut yellow_a_peak = 0.0_f64;
+        for _ in 0..1500 {
+            out = run(&mut area, &no_dc2, &Faults::default(), 0.02);
+            yellow_a_peak = yellow_a_peak.max(out["HYD_YELLOW_ELEC_PUMP_A_FLOW_L_MIN"]);
+        }
         assert!(out["HYD_GREEN_ELEC_PUMP_A_FLOW_L_MIN"].abs() < 1e-9, "no DC 2 control power, no green pump");
         assert!(out["HYD_GREEN_ELEC_PUMP_B_FLOW_L_MIN"].abs() < 1e-9);
-        assert!(out["HYD_YELLOW_ELEC_PUMP_A_FLOW_L_MIN"] > 0.0, "yellow's control bus is DC 1 and is untouched");
+        assert!(yellow_a_peak > 0.0, "yellow's control bus is DC 1 and is untouched");
     }
 
     #[test]

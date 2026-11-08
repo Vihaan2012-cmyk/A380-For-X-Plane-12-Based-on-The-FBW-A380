@@ -22,6 +22,7 @@ CREATOR = "D_an_"
 PREVIEW_WIDTH = 960
 AIRLINES = [
     ("Air France", "France", "AF", "A380-861", "GP7270"),
+    ("Airbus", "France", "", "A380-841", "Trent 970"),
     ("ANA", "Japan", "NH", "A380-841", "Trent 970"),
     ("Asiana Airlines", "South Korea", "OZ", "A380-841", "Trent 970"),
     ("British Airways", "United Kingdom", "BA", "A380-841", "Trent 970"),
@@ -29,6 +30,7 @@ AIRLINES = [
     ("Emirates", "United Arab Emirates", "EK", "A380-861", "GP7270"),
     ("Etihad", "United Arab Emirates", "EY", "A380-861", "GP7270"),
     ("Global Airlines", "United Kingdom", "", "A380-841", "Trent 970"),
+    ("HiFly", "Malta", "5K", "A380-841", "Trent 970"),
     ("Korean Air", "South Korea", "KE", "A380-861", "GP7270"),
     ("Lufthansa", "Germany", "LH", "A380-841", "Trent 970"),
     ("Qantas", "Australia", "QF", "A380-842", "Trent 972"),
@@ -56,7 +58,7 @@ def describe(base: str, folder: Path) -> dict:
     if airline is None:
         raise SystemExit(f"{base}: no airline entry; add it to AIRLINES")
     rest = base[len(airline[0]):].strip()
-    registration = rest if REGISTRATION.match(rest) else ""
+    registration = next((w for w in [rest, *rest.split()] if REGISTRATION.match(w)), "")
     validation = folder / "validation.json"
     if not registration and validation.is_file():
         registration = json.loads(validation.read_text(encoding="utf-8")).get("registration", "")
@@ -74,7 +76,8 @@ def describe(base: str, folder: Path) -> dict:
 
 
 def zip_folder(folder: Path, out: Path) -> None:
-    files = sorted(p for p in folder.rglob("*") if p.is_file())
+    # The CrashFX plugin copies its aircraft's icons into every livery folder.
+    files = sorted(p for p in folder.rglob("*") if p.is_file() and "crashfx" not in p.name.lower())
     lzma_zip.write_zip(out, [(p, f"{folder.name}/{p.relative_to(folder).as_posix()}") for p in files])
 
 

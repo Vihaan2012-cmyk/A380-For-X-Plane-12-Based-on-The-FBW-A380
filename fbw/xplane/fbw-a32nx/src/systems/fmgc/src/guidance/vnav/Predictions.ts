@@ -89,7 +89,7 @@ export class Predictions {
     const theta2 = Common.getTheta2(theta, mach);
     const delta2 = Common.getDelta2(delta, mach);
     const correctedThrust =
-      EngineModel.tableInterpolation(config.engineModelParameters.table1506, correctedCommandedN1, mach) *
+      EngineModel.getCorrectedThrustFraction(config.engineModelParameters, correctedCommandedN1, mach, midStepAltitude) *
       config.engineModelParameters.numberOfEngines *
       config.engineModelParameters.maxThrust;
     const correctedFuelFlow =
@@ -224,7 +224,7 @@ export class Predictions {
       const theta2 = Common.getTheta2(theta, mach);
       const delta2 = Common.getDelta2(delta, mach);
       const correctedThrust =
-        EngineModel.tableInterpolation(config.engineModelParameters.table1506, commandedCorrectedN1, mach) *
+        EngineModel.getCorrectedThrustFraction(config.engineModelParameters, commandedCorrectedN1, mach, initialAltitude) *
         config.engineModelParameters.numberOfEngines *
         config.engineModelParameters.maxThrust;
       const correctedFuelFlow =
@@ -341,11 +341,7 @@ export class Predictions {
     // Divide by number of engines to get thrust per engine
     const correctedThrust = thrust / delta2 / config.engineModelParameters.numberOfEngines;
     // Since table 1506 describes corrected thrust as a fraction of max thrust, divide it
-    const correctedN1 = EngineModel.reverseTableInterpolation(
-      config.engineModelParameters.table1506,
-      mach,
-      correctedThrust / config.engineModelParameters.maxThrust,
-    );
+    const correctedN1 = EngineModel.getCorrectedN1ForThrustFraction(config.engineModelParameters, mach, altitude, correctedThrust / config.engineModelParameters.maxThrust);
     const correctedFuelFlow =
       EngineModel.getCorrectedFuelFlow(config.engineModelParameters, correctedN1, mach, altitude) *
       config.engineModelParameters.numberOfEngines;
@@ -439,7 +435,7 @@ export class Predictions {
     const theta2 = Common.getTheta2(theta, averageMach);
     const delta2 = Common.getDelta2(delta, averageMach);
     const correctedThrust =
-      EngineModel.tableInterpolation(config.engineModelParameters.table1506, commandedCorrectedN1, averageMach) *
+      EngineModel.getCorrectedThrustFraction(config.engineModelParameters, commandedCorrectedN1, averageMach, initialAltitude) *
       config.engineModelParameters.numberOfEngines *
       config.engineModelParameters.maxThrust;
     const correctedFuelFlow =
@@ -628,11 +624,7 @@ export class Predictions {
       // Divide by numberOfEngines to get thrust per engine
       const correctedThrust = thrust / delta2 / config.engineModelParameters.numberOfEngines;
       // Since table 1506 describes corrected thrust as a fraction of max thrust, divide it
-      const correctedN1 = EngineModel.reverseTableInterpolation(
-        config.engineModelParameters.table1506,
-        mach,
-        correctedThrust / config.engineModelParameters.maxThrust,
-      );
+      const correctedN1 = EngineModel.getCorrectedN1ForThrustFraction(config.engineModelParameters, mach, midStepAltitude, correctedThrust / config.engineModelParameters.maxThrust);
       const correctedFuelFlow =
         EngineModel.getCorrectedFuelFlow(config.engineModelParameters, correctedN1, mach, midStepAltitude) *
         config.engineModelParameters.numberOfEngines;
@@ -744,11 +736,7 @@ export class Predictions {
 
       const correctedThrust = thrust / delta2 / config.engineModelParameters.numberOfEngines;
       // Since table 1506 describes corrected thrust as a fraction of max thrust, divide it
-      predictedN1 = EngineModel.reverseTableInterpolation(
-        config.engineModelParameters.table1506,
-        mach,
-        correctedThrust / config.engineModelParameters.maxThrust,
-      );
+      predictedN1 = EngineModel.getCorrectedN1ForThrustFraction(config.engineModelParameters, mach, midStepAltitude, correctedThrust / config.engineModelParameters.maxThrust);
 
       const correctedFuelFlow =
         EngineModel.getCorrectedFuelFlow(config.engineModelParameters, predictedN1, mach, midStepAltitude) *
@@ -861,11 +849,7 @@ export class Predictions {
 
       const correctedThrust = thrust / delta2 / config.engineModelParameters.numberOfEngines;
       // Since table 1506 describes corrected thrust as a fraction of max thrust, divide it
-      predictedN1 = EngineModel.reverseTableInterpolation(
-        config.engineModelParameters.table1506,
-        mach,
-        correctedThrust / config.engineModelParameters.maxThrust,
-      );
+      predictedN1 = EngineModel.getCorrectedN1ForThrustFraction(config.engineModelParameters, mach, midStepAltitude, correctedThrust / config.engineModelParameters.maxThrust);
 
       const correctedFuelFlow =
         EngineModel.getCorrectedFuelFlow(config.engineModelParameters, predictedN1, mach, midStepAltitude) *
@@ -975,7 +959,7 @@ export class Predictions {
       const theta2 = Common.getTheta2(theta, midwayMach);
       const delta2 = Common.getDelta2(delta, midwayMach);
       const correctedThrust =
-        EngineModel.tableInterpolation(config.engineModelParameters.table1506, commandedCorrectedN1, midwayMach) *
+        EngineModel.getCorrectedThrustFraction(config.engineModelParameters, commandedCorrectedN1, midwayMach, midStepAltitude) *
         config.engineModelParameters.numberOfEngines *
         config.engineModelParameters.maxThrust;
       const correctedFuelFlow =
@@ -1115,7 +1099,7 @@ export class Predictions {
       const theta2 = Common.getTheta2(theta, midwayMach);
       const delta2 = Common.getDelta2(delta, midwayMach);
       const correctedThrust =
-        EngineModel.tableInterpolation(config.engineModelParameters.table1506, commandedCorrectedN1, midwayMach) *
+        EngineModel.getCorrectedThrustFraction(config.engineModelParameters, commandedCorrectedN1, midwayMach, midStepAltitude) *
         config.engineModelParameters.numberOfEngines *
         config.engineModelParameters.maxThrust;
       const correctedFuelFlow =

@@ -474,8 +474,8 @@ struct Aurals {
     minimum: f64,
     seatbelt: f64,
     flaps_stop: f64,
-    callouts: [f64; 12],
-    clicks: [f64; 12],
+    callouts: [f64; CALLOUT_HEIGHTS.len()],
+    clicks: [f64; CLICK_SOUNDS.len()],
 }
 
 struct AuralInputs {
@@ -1455,5 +1455,15 @@ mod tests {
         let mut a = Aurals::default();
         a.request("turnknob");
         assert_eq!(a.clicks[CLICK_SOUNDS.iter().position(|c| *c == "sel1").unwrap()], 1.);
+    }
+
+    #[test]
+    fn every_cockpit_click_has_a_counter() {
+        let mut a = Aurals::default();
+        for (event, sound) in CLICKS {
+            a.request(event);
+            assert!(a.clicks[CLICK_SOUNDS.iter().position(|c| c == sound).unwrap()] > 0., "{event}");
+        }
+        a.request("rudtrim");
     }
 }

@@ -93,7 +93,21 @@ export interface LnavConfig {
   EMIT_END_OF_VD_MARKER: boolean;
 }
 
+/** Steady corrected thrust (fraction of maxThrust, per engine) and corrected fuel flow (lb/h, per engine), by altitude, CN1 and Mach. */
+export interface EnginePerformanceTables {
+  altFt: readonly number[];
+  mach: readonly number[];
+  cn1: readonly number[];
+  /** [altitude][cn1][mach] */
+  correctedThrust: readonly (readonly (readonly number[])[])[];
+  /** [altitude][cn1][mach] */
+  correctedFuelFlow: readonly (readonly (readonly number[])[])[];
+}
+
 export interface EngineModelParameters {
+  /** The aircraft's own engine, in place of table 1506 and the fuel flow polynomial when present. */
+  performance?: EnginePerformanceTables;
+
   /** In pounds of force. Used as a multiplier for results of table 1506 */
   maxThrust: number;
 

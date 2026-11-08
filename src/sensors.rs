@@ -235,6 +235,36 @@ pub fn glide_slope_angle_from_bearing_field(field: f32) -> Option<f64> {
     (field >= 1000.).then(|| (field / 1000.).floor() / 100.)
 }
 
+/// The FLS beam reaches this far from its anchor (FCOM DSC-22-FMS FLS beam computation).
+pub const FLS_RANGE_NM: f64 = 100.;
+
+/// FLS deviations from the FMS's virtual beam, as the MMR computes them from the aircraft position and
+/// barometric altitude: (course deviation, degrees, positive with the beam to the right; slope deviation,
+/// degrees, positive above it; distance to the anchor, NM). None outside the beam's 100 NM or behind its anchor.
+#[allow(clippy::too_many_arguments)]
+pub fn fls_deviations(lat: f64, lon: f64, altitude_ft: f64, anchor_lat: f64, anchor_lon: f64, anchor_altitude_ft: f64, course_deg: f64, slope_deg: f64) -> Option<(f64, f64, f64)> {
+    let distance_m = crate::false_glideslope::distance_m(lat, lon, anchor_lat, anchor_lon);
+    let distance_nm = distance_m / 1852.;
+    let (p1, p2, dl) = (lat.to_radians(), anchor_lat.to_radians(), (anchor_lon - lon).to_radians());
+    let to_anchor = (dl.sin() * p2.cos()).atan2(p1.cos() * p2.sin() - p1.sin() * p2.cos() * dl.cos()).to_degrees();
+    let lateral = (to_anchor - course_deg + 540.).rem_euclid(360.) - 180.;
+    if distance_nm > FLS_RANGE_NM || (lateral.abs() > 90. && distance_nm > 0.05) {
+        return None;
+    }
+    let elevation = ((altitude_ft - anchor_altitude_ft) * 0.3048).atan2(distance_m.max(1.)).to_degrees();
+    Some((lateral, elevation - slope_deg, distance_nm))
+}
+
+/// True height above the aerodrome for a barometric one when colder than ISA (ICAO PANS-OPS cold temperature correction).
+pub fn cold_corrected_height_ft(height_ft: f64, elevation_ft: f64, isa_dev_c: f64) -> f64 {
+    if isa_dev_c >= 0. || height_ft <= 0. {
+        return height_ft;
+    }
+    let (h, hss) = (height_ft * 0.3048, elevation_ft * 0.3048);
+    let correction = h * -isa_dev_c / (288.15 + isa_dev_c - 0.5 * 0.0065 * (h + hss));
+    (h - correction) / 0.3048
+}
+
 /// X-Plane's nav receiver behind MSFS's NAV:3, zero-based.
 pub const ILS_RECEIVER: usize = 2;
 
@@ -324,6 +354,14 @@ struct Ils {
     looked_up: Option<(c_int, f64, Option<GsSite>)>,
     /// The frequency whose glide slope was last taken from the nav database, logged once.
     own_gs_noted: Option<c_int>,
+    borrowed_gs_noted: Option<c_int>,
+    /// Nav 3's last (frequency, vertical, flag), logged when it changes.
+    nav3_gs_seen: Option<(c_int, c_int, c_int)>,
+    /// The FMS's FLS beam (FlsBeam.ts): state 0 none, 1 vertical only, 2 lateral and vertical; anchor, course, slope.
+    fls_ids: [VariableIdentifier; 7],
+    /// Which of the deviations are the FLS's, for the FMA and PFD: 0 none, 1 vertical, 2 both.
+    fls_active_id: VariableIdentifier,
+    altitude: Option<DataRef>,
 }
 
 /// A glide slope antenna from X-Plane's nav database.
@@ -376,6 +414,11 @@ impl Ils {
                 .map(|p| unsafe { std::mem::transmute::<*mut c_void, GetNavAidInfoFn>(p) }),
             looked_up: None,
             own_gs_noted: None,
+            borrowed_gs_noted: None,
+            nav3_gs_seen: None,
+            fls_ids: ["FM_FLS_STATE", "FM_FLS_ANCHOR_LAT", "FM_FLS_ANCHOR_LONG", "FM_FLS_ANCHOR_ALT", "FM_FLS_COURSE", "FM_FLS_SLOPE", "FM_FLS_ISA_DEV"].map(|n| vars.get(n.to_owned())),
+            fls_active_id: vars.get("FLS_1_ACTIVE".to_owned()),
+            altitude: xplm.find("sim/cockpit2/gauges/indicators/altitude_ft_pilot"),
         }
     }
 
@@ -406,7 +449,24 @@ impl Ils {
         let localizer = is_localizer_frequency(freq);
         let (horizontal, vertical, gs_flag) = (ints(self.horizontal)[ILS_RECEIVER], ints(self.vertical)[ILS_RECEIVER], ints(self.glideslope_flag)[ILS_RECEIVER]);
         let loc_valid = localizer && horizontal != 0;
-        let gs_valid = ils_glide_slope_valid(loc_valid, vertical != 0, gs_flag != 0);
+        let mut gs_valid = ils_glide_slope_valid(loc_valid, vertical != 0, gs_flag != 0);
+        if loc_valid && self.nav3_gs_seen != Some((freq, vertical, gs_flag)) {
+            self.nav3_gs_seen = Some((freq, vertical, gs_flag));
+            crate::log(&format!("ils: nav 3 at {freq}: vertical {vertical}, glide slope flag {gs_flag}, vdef {:.2}", floats(self.vdef)[ILS_RECEIVER]));
+        }
+        // X-Plane can flag nav 3's glide slope while NAV1 or NAV2 on the same frequency receives it: theirs is X-Plane's own beam.
+        let mut borrowed_vdef = None;
+        if loc_valid && !gs_valid {
+            let (all_vertical, all_flag, all_vdef) = (ints(self.vertical), ints(self.glideslope_flag), floats(self.vdef));
+            if let Some(i) = (0..ILS_RECEIVER).find(|&i| frequency[i] == freq && all_vertical[i] != 0 && all_flag[i] == 0) {
+                gs_valid = true;
+                borrowed_vdef = Some(all_vdef[i] as f64);
+                if self.borrowed_gs_noted != Some(freq) {
+                    self.borrowed_gs_noted = Some(freq);
+                    crate::log(&format!("ils: nav 3 flags the glide slope at {freq} (vertical {vertical}, flag {gs_flag}); NAV{} on the same frequency receives it and is used", i + 1));
+                }
+            }
+        }
         let x_plane_gs = gs_valid;
         if crate::diag::active() && time - self.traced_at >= 2. {
             self.traced_at = time;
@@ -427,8 +487,7 @@ impl Ils {
         } else {
             (None, None)
         };
-        let mut gs_error = floats(self.vdef)[ILS_RECEIVER] as f64 * GS_DEG_PER_DOT;
-        let mut gs_valid = gs_valid;
+        let mut gs_error = borrowed_vdef.unwrap_or(floats(self.vdef)[ILS_RECEIVER] as f64) * GS_DEG_PER_DOT;
         let mut published = None;
         let lat = self.latitude.map_or(0., |d| xplm.get_d(d));
         let near = |site: &GsSite| (lat - site.lat).abs() < 0.4 && (longitude - site.lon).abs() < 0.6;
@@ -464,7 +523,7 @@ impl Ils {
             own = Some(shown);
         }
         crate::false_glideslope::publish_own(freq, own);
-        let values = [
+        let mut values = [
             loc_valid as i32 as f64,
             floats(self.hdef)[ILS_RECEIVER] as f64 * LOC_DEG_PER_DOT,
             gs_valid as i32 as f64,
@@ -474,6 +533,27 @@ impl Ils {
             magnetic_minus_true(psi, mag_psi),
             gs_deg.unwrap_or(0.),
         ];
+        // The FLS: with no ILS approach the MMR flies the FMS's virtual beam, laterally too unless the localizer serves.
+        let fls = self.fls_ids.map(|id| vars.read(&id));
+        let mut fls_active = 0.;
+        if fls[0] >= 1. {
+            let altitude = self.altitude.map_or(0., |d| xplm.get_f(d) as f64);
+            // The FMS corrects the beam for a destination colder than ISA (FCOM DSC-22-FMS cold weather correction).
+            let altitude = fls[3] + cold_corrected_height_ft(altitude - fls[3], fls[3], fls[6]);
+            if let Some((lateral, vertical, distance)) = fls_deviations(lat, longitude, altitude, fls[1], fls[2], fls[3], fls[4], fls[5]) {
+                fls_active = if fls[0] >= 2. { 2. } else { 1. };
+                if fls[0] >= 2. {
+                    values[0] = 1.;
+                    values[1] = lateral;
+                    values[4] = 1.;
+                    values[5] = distance;
+                }
+                values[2] = 1.;
+                values[3] = vertical;
+                values[7] = fls[5];
+            }
+        }
+        vars.write_from_xplane(&self.fls_active_id, fls_active);
         for (id, v) in self.ids.iter().zip(values) {
             vars.write_from_xplane(id, v);
         }
@@ -1217,6 +1297,35 @@ mod tests {
         assert!(!ils_glide_slope_valid(false, true, false), "X-Plane raises vertical on 109.70 at KJFK with no such ILS anywhere near");
         assert!(!ils_glide_slope_valid(true, true, true));
         assert!(!ils_glide_slope_valid(true, false, false));
+    }
+
+    #[test]
+    fn the_fls_deviations_follow_the_virtual_beam() {
+        // 5 NM out on a 143 deg final, 3 deg slope, anchor at 550 ft: on the beam at 550 + 1592 ft.
+        let (lat0, lon0): (f64, f64) = (43.64, 1.37);
+        let back = (143.0f64 + 180.).to_radians();
+        let d: f64 = 5. * 1852. / 6_371_000.;
+        let lat = (lat0.to_radians().sin() * d.cos() + lat0.to_radians().cos() * d.sin() * back.cos()).asin();
+        let lon = lon0.to_radians() + (back.sin() * d.sin() * lat0.to_radians().cos()).atan2(d.cos() - lat0.to_radians().sin() * lat.sin());
+        let (lat, lon) = (lat.to_degrees(), lon.to_degrees());
+        let on = 550. + 5. * 6076.12 * 3f64.to_radians().tan();
+        let (lateral, vertical, distance) = fls_deviations(lat, lon, on, lat0, lon0, 550., 143., 3.).unwrap();
+        assert!(lateral.abs() < 0.05 && vertical.abs() < 0.05 && (distance - 5.).abs() < 0.01, "{lateral} {vertical} {distance}");
+        let (_, high, _) = fls_deviations(lat, lon, on + 300., lat0, lon0, 550., 143., 3.).unwrap();
+        assert!(high > 0.4, "above the beam is positive: {high}");
+        let (left, _, _) = fls_deviations(lat, lon, on, lat0, lon0, 550., 145., 3.).unwrap();
+        assert!(left < 0., "with the beam turned right the aircraft sits right of it, so the beam is to its left: {left}");
+        assert!(fls_deviations(lat, lon, on, lat0, lon0, 550., 323., 3.).is_none(), "behind the anchor");
+        assert!(fls_deviations(lat + 2., lon, on, lat0, lon0, 550., 143., 3.).is_none(), "beyond 100 NM");
+    }
+
+    #[test]
+    fn a_cold_destination_lowers_the_true_height_as_icao_tabulates() {
+        // The PANS-OPS formula at a sea-level aerodrome, -30 C: 1000 ft reads 186 ft too high.
+        let correction = 1000. - cold_corrected_height_ft(1000., 0., -45.);
+        assert!((correction - 186.).abs() < 2., "{correction}");
+        assert_eq!(cold_corrected_height_ft(1000., 0., 5.), 1000.);
+        assert_eq!(cold_corrected_height_ft(1000., 0., 0.), 1000.);
     }
 
     #[test]

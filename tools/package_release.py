@@ -121,6 +121,7 @@ def excluded(rel: str) -> bool:
         or rel.startswith("plugins/fbw_a380_systems/local/")
         or rel == "plugins/fbw_a380_systems/navigraph.ini"
         or rel.startswith("liveries/")
+        or "crashfx" in rel.lower()
     )
 
 

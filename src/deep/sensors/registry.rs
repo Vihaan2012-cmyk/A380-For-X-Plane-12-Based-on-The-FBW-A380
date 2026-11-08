@@ -888,6 +888,18 @@ fn register_smoke_detectors(r: &mut Registry, c: &mut Counter) {
         },
     ];
     register_instance(r, c, 26, "26_fire.smoke_detection_function", "Smoke Detection Function (SDF)", "live_discrete::DiscreteSensors.tick (aggregate SDF discretes)", &sdf_faults, &[]);
+
+    // FCOM PRO-SUP-24-26: the SDF runs on three channels, each with its own overhead reset button.
+    let channel = |field: &'static str, name: &'static str| FaultSpec {
+        field,
+        name,
+        magnitude: "0 running .. 1 off",
+        effect: "with all three channels off no smoke detector alarms and every detector reports a fault",
+        healthy: 0.0,
+        meaning: "SDF channel off",
+    };
+    let channels = [channel("sdf_1_off", "SDF 1 off"), channel("sdf_2_off", "SDF 2 off"), channel("sdf_3_off", "SDF 3 off")];
+    register_instance(r, c, 26, "26_fire.sdf_channels", "Smoke detection function channels (SDF 1, 2, 3)", "live_discrete::DiscreteSensors.tick (SDF channels)", &channels, &[]);
 }
 
 // ---------------------------------------------------------------------

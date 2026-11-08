@@ -663,3 +663,12 @@ fn an_update_shares_its_components_local_variables_with_its_animation() {
     assert!(lua.contains("LV[\"A380X_OVHD_ENG1_FIRE_GUARD/O:_ButtonAnimVar\"]"), "{lua}");
     assert!(!lua.contains("update_"), "{lua}");
 }
+
+#[test]
+fn a_continuous_knob_steps_by_its_wheel_increment() {
+    let cw = "(A:LIGHT POTENTIOMETER:7, Percent) 1 + 100 min 7 (>K:2:LIGHT_POTENTIOMETER_SET)";
+    assert_eq!(bind::with_step(cw, 1.0, 5.0, "+"), "(A:LIGHT POTENTIOMETER:7, Percent) 5 + 100 min 7 (>K:2:LIGHT_POTENTIOMETER_SET)");
+    let ccw = "(A:LIGHT POTENTIOMETER:7, Percent) 1 - 0 max 7 (>K:2:LIGHT_POTENTIOMETER_SET)";
+    assert_eq!(bind::with_step(ccw, 1.0, 5.0, "-"), "(A:LIGHT POTENTIOMETER:7, Percent) 5 - 0 max 7 (>K:2:LIGHT_POTENTIOMETER_SET)");
+    assert_eq!(bind::with_step("(L:X) 2 +", 1.0, 5.0, "+"), "(L:X) 2 +", "another step is left alone");
+}

@@ -2,7 +2,7 @@
 //
 // SPDX-License-Identifier: GPL-3.0
 
-import { EngineModelParameters } from '@fmgc/flightplanning/AircraftConfigTypes';
+import { EngineModelParameters, EnginePerformanceTables } from '@fmgc/flightplanning/AircraftConfigTypes';
 import { Common } from './common';
 
 export class EngineModel {
@@ -99,7 +99,56 @@ export class EngineModel {
    * @param alt altitude in feet
    * @returns fuel flow, in pounds per hour (per engine)
    */
+  /** Linear interpolation of a [altitude][cn1][mach] table. */
+  private static performanceLookup(p: EnginePerformanceTables, table: EnginePerformanceTables['correctedThrust'], cn1: number, mach: number, alt: number): number {
+    const bracket = (axis: readonly number[], v: number): [number, number, number] => {
+      if (v <= axis[0]) return [0, 0, 0];
+      if (v >= axis[axis.length - 1]) return [axis.length - 1, axis.length - 1, 0];
+      let i = 0;
+      while (axis[i + 1] < v) i++;
+      return [i, i + 1, (v - axis[i]) / (axis[i + 1] - axis[i])];
+    };
+    const [a0, a1, ta] = bracket(p.altFt, alt);
+    const [c0, c1, tc] = bracket(p.cn1, cn1);
+    const [m0, m1, tm] = bracket(p.mach, mach);
+    const at = (a: number) => {
+      const lo = table[a][c0][m0] + (table[a][c0][m1] - table[a][c0][m0]) * tm;
+      const hi = table[a][c1][m0] + (table[a][c1][m1] - table[a][c1][m0]) * tm;
+      return lo + (hi - lo) * tc;
+    };
+    return at(a0) + (at(a1) - at(a0)) * ta;
+  }
+
+  /** Corrected thrust per engine as a fraction of maxThrust. */
+  static getCorrectedThrustFraction(config: EngineModelParameters, cn1: number, mach: number, alt: number): number {
+    const p = config.performance;
+    return p ? EngineModel.performanceLookup(p, p.correctedThrust, cn1, mach, alt) : EngineModel.tableInterpolation(config.table1506, cn1, mach);
+  }
+
+  /** The corrected N1 that gives a corrected thrust fraction, the inverse of getCorrectedThrustFraction. */
+  static getCorrectedN1ForThrustFraction(config: EngineModelParameters, mach: number, alt: number, fraction: number): number {
+    const p = config.performance;
+    if (!p) {
+      return EngineModel.reverseTableInterpolation(config.table1506, mach, fraction);
+    }
+    let prevCn1 = p.cn1[0];
+    let prev = EngineModel.getCorrectedThrustFraction(config, prevCn1, mach, alt);
+    if (fraction <= prev) return prevCn1;
+    for (const cn1 of p.cn1.slice(1)) {
+      const thrust = EngineModel.getCorrectedThrustFraction(config, cn1, mach, alt);
+      if (thrust >= fraction) {
+        return prevCn1 + ((fraction - prev) / Math.max(thrust - prev, 1e-9)) * (cn1 - prevCn1);
+      }
+      prevCn1 = cn1;
+      prev = thrust;
+    }
+    return prevCn1;
+  }
+
   static getCorrectedFuelFlow(config: EngineModelParameters, cn1: number, mach: number, alt: number): number {
+    if (config.performance) {
+      return Math.max(0, EngineModel.performanceLookup(config.performance, config.performance.correctedFuelFlow, cn1, mach, alt));
+    }
     // These coefficients should match
     // https://github.com/flybywiresim/aircraft/blob/80b2e662a101be890cee0010d1e4bc659ff375a6/fbw-a32nx/src/wasm/fadec_a32nx/src/Fadec/Polynomials_A32NX.hpp#L321
     // https://github.com/flybywiresim/aircraft/blob/80b2e662a101be890cee0010d1e4bc659ff375a6/fbw-a380x/src/wasm/fadec_a380x/src/Fadec/Polynomials_A380X.hpp#L338

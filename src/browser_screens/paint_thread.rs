@@ -1,11 +1,9 @@
-//! Paints copied off X-Plane's main thread. With software compositing CEF's paint
-//! buffer stays mapped between paints, so the copy can happen after `on_paint` has
-//! returned. Chromium can replace that mapping without telling us, for example on a
-//! reload, so it is read through `ReadProcessMemory`, which fails rather than faults;
-//! the next paint then goes whole. A paint arriving during a read can tear one frame
-//! at worst: the rows it wrote are in its own damage, and are copied again.
+//! Paints finished off X-Plane's main thread. `on_paint` snapshots its damaged rows (a plain
+//! copy, cheap with software compositing); this thread compares them against the screen and
+//! publishes what changed. Chromium redraws into the same buffer for the next frame, so it is
+//! never read after `on_paint` returns: that tore frames into flicker and black patches.
 
-use std::ffi::{c_int, c_void};
+use std::ffi::c_int;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Condvar, Mutex};
 use std::thread::JoinHandle;
@@ -13,11 +11,6 @@ use std::time::{Duration, Instant};
 
 use super::paint_copy::copy_changed;
 use crate::xphfbw_bridge::{ScreenBlock, MAX_DIRTY_RECTS};
-
-extern "system" {
-    fn ReadProcessMemory(process: *mut c_void, base: *const c_void, buffer: *mut c_void, size: usize, read: *mut usize) -> i32;
-    fn GetCurrentProcess() -> *mut c_void;
-}
 
 static READ_FAILURES: AtomicU64 = AtomicU64::new(0);
 static COPIES: AtomicU64 = AtomicU64::new(0);
@@ -67,9 +60,10 @@ impl Wake {
 
 #[derive(Default)]
 struct Pending {
-    buffer: usize,
+    /// Frame rows from `first_row` on, covering every pending rect.
+    rows: Vec<u8>,
+    first_row: u32,
     rects: Vec<[u32; 4]>,
-    whole: bool,
 }
 
 pub struct PaintSlot {
@@ -97,10 +91,23 @@ impl PaintSlot {
         self.copy_rows(src, 0, rects, width as usize * 4);
     }
 
-    pub fn hand_over(&self, buffer: usize, rects: &[[u32; 4]]) {
+    /// `frame` is the whole paint buffer, valid only during `on_paint`: the damaged rows (with any
+    /// still waiting from an earlier paint) are copied out now.
+    pub fn hand_over(&self, frame: &[u8], rects: &[[u32; 4]]) {
+        let (width, height) = self.size();
+        let stride = width as usize * 4;
         let mut p = self.pending.lock().unwrap_or_else(|e| e.into_inner());
-        p.buffer = buffer;
         p.rects.extend_from_slice(rects);
+        let y0 = p.rects.iter().map(|r| r[1]).min().unwrap_or(0);
+        let y1 = p.rects.iter().map(|r| r[1] + r[3]).max().unwrap_or(0).min(height);
+        if y1 <= y0 || frame.len() < y1 as usize * stride {
+            p.rects.clear();
+            return;
+        }
+        let src = &frame[y0 as usize * stride..y1 as usize * stride];
+        p.rows.clear();
+        p.rows.extend_from_slice(src);
+        p.first_row = y0;
         drop(p);
         self.wake.notify();
     }
@@ -134,33 +141,16 @@ impl PaintSlot {
     }
 
     fn run_pending(&self, scratch: &mut Vec<u8>) {
-        let (buffer, mut rects, whole) = {
+        let (rects, first_row) = {
             let mut p = self.pending.lock().unwrap_or_else(|e| e.into_inner());
             if p.rects.is_empty() {
                 return;
             }
-            (p.buffer, std::mem::take(&mut p.rects), std::mem::take(&mut p.whole))
+            std::mem::swap(scratch, &mut p.rows);
+            (std::mem::take(&mut p.rects), p.first_row)
         };
-        let (width, height) = self.size();
-        if whole {
-            rects = vec![[0, 0, width, height]];
-        }
-        let stride = width as usize * 4;
-        let y0 = rects.iter().map(|r| r[1]).min().unwrap_or(0);
-        let y1 = rects.iter().map(|r| r[1] + r[3]).max().unwrap_or(0).min(height);
-        if y1 <= y0 {
-            return;
-        }
-        let bytes = (y1 - y0) as usize * stride;
-        scratch.resize(bytes, 0);
-        let mut read = 0usize;
-        let ok = unsafe { ReadProcessMemory(GetCurrentProcess(), (buffer + y0 as usize * stride) as *const c_void, scratch.as_mut_ptr().cast(), bytes, &mut read) } != 0 && read == bytes;
-        if !ok {
-            READ_FAILURES.fetch_add(1, Ordering::Relaxed);
-            self.pending.lock().unwrap_or_else(|e| e.into_inner()).whole = true;
-            return;
-        }
-        self.copy_rows(scratch, y0, &rects, stride);
+        let (width, _) = self.size();
+        self.copy_rows(scratch, first_row, &rects, width as usize * 4);
     }
 }
 
@@ -227,7 +217,7 @@ mod tests {
     fn a_handed_over_paint_reaches_the_block() {
         let (thread, slot, view) = start(&format!("pt_a_{}", std::process::id()));
         let buffer = vec![7u8; (W * H * 4) as usize];
-        slot.hand_over(buffer.as_ptr() as usize, &[[0, 0, W, H]]);
+        slot.hand_over(&buffer, &[[0, 0, W, H]]);
         wait_for_frame(&view, 1);
         assert_eq!(view.pixels()[..], buffer[..]);
         thread.stop();
@@ -237,9 +227,9 @@ mod tests {
     fn a_repeat_of_the_same_pixels_publishes_nothing() {
         let (thread, slot, view) = start(&format!("pt_b_{}", std::process::id()));
         let buffer = vec![7u8; (W * H * 4) as usize];
-        slot.hand_over(buffer.as_ptr() as usize, &[[0, 0, W, H]]);
+        slot.hand_over(&buffer, &[[0, 0, W, H]]);
         wait_for_frame(&view, 1);
-        slot.hand_over(buffer.as_ptr() as usize, &[[0, 0, W, H]]);
+        slot.hand_over(&buffer, &[[0, 0, W, H]]);
         std::thread::sleep(Duration::from_millis(100));
         assert_eq!(view.header().frame.load(Ordering::Acquire), 1);
         thread.stop();
@@ -249,11 +239,11 @@ mod tests {
     fn rows_below_the_first_land_where_they_belong() {
         let (thread, slot, view) = start(&format!("pt_d_{}", std::process::id()));
         let mut buffer = vec![0u8; (W * H * 4) as usize];
-        slot.hand_over(buffer.as_ptr() as usize, &[[0, 0, W, H]]);
+        slot.hand_over(&buffer, &[[0, 0, W, H]]);
         wait_for_frame(&view, 1);
         let at = ((10 * W + 3) * 4) as usize;
         buffer[at] = 9;
-        slot.hand_over(buffer.as_ptr() as usize, &[[0, 8, W, 6]]);
+        slot.hand_over(&buffer, &[[0, 8, W, 6]]);
         wait_for_frame(&view, 2);
         assert_eq!(view.pixels()[..], buffer[..]);
         assert_eq!(view.header().changed_since(1, 2), Some(vec![[3, 10, 1, 1]]));
@@ -261,22 +251,13 @@ mod tests {
     }
 
     #[test]
-    fn a_buffer_that_is_gone_is_survived_and_the_next_paint_is_whole() {
+    fn chromium_redrawing_its_buffer_after_the_paint_does_not_reach_the_screen() {
         let (thread, slot, view) = start(&format!("pt_c_{}", std::process::id()));
-        let first = vec![7u8; (W * H * 4) as usize];
-        slot.hand_over(first.as_ptr() as usize, &[[0, 0, W, H]]);
+        let mut buffer = vec![7u8; (W * H * 4) as usize];
+        slot.hand_over(&buffer, &[[0, 0, W, H]]);
+        buffer.iter_mut().for_each(|b| *b = 0);
         wait_for_frame(&view, 1);
-        let before = read_failures();
-        slot.hand_over(1 << 40, &[[0, 0, W, H]]);
-        let until = Instant::now() + Duration::from_secs(5);
-        while read_failures() == before {
-            assert!(Instant::now() < until, "the bad read was not noticed");
-            std::thread::sleep(Duration::from_millis(1));
-        }
-        let second = vec![9u8; (W * H * 4) as usize];
-        slot.hand_over(second.as_ptr() as usize, &[[0, 0, 1, 1]]);
-        wait_for_frame(&view, 2);
-        assert_eq!(view.pixels()[..], second[..]);
+        assert!(view.pixels().iter().all(|&b| b == 7), "the screen shows the frame as painted, not the half-redrawn buffer");
         thread.stop();
     }
 }

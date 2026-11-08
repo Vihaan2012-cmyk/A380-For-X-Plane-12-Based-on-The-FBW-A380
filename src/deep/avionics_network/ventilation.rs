@@ -107,10 +107,17 @@ pub struct BayState {
 /// naming the same bay string is assumed to sit in this one compartment).
 pub struct Bay {
     temp_k: f64,
+    /// How many times the reference two-CPIOM bay its ducts, air and structure are sized for.
+    scale: f64,
 }
 impl Bay {
     pub fn new(initial_k: f64) -> Self {
-        Self { temp_k: initial_k }
+        Self { temp_k: initial_k, scale: 1.0 }
+    }
+
+    /// A bay whose ventilation is sized for `design_heat_w` of modules, so a full bay runs as warm as the reference one.
+    pub fn sized(initial_k: f64, design_heat_w: f64) -> Self {
+        Self { temp_k: initial_k, scale: (design_heat_w / (2.0 * CPIOM_HEAT_W)).max(1.0) }
     }
 
     pub fn temp_k(&self) -> f64 {
@@ -133,10 +140,10 @@ impl Bay {
         // Fan and valve are in series in the one duct: both have to pass
         // air for the forced draught to exist at all.
         let airflow_frac = fan_frac * valve_frac;
-        let conductance = NATURAL_CONDUCTANCE_W_K + airflow_frac * (FORCED_CONDUCTANCE_W_K - NATURAL_CONDUCTANCE_W_K);
+        let conductance = self.scale * (NATURAL_CONDUCTANCE_W_K + airflow_frac * (FORCED_CONDUCTANCE_W_K - NATURAL_CONDUCTANCE_W_K));
         let dt = dt_s.max(0.0);
         let target = SUPPLY_AIR_K + heat_w.max(0.0) / conductance.max(1e-6);
-        let k = conductance / BAY_CAPACITY_J_K;
+        let k = conductance / (self.scale * BAY_CAPACITY_J_K);
         self.temp_k = target + (self.temp_k - target) * (-k * dt).exp();
         BayState { temp_k: self.temp_k, conductance_w_k: conductance, airflow_frac }
     }

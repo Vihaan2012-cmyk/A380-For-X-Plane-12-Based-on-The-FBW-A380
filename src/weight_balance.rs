@@ -75,6 +75,8 @@ pub struct WeightBalance {
     /// never mistaken for an empty aircraft.
     payload_reported: bool,
     cg_z_ft: Value,
+    /// This tick's empty aircraft, stations and tanks, for `inertia.rs`.
+    pub masses: Option<(Mass, Vec<Mass>, Vec<Mass>)>,
 }
 
 /// How fast X-Plane's masses and balance point follow a change, per tank or for the payload.
@@ -133,6 +135,7 @@ impl WeightBalance {
             applied_offset_m: None,
             last_total_lb: f64::NEG_INFINITY,
             payload_reported: false,
+            masses: None,
         }
     }
 
@@ -156,6 +159,7 @@ impl WeightBalance {
             self.tanks.iter().zip(&b.tanks).map(|(id, at)| Mass { pounds: vars.read(id).max(0.), position: *at }).collect();
         let payload_lb: f64 = stations.iter().map(|s| s.pounds).sum();
         let stations_lb: Vec<f64> = stations.iter().map(|s| s.pounds).collect();
+        self.masses = Some((empty, stations.clone(), tanks.clone()));
         let (total_lb, cg) = centre_of_gravity(std::iter::once(empty).chain(stations).chain(tanks));
 
         let payload_kg = payload_lb * LB_TO_KG;

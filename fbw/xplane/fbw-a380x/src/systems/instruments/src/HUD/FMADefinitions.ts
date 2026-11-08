@@ -136,7 +136,7 @@ export enum B1Messages {
   VS,
 }
 
-export function computeB1Message(primFgDiscreteWord3: Arinc429WordData): B1Messages {
+export function computeB1Message(primFgDiscreteWord3: Arinc429WordData, fls = 0): B1Messages {
   const gsTrackMode = primFgDiscreteWord3.bitValueOr(22, false);
   const gsCaptureMode = primFgDiscreteWord3.bitValueOr(21, false);
   const descentMode = primFgDiscreteWord3.bitValueOr(12, false);
@@ -155,14 +155,14 @@ export function computeB1Message(primFgDiscreteWord3: Arinc429WordData): B1Messa
   const altCstrApplicable = primFgDiscreteWord3.bitValueOr(28, false);
   const altIsCrzAlt = primFgDiscreteWord3.bitValueOr(29, false);
 
-  if (gsTrackMode) {
-    return B1Messages.GS;
-  } else if (false) {
+  if (gsTrackMode && fls >= 1) {
     return B1Messages.F_GS;
+  } else if (gsTrackMode) {
+    return B1Messages.GS;
+  } else if (gsCaptureMode && fls >= 1) {
+    return B1Messages.F_GS_STAR;
   } else if (gsCaptureMode) {
     return B1Messages.GS_STAR;
-  } else if (false) {
-    return B1Messages.F_GS_STAR;
   } else if (pitchTakeoffMode || pitchGoaroundMode) {
     return B1Messages.SRS;
   } else if (tcasMode) {
@@ -214,7 +214,7 @@ export enum C1Messages {
   NAV,
 }
 
-export function computeC1Message(primFgDiscreteWord4: Arinc429WordData): C1Messages {
+export function computeC1Message(primFgDiscreteWord4: Arinc429WordData, fls = 0): C1Messages {
   const rollGaActive = primFgDiscreteWord4.bitValueOr(15, false);
   const backbeamMode = primFgDiscreteWord4.bitValueOr(29, false);
   const locCaptActive = primFgDiscreteWord4.bitValueOr(13, false);
@@ -230,10 +230,10 @@ export function computeC1Message(primFgDiscreteWord4: Arinc429WordData): C1Messa
     return C1Messages.GA_TRK;
   } else if (locCaptActive && backbeamMode) {
     return C1Messages.LOC_BC_STAR;
+  } else if (locCaptActive && !backbeamMode && fls >= 2) {
+    return C1Messages.F_LOC_STAR;
   } else if (locCaptActive && !backbeamMode) {
     return C1Messages.LOC_STAR;
-  } else if (false) {
-    return C1Messages.F_LOC_STAR;
   } else if (headingActive) {
     return C1Messages.HDG;
   } else if (runwayActive && runwayLocSubmodeActive) {
@@ -244,10 +244,10 @@ export function computeC1Message(primFgDiscreteWord4: Arinc429WordData): C1Messa
     return C1Messages.TRACK;
   } else if (locTrackActive && backbeamMode) {
     return C1Messages.LOC_BC;
+  } else if (locTrackActive && !backbeamMode && fls >= 2) {
+    return C1Messages.F_LOC;
   } else if (locTrackActive && !backbeamMode) {
     return C1Messages.LOC;
-  } else if (false) {
-    return C1Messages.F_LOC;
   } else if (navActive) {
     return C1Messages.NAV;
   } else {
@@ -346,6 +346,7 @@ export function computeD1D2Message(
   fgDiscreteWord2: Arinc429WordData,
   fcdcFgDiscreteWord1: Arinc429WordData,
   appr1Condition: boolean,
+  flsCapability = 0,
 ): D1D2Messages {
   const landModeArmed = fgDiscreteWord2.bitValueOr(28, false);
   const landModeActive = fgDiscreteWord1.bitValueOr(23, false);
@@ -353,7 +354,14 @@ export function computeD1D2Message(
   const land3FailPassiveCapacity = fcdcFgDiscreteWord1.bitValueOr(25, false);
   const land3FailOperationalCapacity = fcdcFgDiscreteWord1.bitValueOr(26, false);
 
-  if (land2Capacity) {
+  // An NPA flown with the FLS shows its capability (FCOM LIM-22-20), never a landing one.
+  if (flsCapability === 3) {
+    return D1D2Messages.F_APP;
+  } else if (flsCapability === 2) {
+    return D1D2Messages.F_APP_RAW;
+  } else if (flsCapability === 1) {
+    return D1D2Messages.RAW_ONLY;
+  } else if (land2Capacity) {
     return D1D2Messages.LAND_2;
   } else if (land3FailPassiveCapacity) {
     return D1D2Messages.LAND_3_SINGLE;

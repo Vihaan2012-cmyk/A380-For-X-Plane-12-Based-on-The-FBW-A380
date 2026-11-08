@@ -17,7 +17,7 @@ pub mod plan;
 pub mod screens;
 pub mod stream;
 pub mod tessellate;
-mod view_scale;
+pub(crate) mod view_scale;
 pub mod text;
 mod gl;
 #[cfg(test)]

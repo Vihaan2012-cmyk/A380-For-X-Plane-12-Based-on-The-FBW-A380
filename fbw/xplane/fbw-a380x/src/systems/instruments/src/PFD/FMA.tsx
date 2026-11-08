@@ -22,6 +22,7 @@ import {
 } from '@flybywiresim/fbw-sdk';
 import { DmcLogicEvents } from '../MsfsAvionicsCommon/providers/DmcPublisher';
 import { PrimFgBusBaseEvents } from '@shared/publishers/PrimFgPublisher';
+import { FGVars } from '../MsfsAvionicsCommon/providers/FGDataPublisher';
 import { FlashOneHertz } from '../MsfsAvionicsCommon/FlashingElementUtils';
 import {
   A1A2Messages,
@@ -130,10 +131,9 @@ export class FMA extends View<{
   private readonly autoBrakeActive = BusSignal.from(this.sub.topic('autoBrakeActive'), false);
 
   private readonly autoBrakeMode = BusSignal.from(this.sub.topic('autoBrakeMode'), 0);
+  private readonly fls = BusSignal.from(this.props.bus.inbox<FGVars>().topic('fg.fls'), 0);
 
-  private readonly B1Message = this.primFgDiscreteWord3.derive((primFgDiscreteWord3) =>
-    computeB1Message(primFgDiscreteWord3),
-  );
+  private readonly B1Message = Derived.from(([word3, fls]) => computeB1Message(word3, fls), this.primFgDiscreteWord3, this.fls);
 
   private readonly disconnectApForLdg = Derived.from(
     ([ap1, ap2, ra, altitude, landingElevation, B1Message]) => {
@@ -974,6 +974,8 @@ class B2Cell extends View<CellProps> {
 
   private primFgDiscreteWord3 = Arinc429LocalVarConsumerSubject.create(this.sub.topic('prim_fg_discrete_word_3'));
 
+  private readonly fls = BusSignal.from(this.props.bus.inbox<FGVars>().topic('fg.fls'), 0);
+
   private classSub = Derived.from(
     ([primFgDiscreteWord2, primFgDiscreteWord3]) => {
       const altAcqArmed = primFgDiscreteWord2.bitValueOr(11, false);
@@ -989,7 +991,7 @@ class B2Cell extends View<CellProps> {
   );
 
   private text1Sub = Derived.from(
-    ([primFgDiscreteWord2, primFgDiscreteWord3]) => {
+    ([primFgDiscreteWord2, primFgDiscreteWord3, fls]) => {
       const altAcqArmed = primFgDiscreteWord2.bitValueOr(11, false);
       const clbArmed = primFgDiscreteWord2.bitValueOr(15, false);
       const desArmed = primFgDiscreteWord2.bitValueOr(16, false);
@@ -1012,22 +1014,23 @@ class B2Cell extends View<CellProps> {
       } else if (altAcqArmed) {
         return gsArmed ? 'ALT ' : '      ALT';
       } else if (gsArmed) {
-        return '      G/S';
+        return fls >= 1 ? '    F-G/S' : '      G/S';
       } else {
         return '';
       }
     },
     this.primFgDiscreteWord2,
     this.primFgDiscreteWord3,
+    this.fls,
   );
 
   private text2Sub = Derived.from(
-    ([primFgDiscreteWord2, text1Sub]) => {
+    ([primFgDiscreteWord2, text1Sub, fls]) => {
       const gsArmed = primFgDiscreteWord2.bitValueOr(13, false);
 
       //TODO Improve this logic, very ugly
-      if (gsArmed && text1Sub !== '      G/S') {
-        return '  G/S';
+      if (gsArmed && text1Sub !== '      G/S' && text1Sub !== '    F-G/S') {
+        return fls >= 1 ? 'F-G/S' : '  G/S';
       } else if (primFgDiscreteWord2.bitValueOr(14, false)) {
         return 'APP-DES';
       } else {
@@ -1036,6 +1039,7 @@ class B2Cell extends View<CellProps> {
     },
     this.primFgDiscreteWord2,
     this.text1Sub,
+    this.fls,
   );
 
   render(): ViewNode {
@@ -1057,9 +1061,9 @@ class C1Cell extends ShowForSecondsComponent<CellProps> {
 
   private primFgDiscreteWord4 = Arinc429LocalVarConsumerSubject.create(this.sub.topic('prim_fg_discrete_word_4'));
 
-  private readonly message = this.primFgDiscreteWord4.derive((primFgDiscreteWord4) =>
-    computeC1Message(primFgDiscreteWord4),
-  );
+  private readonly fls = BusSignal.from(this.props.bus.inbox<FGVars>().topic('fg.fls'), 0);
+
+  private readonly message = Derived.from(([word4, fls]) => computeC1Message(word4, fls), this.primFgDiscreteWord4, this.fls);
 
   private readonly text = this.message.derive((C1Message) => {
     this.isShown = true;
@@ -1126,12 +1130,15 @@ class C1Cell extends ShowForSecondsComponent<CellProps> {
 class C2Cell extends View<CellProps> {
   private sub = this.props.bus.inbox<PrimFgBusBaseEvents>();
 
+  private readonly fls = BusSignal.from(this.props.bus.inbox<FGVars>().topic('fg.fls'), 0);
+
+
   private primFgDiscreteWord2 = Arinc429LocalVarConsumerSubject.create(this.sub.topic('prim_fg_discrete_word_2'));
 
   private primFgDiscreteWord4 = Arinc429LocalVarConsumerSubject.create(this.sub.topic('prim_fg_discrete_word_4'));
 
   private readonly text = Derived.from(
-    ([primFgDiscreteWord2, primFgDiscreteWord4]) => {
+    ([primFgDiscreteWord2, primFgDiscreteWord4, fls]) => {
       const navArmed = primFgDiscreteWord2.bitValueOr(22, false);
       const locArmed = primFgDiscreteWord2.bitValueOr(23, false);
       const rwyArmed = primFgDiscreteWord2.bitValueOr(24, false);
@@ -1139,10 +1146,10 @@ class C2Cell extends View<CellProps> {
 
       if (locArmed && backbeamMode) {
         return 'LOC B/C';
+      } else if (locArmed && fls >= 2) {
+        return 'F-LOC';
       } else if (locArmed) {
         return 'LOC';
-      } else if (false) {
-        return 'F-LOC';
       } else if (rwyArmed) {
         return 'RWY' + (navArmed ? '  NAV' : '');
       } else if (navArmed) {
@@ -1151,6 +1158,7 @@ class C2Cell extends View<CellProps> {
     },
     this.primFgDiscreteWord2,
     this.primFgDiscreteWord4,
+    this.fls,
   );
 
   render(): ViewNode {
@@ -1355,14 +1363,18 @@ class D1D2Cell extends ShowForSecondsComponent<CellProps> {
     this.hasGs,
   );
 
+  private readonly flsCapability = BusSignal.from(this.props.bus.inbox<FGVars>().topic('fg.fls.capability'), 0);
+
   private readonly D1D2Message = Derived.from(
-    ([primFgDiscreteWord1, primFgDiscreteWord2, fcdcFgDiscreteWord1, appr1Condition]) => {
-      return computeD1D2Message(primFgDiscreteWord1, primFgDiscreteWord2, fcdcFgDiscreteWord1, appr1Condition);
+    ([primFgDiscreteWord1, primFgDiscreteWord2, fcdcFgDiscreteWord1, appr1Condition, lsButton, flsCapability]) => {
+      return computeD1D2Message(primFgDiscreteWord1, primFgDiscreteWord2, fcdcFgDiscreteWord1, appr1Condition, lsButton ? flsCapability : 0);
     },
     this.primFgDiscreteWord1,
     this.primFgDiscreteWord2,
     this.fcdcFgDiscreteWord1,
     this.appr1Condition,
+    this.lsButton,
+    this.flsCapability,
   );
 
   private readonly text1Sub = this.D1D2Message.derive((message) => {

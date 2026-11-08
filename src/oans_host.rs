@@ -658,7 +658,7 @@ impl OansHost {
         }
 
         let phase = io.var("L:A32NX_FWC_FLIGHT_PHASE");
-        let reset = io.var("L:A380X_RESET_PANEL_ARPT_NAV") != 0.0;
+        let reset = io.var("L:A32NX_RESET_PANEL_ARPT_NAV") != 0.0;
         let (lat, long) = (arinc(io, "L:A32NX_ADIRS_IR_1_LATITUDE"), arinc(io, "L:A32NX_ADIRS_IR_1_LONGITUDE"));
         let fms = (bus_str(io, "fmsOrigin"), bus_str(io, "fmsDestination"), bus_str(io, "fmsAlternate"), bus_str(io, "fmsDepartureRunway"), bus_str(io, "fmsLandingRunway"));
         let req = arinc(io, "L:A32NX_OANS_BTV_REQ_STOPPING_DISTANCE");

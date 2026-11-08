@@ -717,6 +717,8 @@ pub struct DiscreteSensors {
     /// the same simplification `hydraulics::thermal`'s own monitored-
     /// switch discretes already use).
     sdf_ids: [u64; 2],
+    /// SDF 1, 2 and 3 off, as with their reset buttons pulled.
+    sdf_channel_ids: [u64; 3],
     sdf_configuration_fault: bool,
     sdf_safety_test_overdue: bool,
 }
@@ -1203,6 +1205,7 @@ impl DiscreteSensors {
         }
 
         let sdf_ids = index.ids("26_fire.smoke_detection_function", ["configuration_fault", "safety_test_overdue"]);
+        let sdf_channel_ids = index.ids("26_fire.sdf_channels", ["sdf_1_off", "sdf_2_off", "sdf_3_off"]);
 
         Self {
             proximity,
@@ -1227,6 +1230,7 @@ impl DiscreteSensors {
             cabin_alt_above_landing_elev_ft: [0.0; 2],
             vertical_speed_fpm: 0.0,
             sdf_ids,
+            sdf_channel_ids,
             sdf_configuration_fault: false,
             sdf_safety_test_overdue: false,
         }
@@ -1286,6 +1290,7 @@ impl DiscreteSensors {
             ids.extend_from_slice(&s.faults);
         }
         ids.extend_from_slice(&self.sdf_ids);
+        ids.extend_from_slice(&self.sdf_channel_ids);
         ids
     }
 
@@ -1465,6 +1470,7 @@ impl DiscreteSensors {
         // ---- Smoke detectors.
         let cabin_air_density_kg_m3 =
             (truth.cabin_pressure_pa / (R_AIR_J_KG_K * truth.cabin_temp_k.max(1.0))).max(0.0);
+        let sdf_off = self.sdf_channel_ids.iter().all(|&id| faults.get(id) >= 1.0);
         for s in &mut self.smoke {
             let smoke_kg_m3 = match &s.source {
                 SmokeSource::DensityKgM3(var) => published.get_or(var, 0.0),
@@ -1482,8 +1488,8 @@ impl DiscreteSensors {
                 },
             );
             s.reading_pct_per_ft = out.reading_pct_per_ft;
-            s.alarm = out.alarm;
-            s.fault = out.circuit_fault;
+            s.alarm = out.alarm && !sdf_off;
+            s.fault = out.circuit_fault || sdf_off;
         }
 
         // ECAM completeness pass: the SDF's own two aggregate BITE

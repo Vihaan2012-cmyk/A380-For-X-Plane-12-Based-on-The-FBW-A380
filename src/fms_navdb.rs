@@ -139,6 +139,10 @@ impl FmsNavDb {
         self.load(icao, call, icao.to_string())
     }
 
+    pub fn stand_at(&self, lat: f64, lon: f64) -> Option<crate::navdata::Stand> {
+        self.nav.borrow().stand_at(lat, lon)
+    }
+
     /// FBW `MsfsMapping.mapLandingSystem` for a localizer's VOR record.
     pub fn ils(&self, database_id: &str) -> Option<fms_host::facilities::IlsNavaid> {
         let v = self.facility(database_id)?;

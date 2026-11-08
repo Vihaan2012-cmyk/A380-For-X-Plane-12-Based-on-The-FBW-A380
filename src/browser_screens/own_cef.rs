@@ -1,12 +1,16 @@
 //! Our own browsers inside the Chromium X-Plane has already started: the same
-//! `libcef.dll`, so no separate app, with our frame rate and resolution.
-//! Hand-written C API of CEF 117.1.4, checked against the DLL's
-//! API hash before anything is called. Everything here runs on X-Plane's main
-//! thread, which is the thread that pumps CEF.
+//! `libcef.dll` (Windows) or `Chromium Embedded Framework.framework` (macOS), so no
+//! separate app, with our frame rate and resolution. Hand-written C API of CEF 117
+//! (117.1.4 on Windows, 117.2.5 on macOS), checked against the library's API hash
+//! before anything is called. Everything here runs on X-Plane's main thread, which
+//! is the thread that pumps CEF (on macOS the only one it can be: CEF has no
+//! multi-threaded message loop there, so its UI thread is the AppKit main thread).
 
 use std::ffi::{c_char, c_int, c_void, CStr};
 use std::path::Path;
-use std::sync::atomic::{AtomicBool, AtomicI32, AtomicU64, AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicI32, AtomicU64, Ordering};
+#[cfg(windows)]
+use std::sync::atomic::AtomicUsize;
 use std::sync::{Arc, OnceLock};
 use std::time::{Duration, Instant};
 
@@ -14,8 +18,13 @@ use super::paint_thread::{self, PaintSlot, PaintThread};
 use crate::xphfbw_bridge::{Input, InputKind, ScreenBlock, Session, MAX_DIRTY_RECTS};
 use crate::xphfbw_bridge_views::{self as views, SCREEN_ORDER};
 
-const API_HASH_WINDOWS: &str = "36384f3e3dc2ac64bdad2db177725caebaebf02e";
+#[cfg(windows)]
+const API_HASH: &str = "36384f3e3dc2ac64bdad2db177725caebaebf02e";
+/// CEF 117.2.5+gda4c36a, `cef_api_hash(0)` of X-Plane 12.4.3's framework.
+#[cfg(target_os = "macos")]
+const API_HASH: &str = "35b5f3657fe9f203a7852235b85b5f2a7501d59e";
 
+#[cfg(windows)]
 extern "system" {
     fn GetModuleHandleA(name: *const c_char) -> *mut c_void;
     fn GetProcAddress(module: *mut c_void, name: *const c_char) -> *mut c_void;
@@ -82,6 +91,7 @@ struct KeyEvent {
     focus_on_editable_field: c_int,
 }
 
+#[cfg(windows)]
 #[repr(C)]
 struct WindowInfo {
     ex_style: u32,
@@ -95,6 +105,68 @@ struct WindowInfo {
     external_begin_frame_enabled: c_int,
     window: *mut c_void,
 }
+
+/// `cef_types_mac.h`.
+#[cfg(target_os = "macos")]
+#[repr(C)]
+struct WindowInfo {
+    window_name: CefString,
+    bounds: Rect,
+    hidden: c_int,
+    parent_view: *mut c_void,
+    windowless_rendering_enabled: c_int,
+    shared_texture_enabled: c_int,
+    external_begin_frame_enabled: c_int,
+    view: *mut c_void,
+}
+
+impl WindowInfo {
+    fn windowless() -> Self {
+        #[cfg(windows)]
+        return WindowInfo {
+            ex_style: 0,
+            window_name: NO_STRING,
+            style: 0,
+            bounds: Rect::default(),
+            parent_window: std::ptr::null_mut(),
+            menu: std::ptr::null_mut(),
+            windowless_rendering_enabled: 1,
+            shared_texture_enabled: 0,
+            external_begin_frame_enabled: 0,
+            window: std::ptr::null_mut(),
+        };
+        #[cfg(target_os = "macos")]
+        return WindowInfo {
+            window_name: NO_STRING,
+            bounds: Rect::default(),
+            hidden: 0,
+            parent_view: std::ptr::null_mut(),
+            windowless_rendering_enabled: 1,
+            shared_texture_enabled: 0,
+            external_begin_frame_enabled: 0,
+            view: std::ptr::null_mut(),
+        };
+    }
+}
+
+/// Offsets from CEF 117.2.5's own headers (`offsetof` on macOS, both slices LP64),
+/// so a wrong hand-written field fails the build rather than X-Plane.
+#[cfg(target_os = "macos")]
+const _: () = {
+    use std::mem::{offset_of as at, size_of as size};
+    assert!(size::<Base>() == 40 && size::<CefString>() == 24 && size::<Rect>() == 16);
+    assert!(size::<ScreenInfo>() == 48 && at!(ScreenInfo, available_rect) == 32);
+    assert!(size::<MouseEvent>() == 12 && size::<KeyEvent>() == 28 && at!(KeyEvent, character) == 20 && at!(KeyEvent, focus_on_editable_field) == 24);
+    assert!(size::<WindowInfo>() == 80 && at!(WindowInfo, bounds) == 24 && at!(WindowInfo, parent_view) == 48 && at!(WindowInfo, windowless_rendering_enabled) == 56 && at!(WindowInfo, view) == 72);
+    assert!(size::<BrowserSettings>() == 288 && at!(BrowserSettings, windowless_frame_rate) == 8 && at!(BrowserSettings, default_font_size) == 160);
+    assert!(at!(BrowserSettings, default_encoding) == 176 && at!(BrowserSettings, background_color) == 248 && at!(BrowserSettings, accept_language_list) == 256 && at!(BrowserSettings, chrome_status_bubble) == 280);
+    assert!(at!(Browser, get_host) == 48 && at!(Browser, reload) == 96 && at!(Browser, reload_ignore_cache) == 104);
+    assert!(at!(Host, close_browser) == 48 && at!(Host, set_focus) == 64 && at!(Host, was_hidden) == 272 && at!(Host, send_key_event) == 304);
+    assert!(at!(Host, send_mouse_click_event) == 312 && at!(Host, send_mouse_move_event) == 320 && at!(Host, send_mouse_wheel_event) == 328 && at!(Host, set_windowless_frame_rate) == 368);
+    assert!(size::<ClientVt>() == 192 && at!(ClientVt, get_life_span_handler) == 144 && at!(ClientVt, get_load_handler) == 152 && at!(ClientVt, get_render_handler) == 168);
+    assert!(size::<RenderVt>() == 176 && at!(RenderVt, get_view_rect) == 56 && at!(RenderVt, get_screen_info) == 72 && at!(RenderVt, on_paint) == 96);
+    assert!(size::<LifeVt>() == 72 && at!(LifeVt, on_after_created) == 48 && at!(LifeVt, on_before_close) == 64 && size::<LoadVt>() == 72);
+};
 
 #[repr(C)]
 struct BrowserSettings {
@@ -309,7 +381,7 @@ fn clamped_rects(list: &[Rect], width: c_int, height: c_int) -> Vec<[u32; 4]> {
 fn paints_on_their_thread() -> bool {
     static YES: OnceLock<bool> = OnceLock::new();
     *YES.get_or_init(|| {
-        let yes = SWITCHES_APPLIED.load(Ordering::SeqCst) && chromium_switches().contains("disable-gpu-compositing") && std::env::var("FBW_PAINT_THREAD").as_deref() != Ok("0");
+        let yes = chromium_has_switch("disable-gpu-compositing") && std::env::var("FBW_PAINT_THREAD").as_deref() != Ok("0");
         super::log(&format!("paints copied {}", if yes { "on their own thread" } else { "on the main thread" }));
         yes
     })
@@ -330,16 +402,16 @@ unsafe extern "system" fn on_paint(handler: *mut RenderVt, browser: *mut Browser
     let given = if rects.is_null() { &[][..] } else { std::slice::from_raw_parts(rects, count) };
     let list = if given.is_empty() || given.len() > MAX_DIRTY_RECTS { &whole[..] } else { given };
     let list = clamped_rects(list, width, height);
-    #[cfg(test)]
+    #[cfg(all(test, windows))]
     let probe_started = (Instant::now(), probe::page_faults());
     crate::perf::time("screens (browser paints)", || {
         if paints_on_their_thread() {
-            slot.hand_over(buffer as usize, &list);
+            slot.hand_over(std::slice::from_raw_parts(buffer, width as usize * height as usize * 4), &list);
         } else {
             slot.copy_now(std::slice::from_raw_parts(buffer, width as usize * height as usize * 4), &list);
         }
     });
-    #[cfg(test)]
+    #[cfg(all(test, windows))]
     {
         probe::PAINTS.fetch_add(1, Ordering::Relaxed);
         probe::BYTES.fetch_add(list.iter().map(|r| r[2] as u64 * r[3] as u64 * 4).sum(), Ordering::Relaxed);
@@ -404,25 +476,41 @@ struct Lib {
     work: DoWork,
 }
 
-fn lib() -> Option<Lib> {
-    unsafe {
+/// A function of the CEF X-Plane has loaded; never loads it, and never links to it.
+fn cef_symbol(name: &CStr) -> Option<*mut c_void> {
+    #[cfg(windows)]
+    let p = unsafe {
         let module = GetModuleHandleA(c"libcef.dll".as_ptr());
         if module.is_null() {
             return None;
         }
-        let f = |name: &CStr| {
-            let p = GetProcAddress(module, name.as_ptr());
-            (!p.is_null()).then_some(p)
-        };
+        GetProcAddress(module, name.as_ptr())
+    };
+    #[cfg(target_os = "macos")]
+    let p = unsafe { crate::xp::library_symbol("Chromium Embedded Framework.framework/", name) };
+    (!p.is_null()).then_some(p)
+}
+
+fn lib() -> Option<Lib> {
+    unsafe {
         Some(Lib {
-            create: std::mem::transmute::<*mut c_void, CreateBrowser>(f(c"cef_browser_host_create_browser")?),
-            work: std::mem::transmute::<*mut c_void, DoWork>(f(c"cef_do_message_loop_work")?),
+            create: std::mem::transmute::<*mut c_void, CreateBrowser>(cef_symbol(c"cef_browser_host_create_browser")?),
+            work: std::mem::transmute::<*mut c_void, DoWork>(cef_symbol(c"cef_do_message_loop_work")?),
         })
     }
 }
 
+/// Whether CEF is up and this is its UI thread (`cef_currently_on(TID_UI)`): false,
+/// with no harm, before X-Plane has initialized it.
+#[cfg(target_os = "macos")]
+pub fn on_ui_thread() -> bool {
+    let Some(f) = cef_symbol(c"cef_currently_on") else { return false };
+    unsafe { std::mem::transmute::<*mut c_void, unsafe extern "C" fn(c_int) -> c_int>(f)(0) != 0 }
+}
+
 #[repr(C)]
 #[allow(dead_code)]
+#[cfg(windows)]
 struct Settings {
     size: usize,
     no_sandbox: c_int,
@@ -457,6 +545,7 @@ struct Settings {
 }
 
 #[repr(C)]
+#[cfg(windows)]
 struct CommandLine {
     base: Base,
     before: [Slot; 14],
@@ -464,15 +553,18 @@ struct CommandLine {
     append_switch_with_value: unsafe extern "system" fn(*mut CommandLine, *const CefString, *const CefString),
 }
 
+#[cfg(windows)]
 type OnCommandLine = unsafe extern "system" fn(*mut AppVt, *const CefString, *mut CommandLine);
 
 #[repr(C)]
+#[cfg(windows)]
 struct AppVt {
     base: Base,
     on_before_command_line_processing: Option<OnCommandLine>,
     rest: [Slot; 4],
 }
 
+#[cfg(windows)]
 type CefInitialize = unsafe extern "C" fn(*const *mut c_void, *const c_void, *mut AppVt, *mut c_void) -> c_int;
 
 /// Where Chromium composites, as measured on six 1152x1536 browsers. `Software`:
@@ -521,15 +613,20 @@ fn chromium_switches() -> String {
     std::env::var("FBW_CHROMIUM_SWITCHES").unwrap_or_else(|_| chromium_mode().switches().to_string())
 }
 
+#[cfg(windows)]
 fn chromium_helper() -> Option<std::path::PathBuf> {
     Some(crate::xp::system_path()?.join("Resources").join("dlls").join("64").join("cef").join("win").join("cefclient.exe"))
 }
 
+#[cfg(windows)]
 static IAT_SLOT: AtomicUsize = AtomicUsize::new(0);
+#[cfg(windows)]
 static IAT_WAS: AtomicUsize = AtomicUsize::new(0);
+#[cfg(windows)]
 static X_PLANES_ON_COMMAND_LINE: AtomicUsize = AtomicUsize::new(0);
 static SWITCHES_APPLIED: AtomicBool = AtomicBool::new(false);
 
+#[cfg(windows)]
 unsafe fn append_switches(line: *mut CommandLine) {
     let wide = |s: &str| -> Vec<u16> { s.encode_utf16().collect() };
     let string = |v: &Vec<u16>| CefString { str_: v.as_ptr(), length: v.len(), dtor: 0 };
@@ -547,6 +644,7 @@ unsafe fn append_switches(line: *mut CommandLine) {
     }
 }
 
+#[cfg(windows)]
 unsafe fn text(s: &CefString) -> String {
     if s.str_.is_null() {
         return String::new();
@@ -554,6 +652,7 @@ unsafe fn text(s: &CefString) -> String {
     String::from_utf16_lossy(std::slice::from_raw_parts(s.str_, s.length))
 }
 
+#[cfg(windows)]
 unsafe fn log_settings(settings: *const c_void) {
     if settings.is_null() {
         return;
@@ -579,6 +678,7 @@ unsafe fn log_settings(settings: *const c_void) {
     ));
 }
 
+#[cfg(windows)]
 unsafe fn log_command_line(line: *mut CommandLine) {
     const GET_COMMAND_LINE_STRING: usize = 7;
     let get = std::mem::transmute::<Slot, unsafe extern "system" fn(*mut CommandLine) -> *mut CefString>((*line).before[GET_COMMAND_LINE_STRING]);
@@ -587,12 +687,12 @@ unsafe fn log_command_line(line: *mut CommandLine) {
         return;
     }
     super::log(&format!("Chromium command line: {}", text(&*string)));
-    let free = GetProcAddress(GetModuleHandleA(c"libcef.dll".as_ptr()), c"cef_string_userfree_utf16_free".as_ptr());
-    if !free.is_null() {
+    if let Some(free) = cef_symbol(c"cef_string_userfree_utf16_free") {
         std::mem::transmute::<*mut c_void, unsafe extern "C" fn(*mut CefString)>(free)(string);
     }
 }
 
+#[cfg(windows)]
 unsafe extern "system" fn on_command_line(app: *mut AppVt, process: *const CefString, line: *mut CommandLine) {
     let was = X_PLANES_ON_COMMAND_LINE.load(Ordering::SeqCst);
     if was != 0 {
@@ -605,6 +705,7 @@ unsafe extern "system" fn on_command_line(app: *mut AppVt, process: *const CefSt
     }
 }
 
+#[cfg(windows)]
 unsafe fn write_slot(slot: usize, value: usize) -> bool {
     const PAGE_READWRITE: u32 = 4;
     let mut protection = 0u32;
@@ -620,6 +721,7 @@ unsafe fn write_slot(slot: usize, value: usize) -> bool {
 /// An app for a Chromium started without one. CEF keeps it until it shuts down,
 /// after this DLL may have unloaded with the aircraft, so nothing in it lives here:
 /// two small functions in memory of their own, returning 0 and 1.
+#[cfg(windows)]
 unsafe fn app_outliving_this_dll() -> Option<(*mut AppVt, Slot)> {
     const MEM_COMMIT_RESERVE: u32 = 0x3000;
     const PAGE_READWRITE: u32 = 4;
@@ -653,16 +755,14 @@ unsafe fn app_outliving_this_dll() -> Option<(*mut AppVt, Slot)> {
 }
 
 /// X-Plane's call to start Chromium, with our switches added to its command line.
+#[cfg(windows)]
 unsafe extern "C" fn cef_initialize_hook(args: *const *mut c_void, settings: *const c_void, app: *mut AppVt, sandbox: *mut c_void) -> c_int {
     let slot = IAT_SLOT.swap(0, Ordering::SeqCst);
     if slot != 0 {
         write_slot(slot, IAT_WAS.load(Ordering::SeqCst));
     }
     log_settings(settings);
-    let real = GetProcAddress(GetModuleHandleA(c"libcef.dll".as_ptr()), c"cef_initialize".as_ptr());
-    if real.is_null() {
-        return 0;
-    }
+    let Some(real) = cef_symbol(c"cef_initialize") else { return 0 };
     let real = std::mem::transmute::<*mut c_void, CefInitialize>(real);
     if app.is_null() {
         let Some((own, zero)) = app_outliving_this_dll() else {
@@ -684,6 +784,7 @@ unsafe extern "C" fn cef_initialize_hook(args: *const *mut c_void, settings: *co
 }
 
 /// The slot of `function` in the delay-load table of `module`, for `dll`.
+#[cfg(windows)]
 unsafe fn delay_import_slot(module: usize, dll: &str, function: &str) -> Option<usize> {
     let read32 = |at: usize| std::ptr::read_unaligned(at as *const u32) as usize;
     let name_at = |at: usize| CStr::from_ptr(at as *const c_char).to_string_lossy().into_owned();
@@ -716,6 +817,7 @@ unsafe fn delay_import_slot(module: usize, dll: &str, function: &str) -> Option<
 }
 
 /// Before anything asks X-Plane for a browser: Chromium takes its switches when it starts.
+#[cfg(windows)]
 pub fn prepare_chromium_start() {
     static ONCE: AtomicBool = AtomicBool::new(false);
     if ONCE.swap(true, Ordering::SeqCst) {
@@ -733,19 +835,22 @@ pub fn prepare_chromium_start() {
         };
         let was = std::ptr::read_volatile(slot as *const usize);
         let image_bytes = std::ptr::read_unaligned((exe + std::ptr::read_unaligned((exe + 0x3C) as *const u32) as usize + 24 + 56) as *const u32) as usize;
+        // X-Plane 12.4 binds the slot at load, long before it starts Chromium, so a bound slot is no sign of a started one.
         if !(exe..exe + image_bytes).contains(&was) {
-            super::log("X-Plane already called Chromium's start, too early for our switches");
-            return;
+            super::log("Chromium's start is already bound; hooking it anyway");
         }
         IAT_WAS.store(was, Ordering::SeqCst);
         IAT_SLOT.store(slot, Ordering::SeqCst);
         if !write_slot(slot, cef_initialize_hook as *const () as usize) {
             IAT_SLOT.store(0, Ordering::SeqCst);
+            super::log("Chromium's start could not be hooked: the slot stays read-only");
         }
+        super::log(&format!("Chromium's library {} loaded when the hook went in", if GetModuleHandleA(c"libcef.dll".as_ptr()).is_null() { "was not" } else { "was" }));
     }
 }
 
 /// Before this DLL unloads, if X-Plane never started Chromium.
+#[cfg(windows)]
 pub fn forget_chromium_start() {
     let slot = IAT_SLOT.swap(0, Ordering::SeqCst);
     if slot != 0 {
@@ -753,31 +858,64 @@ pub fn forget_chromium_start() {
     }
 }
 
+/// X-Plane's Chromium is already running on macOS by the time a plugin loads, and its
+/// start is not ours to hook: it keeps X-Plane's switches.
+#[cfg(not(windows))]
+pub fn prepare_chromium_start() {}
+
+#[cfg(not(windows))]
+pub fn forget_chromium_start() {}
+
 pub fn chromium_switches_applied() -> bool {
     SWITCHES_APPLIED.load(Ordering::SeqCst)
+}
+
+/// Whether Chromium's own command line carries `name`: ours through the hook, or X-Plane's launch line.
+pub fn chromium_has_switch(name: &str) -> bool {
+    const HAS_SWITCH: usize = 11;
+    unsafe {
+        let module = GetModuleHandleA(c"libcef.dll".as_ptr());
+        if module.is_null() {
+            return false;
+        }
+        let get = GetProcAddress(module, c"cef_command_line_get_global".as_ptr());
+        if get.is_null() {
+            return false;
+        }
+        let line = std::mem::transmute::<*mut c_void, unsafe extern "C" fn() -> *mut CommandLine>(get)();
+        if line.is_null() {
+            return false;
+        }
+        let wide: Vec<u16> = name.encode_utf16().collect();
+        let has = std::mem::transmute::<Slot, unsafe extern "system" fn(*mut CommandLine, *const CefString) -> c_int>((*line).before[HAS_SWITCH])(line, &CefString { str_: wide.as_ptr(), length: wide.len(), dtor: 0 });
+        if let Some(release) = (*line).base.release {
+            release(line as *mut c_void);
+        }
+        has != 0
+    }
 }
 
 /// Whether the X-Plane installed here carries the exact Chromium this code was written for.
 pub fn available(xplane_root: &Path) -> Result<(), String> {
     unsafe {
-        let mut module = GetModuleHandleA(c"libcef.dll".as_ptr());
-        if module.is_null() {
+        #[cfg(windows)]
+        if GetModuleHandleA(c"libcef.dll".as_ptr()).is_null() {
             let path = xplane_root.join("Resources").join("dlls").join("64").join("cef").join("win").join("libcef.dll");
             let wide: Vec<u16> = path.to_string_lossy().encode_utf16().chain(std::iter::once(0)).collect();
             const LOAD_WITH_ALTERED_SEARCH_PATH: u32 = 8;
-            module = LoadLibraryExW(wide.as_ptr(), std::ptr::null_mut(), LOAD_WITH_ALTERED_SEARCH_PATH);
+            if LoadLibraryExW(wide.as_ptr(), std::ptr::null_mut(), LOAD_WITH_ALTERED_SEARCH_PATH).is_null() {
+                return Err(format!("cannot load {}", xplane_root.display()));
+            }
         }
-        if module.is_null() {
-            return Err(format!("cannot load {}", xplane_root.display()));
-        }
-        let hash = GetProcAddress(module, c"cef_api_hash".as_ptr());
-        if hash.is_null() {
-            return Err("libcef.dll has no cef_api_hash".to_string());
-        }
+        #[cfg(not(windows))]
+        let _ = xplane_root;
+        let Some(hash) = cef_symbol(c"cef_api_hash") else {
+            return Err("X-Plane's Chromium is not loaded, or has no cef_api_hash".to_string());
+        };
         let hash = std::mem::transmute::<*mut c_void, ApiHash>(hash);
         let found = CStr::from_ptr(hash(0)).to_string_lossy().into_owned();
-        if found != API_HASH_WINDOWS {
-            return Err(format!("X-Plane's Chromium has API hash {found}, this plugin was written for {API_HASH_WINDOWS}"));
+        if found != API_HASH {
+            return Err(format!("X-Plane's Chromium has API hash {found}, this plugin was written for {API_HASH}"));
         }
     }
     Ok(())
@@ -797,16 +935,17 @@ pub struct Browsers {
     fps_cap: c_int,
     governed: c_int,
     governed_outside: bool,
+    governed_hidden: Vec<bool>,
     governed_at: Option<(u64, Instant)>,
     stats_at: Instant,
 }
 
 const OUTSIDE_RATE: c_int = 5;
 
-/// The big screens need no full rate from outside. Everything else keeps it: the
+/// The big screens need no full rate from outside or out of view. Everything else keeps it: the
 /// pages that do the aircraft's work run on the same clock.
 fn rate_for(key: &str, base: c_int, outside: bool) -> c_int {
-    if outside && matches!(key, "SCREEN_DU_PFDL" | "SCREEN_DU_PFDR" | "SCREEN_DU_NDL" | "SCREEN_DU_NDR" | "SCREEN_DU_EWD" | "SCREEN_DU_SD") {
+    if (outside || super::screen_out_of_view(key)) && matches!(key, "SCREEN_DU_PFDL" | "SCREEN_DU_PFDR" | "SCREEN_DU_NDL" | "SCREEN_DU_NDR" | "SCREEN_DU_EWD" | "SCREEN_DU_SD") {
         return OUTSIDE_RATE.min(base);
     }
     base
@@ -849,18 +988,7 @@ pub fn open_all(tag: &str, port: u16, wanted: &[Wanted], fps_cap: c_int) -> Opti
         let url = std::env::var("FBW_BENCH_URL").unwrap_or(url);
         let url: Vec<u16> = url.encode_utf16().collect();
         let url_string = CefString { str_: url.as_ptr(), length: url.len(), dtor: 0 };
-        let info = WindowInfo {
-            ex_style: 0,
-            window_name: NO_STRING,
-            style: 0,
-            bounds: Rect::default(),
-            parent_window: std::ptr::null_mut(),
-            menu: std::ptr::null_mut(),
-            windowless_rendering_enabled: 1,
-            shared_texture_enabled: 0,
-            external_begin_frame_enabled: 0,
-            window: std::ptr::null_mut(),
-        };
+        let info = WindowInfo::windowless();
         let settings = BrowserSettings {
             size: std::mem::size_of::<BrowserSettings>(),
             windowless_frame_rate: fps_cap,
@@ -882,7 +1010,7 @@ pub fn open_all(tag: &str, port: u16, wanted: &[Wanted], fps_cap: c_int) -> Opti
         list.push(view);
     }
     RATE_WANTED.store(false, Ordering::Relaxed);
-    Some(Browsers { views: list, paints: Some(paints), fps_cap, governed: 0, governed_outside: false, governed_at: None, stats_at: Instant::now() })
+    Some(Browsers { views: list, paints: Some(paints), fps_cap, governed: 0, governed_outside: false, governed_hidden: Vec::new(), governed_at: None, stats_at: Instant::now() })
 }
 
 impl Browsers {
@@ -931,6 +1059,11 @@ impl Browsers {
     /// No faster than X-Plane shows, as every paint costs its main thread, and never
     /// for a 1-2 fps wobble.
     fn govern(&mut self, session: &Session) {
+        let hidden: Vec<bool> = self.views.iter().map(|v| unsafe { super::screen_out_of_view(&(**v).key) }).collect();
+        if self.governed > 0 && hidden != self.governed_hidden {
+            self.governed_hidden = hidden;
+            self.set_rate(self.governed, self.governed_outside);
+        }
         let now = Instant::now();
         let frame = session.slots.header().frame.load(Ordering::Acquire);
         let Some((last_frame, at)) = self.governed_at else {
@@ -1034,7 +1167,7 @@ unsafe fn send_key(host: *mut Host, input: &Input) {
     ((*host).send_key_event)(host, &key(KEYUP, 0));
 }
 
-#[cfg(test)]
+#[cfg(all(test, windows))]
 pub mod probe {
     use super::*;
 
@@ -1087,7 +1220,7 @@ mod mode_tests {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, windows))]
 mod start_tests {
     use super::*;
 
@@ -1123,7 +1256,7 @@ mod rate_tests {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, windows))]
 pub mod test_support {
     use super::*;
 

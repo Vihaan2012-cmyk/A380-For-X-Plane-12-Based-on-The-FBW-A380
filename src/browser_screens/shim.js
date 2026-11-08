@@ -303,7 +303,10 @@
   window.fetch = function (resource, options) {
     const url = String(resource && resource.url !== undefined ? resource.url : resource);
     const m = /^https?:\/\/(?:localhost|127\.0\.0\.1):8380(\/.*)$/i.exec(url);
-    return m ? realFetch(`/__b/simbridge?p=${q(m[1])}`, options) : realFetch(resource, options);
+    if (m) return realFetch(`/__b/simbridge?p=${q(m[1])}`, options);
+    // The airport map's AMDB is the plugin's local data, not Navigraph's paid API.
+    if (/^https:\/\/amdb\.api\.navigraph\.com\//i.test(url)) return realFetch(`/__b/amdb?u=${q(url)}`, options);
+    return realFetch(resource, options);
   };
 
   window.addEventListener("error", (e) => send(["l", 2, `${e.message} at ${e.filename}:${e.lineno}`]));

@@ -1241,6 +1241,63 @@ pub(crate) mod tests {
         assert!((10.0..=14.0).contains(&four_engines_t_h), "{four_engines_t_h:.1} t/h");
     }
 
+    /// ISA at a pressure altitude: pressure (Pa) and temperature (K).
+    fn isa(alt_ft: f64) -> (f64, f64) {
+        let h = alt_ft * 0.3048;
+        if h <= 11_000.0 {
+            let t = T_REF_K - 0.0065 * h;
+            (P_REF_PA * (t / T_REF_K).powf(5.255_88), t)
+        } else {
+            (22_632.0 * (-(h - 11_000.0) / 6_341.6).exp(), 216.65)
+        }
+    }
+
+    /// Steady corrected thrust and fuel flow of this engine over the FMS's CN1 x Mach x altitude grid, for its
+    /// performance predictions: `FMS_ENGINE_OUT=<file> cargo test --release --lib -- --ignored dump_fms_engine_tables`.
+    #[test]
+    #[ignore]
+    fn dump_fms_engine_tables() {
+        let path = std::env::var("FMS_ENGINE_OUT").expect("FMS_ENGINE_OUT");
+        let alts = [0.0, 5000.0, 10000.0, 15000.0, 20000.0, 25000.0, 30000.0, 35000.0, 39000.0, 43000.0];
+        let machs = [0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9];
+        let cn1s = [20.0, 30.0, 40.0, 50.0, 60.0, 70.0, 75.0, 80.0, 85.0, 90.0, 95.0, 100.0, 105.0];
+        let lbf = 4.448_221_615_3;
+        let mut thrust = vec![vec![vec![0.0; machs.len()]; cn1s.len()]; alts.len()];
+        let mut fuel = thrust.clone();
+        for (a, &alt) in alts.iter().enumerate() {
+            let (p, t) = isa(alt);
+            for (m, &mach) in machs.iter().enumerate() {
+                let mut engine = Engine::new();
+                run_to_steady_state(&mut engine, EngineInputs { target_n1_corrected_pct: 100.0, ..isa_sea_level() }, 10.0);
+                let delta2 = crate::fadec::ratios::delta2(mach, p / 100.0);
+                let theta2 = crate::fadec::ratios::theta2(mach, t - 273.15);
+                let at = |cn1: f64| EngineInputs { ambient_pressure_pa: p, ambient_temp_k: t, mach, true_airspeed_m_s: mach * (GAMMA_AIR * R_AIR * t).sqrt(), target_n1_corrected_pct: cn1, starter_supply_fraction: 0.0, ..isa_sea_level() };
+                run_for(&mut engine, at(105.0), 40.0);
+                // From full power down: below where the engine stays lit at this condition the cell is left out.
+                let mut lit = true;
+                for (c, &cn1) in cn1s.iter().enumerate().rev() {
+                    let out = run_for(&mut engine, at(cn1), 25.0).0;
+                    lit = lit && out.fuel_flow_kg_s > 0.0 && out.n3_pct > 40.0;
+                    thrust[a][c][m] = if lit { out.net_thrust_n / lbf / delta2 / (STATIC_THRUST_N / lbf) } else { f64::NAN };
+                    fuel[a][c][m] = if lit { out.fuel_flow_kg_s * 3600.0 / 0.453_592_37 / (delta2 * theta2.sqrt()) } else { f64::NAN };
+                }
+            }
+        }
+        // Cells where the engine would not stay lit take their nearest lit neighbour along the Mach axis.
+        for table in [&mut thrust, &mut fuel] {
+            for row in table.iter_mut().flat_map(|alt| alt.iter_mut()) {
+                for m in 0..row.len() {
+                    if row[m].is_nan() {
+                        let near = (0..row.len()).filter(|&k| !row[k].is_nan()).min_by_key(|&k| (k as i64 - m as i64).abs());
+                        row[m] = near.map_or(0.0, |k| row[k]);
+                    }
+                }
+            }
+        }
+        let json = serde_json::json!({ "alt_ft": alts, "mach": machs, "cn1": cn1s, "max_thrust_lbf": STATIC_THRUST_N / lbf, "corrected_thrust_fraction": thrust, "corrected_fuel_flow_lb_h": fuel });
+        std::fs::write(&path, serde_json::to_string_pretty(&json).unwrap()).unwrap();
+    }
+
     #[test]
     fn spool_up_from_ground_idle_to_toga_is_prompt() {
         // The certified acceleration figure is EASA.E.012 Note 12's 5.6 s
