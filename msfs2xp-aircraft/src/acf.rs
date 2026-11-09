@@ -1240,7 +1240,7 @@ pub fn build(inp: &Inputs) -> anyhow::Result<(String, Vec<String>)> {
         acf.set("acf/_ICAO", &icao);
     }
     acf.set("acf/_author", "FlyByWire Simulations (GPL-3.0); converted by msfs2xp-aircraft");
-    acf.set("acf/_studio", "Xplane Hub and Fly By Wire");
+    acf.set("acf/_studio", "A380 for X-Plane");
     acf.set("acf/_descrip", format!("{} converted from MSFS", inp.name));
     // The template's own paint name ("Lufthansa D-AIKN") would label the
     // default livery.
