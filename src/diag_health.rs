@@ -83,7 +83,7 @@ fn fmt_spans(v: &[(f64, f64)]) -> String {
     v.iter().take(6).map(|(a, b)| format!("{a:.0}-{b:.0} s")).collect::<Vec<_>>().join(", ") + if v.len() > 6 { " ..." } else { "" }
 }
 
-pub fn report(samples_csv: &str, events_log: &str, _processes_csv: &str) -> String {
+pub fn report(samples_csv: &str, events_log: &str, processes_csv: &str) -> String {
     let s = Samples::parse(samples_csv);
     let mut r = Report { lines: Vec::new(), problems: 0 };
     let parked = |s: &Samples, row: &[f64]| s.get(row, "sim/flightmodel/failures/onground_any") > 0.5 && s.get(row, "sim/flightmodel/position/groundspeed") < 0.3;
@@ -217,6 +217,25 @@ pub fn report(samples_csv: &str, events_log: &str, _processes_csv: &str) -> Stri
         r.ok(format!("sound loaded and playing ({sound_lines} sound log lines, no mis-pitched voice)"));
     }
 
+    r.section("Display process");
+    let mut seen = false;
+    let mut lost = Vec::new();
+    for l in processes_csv.lines().filter(|l| l.contains(",XPHFBW.exe,")) {
+        let f: Vec<&str> = l.split(',').collect();
+        let instances: u32 = f.get(2).and_then(|v| v.parse().ok()).unwrap_or(0);
+        if instances > 0 {
+            seen = true;
+        } else if seen {
+            lost.push(f.first().copied().unwrap_or("?").to_string());
+            seen = false;
+        }
+    }
+    if lost.is_empty() {
+        r.ok("XPHFBW never disappeared".into());
+    } else {
+        r.problem(format!("XPHFBW disappeared at {} s (crash?)", lost.join(", ")));
+    }
+
     r.section("Failures and breakers");
     for l in events_log.lines().filter(|l| l.contains("[failure]") || l.contains("[breaker]")).take(60) {
         r.info(l.trim().to_string());
@@ -260,15 +279,15 @@ mod tests {
     #[test]
     fn a_healthy_parked_session_reports_no_problems_from_the_samples() {
         let samples = csv(&["1,30,3,1,1,0,0.1,-0.2,1,0.17,1,1,0", "2,30,3,1,1,0,0.2,-0.2,1,0.17,1,0,1"]);
-        let out = report(&samples, "1 [log] sound: 150 voices (60 audible); loudest: media 1 trigger 2 -10 dB pitch x1.00\n", "");
+        let out = report(&samples, "1 [log] sound: 150 voices (60 audible); loudest: media 1 trigger 2 -10 dB pitch x1.00\n", "1,XPHFBW.exe,27,1,1,1,1\n");
         assert!(out.starts_with("A380 for X-Plane 12 diagnostics health report: 0 problem(s)"), "{out}");
     }
 
     #[test]
     fn the_bugs_this_session_fixed_each_show_as_a_problem() {
         let samples = csv(&["1,8,85,2,1,0,9.5,9.9,1,0.0,1,1,1", "2,8,85,2,1,0,10.0,9.9,0,0.0,1,1,1"]);
-        let out = report(&samples, "1 [log] sound: loudest: media 9 trigger 3 -5 dB pitch x4.10\n", "");
-        for needle in ["plugin takes over 10 ms", "IR ground speed reached 10.0 kt", "wing flex parked +9.90", "engine 1 running with no fuel flow", "engine 1 stopped at 2 s", "STROBE lit with its switch at OFF", "4.10x its recorded pitch"] {
+        let out = report(&samples, "1 [log] sound: loudest: media 9 trigger 3 -5 dB pitch x4.10\n", "1,XPHFBW.exe,27,1,1,1,1\n3,XPHFBW.exe,0,0,0,0,0\n");
+        for needle in ["plugin takes over 10 ms", "IR ground speed reached 10.0 kt", "wing flex parked +9.90", "engine 1 running with no fuel flow", "engine 1 stopped at 2 s", "STROBE lit with its switch at OFF", "4.10x its recorded pitch", "XPHFBW disappeared at 3 s"] {
             assert!(out.contains(needle), "missing {needle:?} in\n{out}");
         }
     }

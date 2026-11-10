@@ -3,7 +3,7 @@ import path from 'node:path';
 
 const OUT = path.resolve(process.argv[2] || 'captures');
 const PORT = process.env.TOUR_PORT || '9333';
-const SCRIPT = process.env.MFD_DOM_JS || path.resolve(path.dirname(new URL(import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, '$1')), '../../web/js/msfs/mfd-dom.js');
+const SCRIPT = process.env.MFD_DOM_JS || path.resolve(path.dirname(new URL(import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, '$1')), '../../app/js/msfs/mfd-dom.js');
 const PAGES = (process.env.MFD_PAGES || 'ACTIVE>F-PLN,ACTIVE>PERF,ACTIVE>INIT,ACTIVE>FUEL & LOAD,ACTIVE>WIND,SECONDARY>F-PLN,POSITION>MONITOR').split(',');
 fs.mkdirSync(OUT, { recursive: true });
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));

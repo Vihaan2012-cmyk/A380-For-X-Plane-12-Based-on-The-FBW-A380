@@ -1079,6 +1079,8 @@ impl Browsers {
     /// Display-only pages nobody can see stop rendering altogether (CEF's WasHidden) and pick up
     /// again the moment their screen comes back into view; pages that do the aircraft's work keep running.
     fn suspend_unseen(&mut self) {
+        static ON: OnceLock<bool> = OnceLock::new();
+        let on = *ON.get_or_init(|| std::env::var("FBW_SUSPEND_UNSEEN").is_ok_and(|v| v == "1"));
         let outside = super::VIEW_OUTSIDE.load(Ordering::Relaxed);
         let in_deck = crate::flight_deck_view::eye_in_flight_deck();
         if self.suspended.len() != self.views.len() {
@@ -1088,6 +1090,14 @@ impl Browsers {
             let key = unsafe { (**v).key.clone() };
             let want = suspend_when_unseen(&key, outside, in_deck, super::screen_out_of_view(&key));
             if want == self.suspended[i] {
+                continue;
+            }
+            static CHANGES: AtomicU64 = AtomicU64::new(0);
+            if CHANGES.fetch_add(1, Ordering::Relaxed) < 40 {
+                super::log(&format!("{key} {} ({}; outside {outside}, in deck {in_deck}, out of view {})", if want { "unseen" } else { "seen" }, if on { "suspended" } else { "suspension off" }, super::screen_out_of_view(&key)));
+            }
+            if !on {
+                self.suspended[i] = want;
                 continue;
             }
             unsafe {
@@ -1391,6 +1401,17 @@ pub mod test_support {
 
     pub fn open_count() -> i32 {
         OPEN_BROWSERS.load(Ordering::SeqCst)
+    }
+
+    pub fn set_hidden(b: &Browsers, hidden: bool) {
+        for v in &b.views {
+            unsafe {
+                if let Some(host) = host_of((**v).browser) {
+                    ((*host).was_hidden)(host, hidden as c_int);
+                    release_host(host);
+                }
+            }
+        }
     }
 
     pub fn tga_like_dump(block: &ScreenBlock) -> (u32, u32, Vec<u8>) {

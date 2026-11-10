@@ -410,7 +410,7 @@ fn processes_loop() {
             send(Stream::Processes, "t,process,instances,cpu_cores,cpu_percent_of_machine,working_set_mb,private_mb".into());
         }
         let now = Instant::now();
-        for (name, instances, cpu_100ns, ws, private) in process_stats(&["X-Plane.exe", "cefclient.exe"]) {
+        for (name, instances, cpu_100ns, ws, private) in process_stats(&["X-Plane.exe", "XPHFBW.exe", "fbw_a380_systems_server.exe"]) {
             let cores_used = match last.get(&name) {
                 Some(&(prev, at)) if cpu_100ns >= prev => (cpu_100ns - prev) as f64 / 1e7 / now.duration_since(at).as_secs_f64(),
                 _ => 0.0,

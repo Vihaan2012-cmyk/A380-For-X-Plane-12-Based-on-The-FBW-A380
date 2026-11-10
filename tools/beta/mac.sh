@@ -456,7 +456,7 @@ run "the screens did not build" sh -c "cd '$SRC/fbw/xplane' && node xplane/build
 step "Installing into X-Plane..."
 xplane_running && stop "X-Plane was started while building. Close it and run this again; the build is kept."
 [ -d "$PLUGIN_DIR" ] || stop "the aircraft is not installed at $AIRCRAFT."
-rm -rf "$PLUGIN_DIR/XPHFBW" "$PLUGIN_DIR/web"
+mkdir -p "$PLUGIN_DIR/64" "$PLUGIN_DIR/XPHFBW/ui" "$PLUGIN_DIR/XPHFBW/js" "$AIRCRAFT/html_ui"
 [ -f "$PLUGIN_DIR/64/$XPL" ] && cp "$PLUGIN_DIR/64/$XPL" "$WORK/$XPL.previous"
 run "the plugin could not be copied" cp "$BUILT_PLUGIN" "$PLUGIN_DIR/64/$XPL"
 STAGE="$WORK/stage"
@@ -473,9 +473,9 @@ run "the screens could not be installed" cp -R "$STAGE/html_ui/." "$AIRCRAFT/htm
 for json in "$INSTRUMENTS"/*.json; do
   [ -f "$json" ] && cp "$json" "$AIRCRAFT/"
 done
-run "the EFB pages could not be installed" cp -R "$SRC/web/ui/." "$PLUGIN_DIR/web/ui/"
-run "the page runtime could not be installed" cp -R "$SRC/web/js/." "$PLUGIN_DIR/web/js/"
-run "the page runtime could not be installed" cp "$INSTRUMENTS/runtime/xplane-js-data.js" "$PLUGIN_DIR/web/js/xplane-js-data.js"
+run "the EFB pages could not be installed" cp -R "$SRC/app/ui/." "$PLUGIN_DIR/XPHFBW/ui/"
+run "the page runtime could not be installed" cp -R "$SRC/app/js/." "$PLUGIN_DIR/XPHFBW/js/"
+run "the page runtime could not be installed" cp "$INSTRUMENTS/runtime/xplane-js-data.js" "$PLUGIN_DIR/XPHFBW/js/xplane-js-data.js"
 [ -f "$SRC/distribution/THIRD_PARTY_NOTICES.txt" ] && cp "$SRC/distribution/THIRD_PARTY_NOTICES.txt" "$AIRCRAFT/"
 
 if [ "$OS" = mac ]; then

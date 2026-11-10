@@ -1,8 +1,9 @@
-//! The cockpit screens: FlyByWire's pages in X-Plane's own Chromium, served by `server.rs`, with the
-//! systems on a thread of the plugin. The pages draw in our own browsers inside X-Plane's Chromium
+//! Experimental: the cockpit screens with no XPHFBW process, off unless the
+//! `browserDisplays` setting is on. The systems run on a thread of the plugin
+//! (`FBW_SYSTEMS_IN_PROCESS=0` puts them in `fbw_a380_systems_server.exe`) and
+//! `server.rs` stands in for the rest of XPHFBW. The pages draw in our own browsers inside X-Plane's Chromium
 //! (`own_cef.rs`, Windows and macOS); `FBW_BROWSER_ROUTE=device` uses X-Plane's browser devices
-//! instead (`xplm_WindowContentTypeBrowser`), which X-Plane runs at about 30 Hz. Without X-Plane 12.4's
-//! Chromium (X-Plane 11, older X-Plane 12) the native screens and systems take over (native_mode.rs).
+//! instead (`xplm_WindowContentTypeBrowser`), which X-Plane runs at about 30 Hz.
 
 mod dead_band;
 pub mod server;
@@ -102,35 +103,29 @@ pub fn own_route() -> bool {
     *OWN.get_or_init(|| cfg!(any(windows, target_os = "macos")) && std::env::var("FBW_BROWSER_ROUTE").map_or(true, |v| v != "device"))
 }
 
-/// X-Plane has what the screens need (`FBW_BROWSER_DISPLAYS=0` turns them off).
+/// The setting (or `FBW_BROWSER_DISPLAYS=1`), on an X-Plane that has what the route needs.
 pub fn enabled() -> bool {
     static ON: OnceLock<bool> = OnceLock::new();
     *ON.get_or_init(|| {
-        if std::env::var("FBW_BROWSER_DISPLAYS").is_ok_and(|v| v == "0") {
-            log("screens: off (FBW_BROWSER_DISPLAYS=0)");
-            return false;
-        }
+        let wanted = std::env::var("FBW_BROWSER_DISPLAYS").map_or_else(|_| !cfg!(windows) || crate::app_settings::load_now().browser_displays, |v| v == "1");
         // Windows' own route still asks a browser device to start Chromium; macOS's
         // X-Plane has it running already and needs none.
-        if api().is_none() && !(cfg!(target_os = "macos") && own_route()) {
-            log("screens: this X-Plane has no browser devices (12.4 or later needed); the native screens draw instead");
+        if wanted && api().is_none() && !(cfg!(target_os = "macos") && own_route()) {
+            log("this X-Plane has no browser devices (12.4.4 or later needed); using the app");
             return false;
         }
         #[cfg(any(windows, target_os = "macos"))]
-        if own_route() {
+        if wanted && own_route() {
             if let Err(e) = xp::system_path().ok_or_else(|| "no X-Plane folder".to_string()).and_then(|root| own_cef::available(&root)) {
-                log(&format!("screens: X-Plane's Chromium cannot be used ({e}); the native screens draw instead"));
+                log(&format!("using the app: {e}"));
                 return false;
             }
         }
-        log("screens: in X-Plane's browser");
-        true
+        if wanted {
+            log("experimental: screens in X-Plane's browser, XPHFBW stays off");
+        }
+        wanted
     })
-}
-
-/// Where the EFB and app pages and their scripts are installed: `ui/` and `js/` below it.
-pub fn web_dir(plugin_dir: &std::path::Path) -> std::path::PathBuf {
-    plugin_dir.join("web")
 }
 
 pub(crate) fn log(message: &str) {
@@ -416,7 +411,7 @@ pub fn attach(tag: &str, session: &Session, defs: &[ViewDef]) {
     let Some(plugin_dir) = crate::sound_pack::plugin_dir() else { return };
     let Some(aircraft) = plugin_dir.parent().and_then(|p| p.parent()).map(|p| p.to_path_buf()) else { return };
     let Some(root) = xp::system_path() else { return };
-    let paths = Paths { xplane_root: root, aircraft_dir: aircraft, ui_dir: web_dir(&plugin_dir).join("ui") };
+    let paths = Paths { xplane_root: root, aircraft_dir: aircraft, ui_dir: plugin_dir.join("XPHFBW").join("ui") };
     let open = views::views_to_open(defs.to_vec(), session.slots.header().native_views_off.load(Ordering::Acquire));
     let screens: Vec<&'static ScreenDef> = crate::display::screens::SCREENS.iter().collect();
     let hidden: Vec<(u32, String)> = open.iter().filter(|v| v.screen.is_empty()).map(|v| (v.index, format!("@{}", v.index))).collect();
@@ -628,13 +623,13 @@ pub fn request_refresh() {
 
 /// Once a frame, on the main thread.
 pub fn tick(session: &Session) {
-    if !enabled() {
-        return;
-    }
     if let Ok(mut q) = logs().lock() {
         for line in q.drain(..) {
             crate::log(&format!("browser screens: {line}"));
         }
+    }
+    if !enabled() {
+        return;
     }
     if own_route() {
         tick_own(session);
@@ -964,6 +959,39 @@ mod tests {
         server::stop();
     }
 
+    /// The real server exe in lockstep, built and rebuilt as a flight does it:
+    /// FBW_BENCH_SERVER is its path.
+    #[test]
+    #[ignore]
+    fn the_server_exe_ticks_in_lockstep() {
+        use crate::aspects::test_vars::TestVars;
+        use systems::simulation::StartState;
+        let exe = std::path::PathBuf::from(std::env::var("FBW_BENCH_SERVER").unwrap());
+        let mut vars = TestVars::default();
+        let mut remote = crate::remote::client::RemoteSystems::start(&exe, StartState::Apron, &mut vars).unwrap();
+        println!("variables {}", remote.variable_count());
+        let step = |remote: &mut crate::remote::client::RemoteSystems, vars: &mut TestVars, from: usize, n: usize| {
+            for i in from..from + n {
+                vars.set("AMBIENT PRESSURE", 29.92);
+                vars.set("AMBIENT TEMPERATURE", 15.);
+                vars.set("AMBIENT DENSITY", 0.002377);
+                for n in 1..=4 {
+                    vars.set(&format!("A32NX_EXT_PWR_AVAIL:{n}"), 1.);
+                    vars.set(&format!("A32NX_OVHD_ELEC_EXT_PWR_{n}_PB_IS_ON"), 1.);
+                }
+                if let Some(m) = remote.tick(Duration::from_millis(50), i as f64 * 0.05, vars) {
+                    println!("tick {i}: {m}");
+                }
+            }
+        };
+        step(&mut remote, &mut vars, 0, 200);
+        println!("late before rebuild {}", remote.stats.late);
+        remote.rebuild(StartState::Runway);
+        step(&mut remote, &mut vars, 200, 200);
+        println!("ticks {} late {} mean round trip {:.2} ms", remote.stats.ticks, remote.stats.late, remote.stats.round_trip_us as f64 / remote.stats.ticks.max(1) as f64 / 1000.);
+        println!("process {:?} systems mean {:.2} ms AC1 powered {}", remote.process_id(), remote.stats.systems_us as f64 / remote.stats.ticks.max(1) as f64 / 1000., vars.value("A32NX_ELEC_AC_1_BUS_IS_POWERED"));
+    }
+
     #[test]
     #[ignore = "offline, with X-Plane's Chromium: FBW_BENCH_CEF, FBW_BENCH_CACHE, FBW_BENCH_URL"]
     #[cfg(windows)]
@@ -1009,6 +1037,41 @@ mod tests {
         println!("PROBE paints/s {:.1}; MB per paint {:.2}; ms per paint {:.3}; GB/s {:.2}; faults per MB {:.0}", c / 18., b / c.max(1.) / 1e6, n / c.max(1.) / 1e6, b / n.max(1.), f / (b / 1e6).max(1.));
         let (w, h, px) = t::tga_like_dump(&blocks[0]);
         std::fs::write(format!("E:/fbw-build/tmp/probe-{w}x{h}.bgra"), &px).unwrap();
+        browsers.close();
+    }
+
+    #[test]
+    #[ignore = "offline, with X-Plane's Chromium: FBW_BENCH_CEF, FBW_BENCH_CACHE, FBW_BENCH_URL"]
+    #[cfg(windows)]
+    fn paints_resume_after_was_hidden() {
+        use own_cef::test_support as t;
+        let env = |k: &str| std::env::var(k).unwrap_or_else(|_| panic!("{k}"));
+        t::start_chromium(&env("FBW_BENCH_CEF"), &env("FBW_BENCH_CACHE"));
+        let tag = format!("hide_{}", std::process::id());
+        let key = "SCREEN_DU_PFDL";
+        let (dw, dh) = views::device_size(key, 768, 1024);
+        let _block = crate::xphfbw_bridge::ScreenBlock::create(&tag, key, dw, dh).unwrap();
+        let session = crate::xphfbw_bridge::Session::create(&tag).unwrap();
+        let wanted = [own_cef::Wanted { key: key.to_string(), screen: Some(key.to_string()), width: 768, height: 1024 }];
+        let mut browsers = own_cef::open_all(&tag, 1, &wanted, 30).expect("browsers");
+        let mut run = |seconds: f64, browsers: &mut own_cef::Browsers| {
+            t::reset(browsers);
+            let started = Instant::now();
+            while started.elapsed().as_secs_f64() < seconds {
+                t::pump();
+                std::thread::sleep(Duration::from_millis(5));
+            }
+            t::stats(browsers)[0].1
+        };
+        let _ = &session;
+        let warm = run(6., &mut browsers);
+        let shown = run(3., &mut browsers);
+        t::set_hidden(&browsers, true);
+        let hidden = run(3., &mut browsers);
+        t::set_hidden(&browsers, false);
+        let again = run(3., &mut browsers);
+        let later = run(3., &mut browsers);
+        println!("HIDE paints: warm {warm}, shown {shown}, hidden {hidden}, shown again {again}, later {later}");
         browsers.close();
     }
 

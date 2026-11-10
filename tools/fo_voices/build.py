@@ -251,7 +251,7 @@ def table(repo):
     import copilot_voices
     repo = Path(repo)
     rows = {}
-    for k, v in copilot_voices.phrases(repo / "web/ui/index.html").items():
+    for k, v in copilot_voices.phrases(repo / "app/ui/index.html").items():
         rows[k] = (v, "callout" if k in copilot_voices.CALLOUTS else "checklist", "full")
     for k, v in AI_FO.items():
         rows[k] = (v, "ai_fo", "full")

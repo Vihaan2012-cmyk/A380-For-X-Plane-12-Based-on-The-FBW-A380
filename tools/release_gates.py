@@ -1,4 +1,4 @@
-"""python -I tools/release_gates.py <staged aircraft folder> --out <folder>"""
+"""python -I tools/release_gates.py <staged aircraft folder> [--native-only]"""
 import argparse
 import csv
 import fnmatch
@@ -17,7 +17,7 @@ MIRROR = Path(os.environ.get("SIMCHECK_MIRROR", "E:/fbw-build/simcheck/msfs-avio
 SIMCHECK = Path(os.environ.get("SIMCHECK_TOOL", "E:/fbw-tools/session-tools/simcheck_tool"))
 FS_BASE_UI = {name: Path(os.environ[var]) for name, var in (("fs2020", "FS_BASE_UI"), ("fs2024", "FS_BASE_UI_2024")) if os.environ.get(var)}
 API_MAP = Path(os.environ.get("XPJS_API_MAP", "E:/fbw-int/xplane-js-private/api-map.json"))
-JS_DISPLAYS = ("html_ui/", "plugins/fbw_a380_systems/web/js/", "plugins/fbw_a380_systems/web/ui/")
+JS_DISPLAYS = ("html_ui/", "plugins/fbw_a380_systems/XPHFBW/js/", "plugins/fbw_a380_systems/XPHFBW/ui/")
 MS_NOTICE = re.compile(rb"copyright\s*(?:\(c\)|\xc2\xa9|\xa9)?\s*(?:\d{4}(?:-\d{4})?\s*)?microsoft", re.I)
 MS_NOTICE_WIDE = re.compile(b"(?:c\x00o\x00p\x00y\x00r\x00i\x00g\x00h\x00t\x00|\xa9\x00).{0,40}?m\x00i\x00c\x00r\x00o\x00s\x00o\x00f\x00t\x00", re.I | re.S)
 
@@ -74,6 +74,7 @@ def scrub(gates, roots):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("aircraft", type=Path)
+    ap.add_argument("--native-only", action="store_true")
     ap.add_argument("--out", type=Path, required=True, help="folder for the reports and PROVENANCE.csv (a staged release, never an X-Plane install)")
     args = ap.parse_args()
     aircraft = args.aircraft
@@ -93,9 +94,9 @@ def main():
         else:
             pr = package_release()
             served = [LIBRARY / "data/src"]
-            for top in ("html_ui", "plugins/fbw_a380_systems/web"):
+            for top in ("html_ui", "plugins/fbw_a380_systems/XPHFBW"):
                 for p in sorted((aircraft / top).rglob("*")):
-                    if p.is_file() and p.suffix in (".js", ".mjs") and not pr.excluded(p.relative_to(aircraft).as_posix()):
+                    if p.is_file() and p.suffix in (".js", ".mjs") and not pr.excluded(p.relative_to(aircraft).as_posix(), args.native_only):
                         served.append(p)
             listed = gates / "b-candidates.txt"
             listed.write_text("\n".join(map(str, served)) + "\n", encoding="utf-8")
@@ -106,7 +107,7 @@ def main():
             listed.unlink()
             results.append(("(b) page-script similarity", ok, last))
         cmd = ["node", str(LIBRARY / "tools/gate-identifiers.cjs"), str(aircraft / "html_ui"), str(gates / "c-identifiers.json"), "--map", str(API_MAP), "--fbw", str(FORK)]
-        for script in sorted((aircraft / "plugins/fbw_a380_systems/web/js").glob("**/*.js")):
+        for script in sorted((aircraft / "plugins/fbw_a380_systems/XPHFBW/js").glob("**/*.js")):
             cmd += ["--extra", str(script)]
         ok, last = run(cmd, log)
         results.append(("(c) identifiers", ok, last))
@@ -119,7 +120,7 @@ def main():
         for dirpath, _, files in os.walk(aircraft):
             for name in sorted(files):
                 rel = (Path(dirpath) / name).relative_to(aircraft).as_posix()
-                if pr.excluded(rel):
+                if pr.excluded(rel, args.native_only):
                     continue
                 hit = next((why for rx, why in forbidden if rx.match(rel)), None)
                 if hit:
@@ -145,7 +146,7 @@ def main():
                 rel = (Path(dirpath) / name).relative_to(aircraft).as_posix()
                 if name.endswith(".map"):
                     maps.append(rel)
-                elif name.endswith((".js", ".css", ".mjs")) and not pr.excluded(rel):
+                elif name.endswith((".js", ".css", ".mjs")) and not pr.excluded(rel, args.native_only):
                     if "sourceMappingURL=" in (Path(dirpath) / name).read_text(encoding="utf-8", errors="replace"):
                         refs.append(rel)
         (gates / "e-source-maps.json").write_text(json.dumps({"map_files": maps, "files_referencing_maps": refs}, indent=1), encoding="utf-8")
@@ -157,7 +158,7 @@ def main():
         for dirpath, _, files in os.walk(aircraft):
             for name in sorted(files):
                 rel = (Path(dirpath) / name).relative_to(aircraft).as_posix()
-                if pr.excluded(rel):
+                if pr.excluded(rel, args.native_only):
                     continue
                 data = (Path(dirpath) / name).read_bytes()
                 hits = len(MS_NOTICE.findall(data)) + len(MS_NOTICE_WIDE.findall(data))

@@ -70,7 +70,7 @@ pub fn sim_frame(xplm: &crate::xp::Xplm) {
 }
 
 #[cfg(windows)]
-const CPU_PROCESSES: [&str; 2] = ["X-Plane.exe", "cefclient.exe"];
+const CPU_PROCESSES: [&str; 3] = ["X-Plane.exe", "XPHFBW.exe", "cefclient.exe"];
 
 fn sim_report() -> String {
     SIM.with(|s| {

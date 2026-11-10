@@ -3,7 +3,7 @@ import http from 'node:http';
 import path from 'node:path';
 import { chromium } from 'playwright';
 
-const root = path.resolve('../../web/ui');
+const root = path.resolve('../../app/ui');
 const out = process.argv[2] || 'wear-preview.png';
 const types = { '.html': 'text/html', '.json': 'application/json', '.js': 'text/javascript', '.css': 'text/css', '.svg': 'image/svg+xml', '.png': 'image/png' };
 const server = http.createServer((req, res) => {
