@@ -6,16 +6,26 @@ const SIDES: [&str; 2] = ["LEFT", "RIGHT"];
 const JOINTS: [&str; 4] = ["INBOARD", "INBOARD_MID", "OUTBOARD_MID", "OUTBOARD"];
 const LIMIT_DEG: f64 = 30.0;
 
+/// Per joint: A380_EXTERIOR.xml's clip percent `angle * gain + offset` (50 = rest), and hinge degrees at 0 and 100 % matching the glTF bones' tip lift.
+const CLIPS: [(f64, f64, f64, f64); 4] = [
+    (23.25, 55.35, -2.432, 3.303),
+    (16.125, 67.0, -3.124, 4.239),
+    (29.41, 31.9, -3.407, 4.254),
+    (29.41, 50.0, -0.990, 1.237),
+];
+
 pub fn dataref(side: usize, joint: usize) -> String {
     format!("fbw/anim/wing_flex/{}_{}", SIDES[side].to_lowercase(), JOINTS[joint].to_lowercase())
 }
 
-pub fn angle(raw: f64) -> f64 {
-    if raw.is_finite() {
-        raw.clamp(-LIMIT_DEG, LIMIT_DEG)
-    } else {
-        0.0
+/// FlyByWire's WING_FLEX angle for a joint as the hinge angle the wing objects rotate by.
+pub fn angle(joint: usize, raw: f64) -> f64 {
+    if !raw.is_finite() {
+        return 0.0;
     }
+    let (gain, offset, low, high) = CLIPS[joint];
+    let along = ((raw * gain + offset).clamp(0., 100.) - 50.) / 50.;
+    (along * if along < 0. { -low } else { high }).clamp(-LIMIT_DEG, LIMIT_DEG)
 }
 
 const RESTING_SMOOTHING_S: f64 = 0.25;
@@ -45,8 +55,8 @@ impl WingFlexAnims {
         let ids = self.ids.get_or_insert_with(|| {
             (0..2).flat_map(|s| (0..4).map(move |j| (s, j))).map(|(s, j)| vars.get(format!("WING_FLEX_{}_{}", SIDES[s], JOINTS[j]))).collect()
         });
-        for ((value, id), shown) in self.values.iter().zip(ids.iter()).zip(self.shown.iter_mut()) {
-            *shown = smoothed(*shown, angle(vars.read(id)), dt, resting_on_airframe);
+        for (k, ((value, id), shown)) in self.values.iter().zip(ids.iter()).zip(self.shown.iter_mut()).enumerate() {
+            *shown = smoothed(*shown, angle(k % 4, vars.read(id)), dt, resting_on_airframe);
             published::set(*value, *shown);
         }
     }
@@ -78,8 +88,17 @@ mod tests {
 
     #[test]
     fn angles_are_bounded_and_never_nan() {
-        assert_eq!(angle(f64::NAN), 0.0);
-        assert_eq!(angle(90.0), LIMIT_DEG);
-        assert_eq!(angle(-2.5), -2.5);
+        assert_eq!(angle(0, f64::NAN), 0.0);
+        assert_eq!(angle(0, 90.0), 3.303);
+        assert_eq!(angle(0, -90.0), -2.432);
+        assert_eq!(angle(3, 0.0), 0.0);
+    }
+
+    #[test]
+    fn one_g_flight_lifts_the_tip_as_far_as_flybywires_model_does() {
+        let fbw = [0.37, 0.59, 0.72, 0.26];
+        let levers = [34.881 - 6.5, 34.881 - 14.55, 34.881 - 25.1, 34.881 - 32.05];
+        let rise: f64 = (0..4).map(|j| angle(j, fbw[j]).to_radians().tan() * levers[j]).sum();
+        assert!((rise - 1.31).abs() < 0.05, "{rise}");
     }
 }

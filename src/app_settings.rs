@@ -36,9 +36,6 @@
 //!   cabin objects' `ANIM_show` reads) every tick it changes.
 //! - `walkaround`: live. Off (the default) removes every walkaround item
 //!   and fits none at a cold and dark start (`walkaround.rs`).
-//! - `systemsOutOfProcess`: next aircraft load. [`systems_out_of_process`]
-//!   is read by `start_systems` (lib.rs, agent A), which only runs once,
-//!   at `Plugin::new`.
 //!
 //! ## Rule 8 (the settings-files mutex)
 //!
@@ -118,7 +115,6 @@ pub struct AppSettings {
     /// `xphfbw.satcomAntenna`; `None` when the key is not in the file, so the
     /// flyPad's MODEL_SATCOM_ENABLED stays in charge.
     pub satcom_antenna: Option<SatcomAntenna>,
-    pub systems_out_of_process: bool,
     pub cold_start_ground_power: bool,
     pub random_failures: bool,
     pub failure_rate: f64,
@@ -142,7 +138,6 @@ pub struct AppSettings {
     pub cabin_brightness: f64,
     pub display_scale: f64,
     pub screens_on_integrated_gpu: bool,
-    pub browser_displays: bool,
     pub ground_equipment: bool,
     pub gse_operator: u8,
     pub glass_scale: f64,
@@ -178,7 +173,6 @@ impl Default for AppSettings {
             msn: String::new(),
             selcal: String::new(),
             satcom_antenna: None,
-            systems_out_of_process: true,
             cold_start_ground_power: true,
             random_failures: false,
             failure_rate: 1.0,
@@ -198,7 +192,6 @@ impl Default for AppSettings {
             cabin_brightness: 1.0,
             display_scale: crate::xphfbw_bridge_views::SCREEN_SUPERSAMPLE,
             screens_on_integrated_gpu: false,
-            browser_displays: false,
             ground_equipment: true,
             gse_operator: 0,
             glass_scale: crate::xphfbw_bridge_views::GLASS_SCALE_DEFAULT,
@@ -258,7 +251,6 @@ fn parse(map: &Map<String, Value>) -> AppSettings {
         msn: as_text(map, "msn"),
         selcal: as_text(map, "selcal").to_ascii_uppercase(),
         satcom_antenna: satcom_antenna(map),
-        systems_out_of_process: as_bool(map, "systemsOutOfProcess", defaults.systems_out_of_process),
         cold_start_ground_power: as_bool(map, "coldStartGroundPower", defaults.cold_start_ground_power),
         random_failures: as_bool(map, "randomFailures", defaults.random_failures),
         failure_rate: as_f64(map, "failureRate", defaults.failure_rate).clamp(0.0, 1_000_000.0),
@@ -278,7 +270,6 @@ fn parse(map: &Map<String, Value>) -> AppSettings {
         cabin_brightness: as_f64(map, "cabinBrightness", defaults.cabin_brightness).clamp(0.0, 1.0),
         display_scale: as_f64(map, "displayScale", defaults.display_scale).clamp(1.0, 2.0),
         screens_on_integrated_gpu: map.get("displayGpu").and_then(Value::as_str) == Some("integrated"),
-        browser_displays: as_bool(map, "browserDisplays", defaults.browser_displays),
         ground_equipment: as_bool(map, "groundEquipment", defaults.ground_equipment),
         gse_operator: gse_operator(map),
         glass_scale: as_f64(map, "glassScale", defaults.glass_scale).clamp(1.0, 2.0),
@@ -517,13 +508,6 @@ pub fn generation() -> u64 {
     global().generation()
 }
 
-/// `xphfbw.systemsOutOfProcess`, for `start_systems` (lib.rs, agent A) to
-/// decide whether to launch `fbw_a380_systems_server.exe`/XPHFBW.exe
-/// separately or run the systems in-process.
-pub fn systems_out_of_process() -> bool {
-    current().systems_out_of_process
-}
-
 // ---------------------------------------------------------------------
 // Rule 8: the cross-process settings-files mutex.
 // ---------------------------------------------------------------------
@@ -592,7 +576,6 @@ mod tests {
     #[test]
     fn parses_every_key_the_app_writes() {
         let m = map(&[
-            ("systemsOutOfProcess", Value::Bool(false)),
             ("coldStartGroundPower", Value::Bool(false)),
             ("randomFailures", Value::Bool(true)),
             ("failureRate", Value::String("2.5".into())),
@@ -602,7 +585,6 @@ mod tests {
             ("stateDumpKeep", Value::String("10".into())),
         ]);
         let s = parse(&m);
-        assert!(!s.systems_out_of_process);
         assert!(!s.cold_start_ground_power);
         assert!(s.random_failures);
         assert_eq!(s.failure_rate, 2.5);

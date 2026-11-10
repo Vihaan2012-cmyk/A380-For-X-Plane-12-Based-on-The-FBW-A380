@@ -513,6 +513,17 @@ pub fn oans_clear_patches() -> Vec<SourcePatch> {
     ]
 }
 
+/// The A380's MFD bundles the A320's flight phase helpers: "an engine is on" was engine 1 or 2 above 55 % N2.
+/// Approach idle sits at 55 %, so the FMS went to DONE in the air and reset the flight plan.
+pub fn flight_phase_engine_patch() -> SourcePatch {
+    SourcePatch {
+        path: "/Pages/VCockpit/Instruments/A380X/MFD/mfd.js".to_string(),
+        find: "function isAnEngineOn() {\n    return isEngineOn(1) || isEngineOn(2);\n  }".to_string(),
+        replace: "function isAnEngineOn() {\n    return [1, 2, 3, 4].some((i) => Vars.read(`L:A32NX_ENGINE_N2:${i}`, \"number\") > 20);\n  }".to_string(),
+        reason: "the flight phase's engine check reads all four engines above 20 % N2, so approach idle no longer ends the flight".to_string(),
+    }
+}
+
 pub fn amdb_fetch_patches() -> Vec<SourcePatch> {
     const OLD_LINE: &str = "const response = await navigraphRequest.get(`https://amdb.api.navigraph.com/v1/${query}`);";
     const NEW_LINE: &str = "const response = { data: await (await fetch(`/__plugin/amdb/v1/${query}`)).json() };";
@@ -547,6 +558,17 @@ mod tests {
 
     fn patch(find: &str, replace: &str) -> SourcePatch {
         SourcePatch { path: "/a.js".to_string(), find: find.to_string(), replace: replace.to_string(), reason: "test".to_string() }
+    }
+
+    #[test]
+    fn approach_idle_on_engines_one_and_two_still_counts_as_an_engine_on() {
+        let p = flight_phase_engine_patch();
+        let bundle = "  function isEngineOn(index) {\n    return Vars.read(`L:A32NX_ENGINE_N2:${index}`, \"number\") > 55;\n  }\n  function isAnEngineOn() {\n    return isEngineOn(1) || isEngineOn(2);\n  }\n";
+        let mut ok = Vec::new();
+        let out = apply(&[p.clone()], &p.path, bundle.to_string(), |good, _| ok.push(good));
+        assert_eq!(ok, vec![true]);
+        assert!(out.contains("[1, 2, 3, 4].some((i) => Vars.read(`L:A32NX_ENGINE_N2:${i}`, \"number\") > 20)"), "{out}");
+        assert!(!out.contains("isEngineOn(1) || isEngineOn(2)"));
     }
 
     #[test]

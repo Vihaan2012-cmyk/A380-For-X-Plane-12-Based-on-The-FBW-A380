@@ -48,6 +48,7 @@ pub const SAMPLES: i32 = 4;
 
 const GL_TRIANGLES: c_uint = 0x0004;
 const GL_SCISSOR_TEST: c_uint = 0x0C11;
+const GL_FRAMEBUFFER_BINDING: c_uint = 0x8CA6;
 const GL_STENCIL_TEST: c_uint = 0x0B90;
 const GL_VIEWPORT: c_uint = 0x0BA2;
 const GL_COLOR_BUFFER_BIT: c_uint = 0x4000;
@@ -2031,6 +2032,123 @@ impl Renderer {
             (self.gl.viewport)(x0, y0, x1 - x0, y1 - y0);
         }
         Some(target.texture)
+    }
+
+    /// Whether scissoring is on and its box, as X-Plane left them.
+    pub fn scissor_state(&self) -> (bool, [c_int; 4]) {
+        let (mut on, mut b) = (0, [0; 4]);
+        unsafe {
+            (self.gl.get_integer)(GL_SCISSOR_TEST, &mut on);
+            (self.gl.get_integer)(0x0C10, b.as_mut_ptr());
+        }
+        (on != 0, b)
+    }
+
+    /// The framebuffer and viewport bound right now (X-Plane's, inside a panel draw callback).
+    pub fn bound_target(&self) -> Target {
+        let (mut fbo, mut v) = (0, [0; 4]);
+        unsafe {
+            (self.gl.get_integer)(GL_FRAMEBUFFER_BINDING, &mut fbo);
+            (self.gl.get_integer)(GL_VIEWPORT, v.as_mut_ptr());
+        }
+        Target { framebuffer: fbo as c_uint, viewport: v }
+    }
+
+    /// Puts `target` back as the bound framebuffer and viewport, with no program or vertex array bound.
+    pub fn restore_target(&self, target: Target) {
+        unsafe {
+            (self.gl.bind_framebuffer)(GL_FRAMEBUFFER, target.framebuffer);
+            let [x, y, w, h] = target.viewport;
+            (self.gl.viewport)(x, y, w, h);
+            (self.gl.disable)(GL_SCISSOR_TEST);
+            (self.gl.use_program)(0);
+            (self.gl.bind_vertex_array)(0);
+        }
+    }
+
+    /// An offscreen colour target of this size, made or resized, and its texture; None if the driver refuses it.
+    pub fn offscreen(&mut self, target: &mut HudTarget, width: u32, height: u32, restore_framebuffer: c_uint) -> Option<(Target, c_int)> {
+        unsafe {
+            if target.framebuffer == 0 || target.size != (width, height) {
+                if target.framebuffer == 0 {
+                    (self.gl.gen_framebuffers)(1, &mut target.framebuffer);
+                }
+                if target.texture == 0 {
+                    target.texture = self.new_texture();
+                }
+                (self.xp.bind_texture)(target.texture, 0);
+                (self.gl.tex_image)(GL_TEXTURE_2D, 0, GL_RGBA8, width as c_int, height as c_int, 0, GL_RGBA, GL_UNSIGNED_BYTE, std::ptr::null());
+                self.texture_parameters(GL_LINEAR, 1);
+                (self.gl.bind_framebuffer)(GL_FRAMEBUFFER, target.framebuffer);
+                (self.gl.framebuffer_texture_2d)(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, target.texture as c_uint, 0);
+                let status = (self.gl.check_framebuffer_status)(GL_FRAMEBUFFER);
+                (self.gl.bind_framebuffer)(GL_FRAMEBUFFER, restore_framebuffer);
+                if status != GL_FRAMEBUFFER_COMPLETE {
+                    crate::log(&format!("display: offscreen target incomplete (0x{status:x})"));
+                    return None;
+                }
+                target.size = (width, height);
+            }
+        }
+        Some((Target { framebuffer: target.framebuffer, viewport: [0, 0, width as c_int, height as c_int] }, target.texture))
+    }
+
+    /// Clears `target` to opaque black.
+    pub fn clear_target(&self, target: Target) {
+        unsafe {
+            (self.gl.bind_framebuffer)(GL_FRAMEBUFFER, target.framebuffer);
+            let [x, y, w, h] = target.viewport;
+            (self.gl.viewport)(x, y, w, h);
+            (self.gl.disable)(GL_SCISSOR_TEST);
+            (self.gl.clear_color)(0., 0., 0., 1.);
+            (self.gl.clear)(GL_COLOR_BUFFER_BIT);
+        }
+    }
+
+    /// The average colour of a grid of pixels in `framebuffer`'s `[x, y, w, h]`, for the panel log.
+    pub fn probe(&self, framebuffer: c_uint, rect: [c_int; 4], restore: c_uint) -> [u32; 4] {
+        let mut sum = [0u32; 4];
+        let [x, y, w, h] = rect;
+        unsafe {
+            (self.gl.bind_framebuffer)(GL_READ_FRAMEBUFFER, framebuffer);
+            for i in 0..5 {
+                for j in 0..5 {
+                    let mut px = [0u8; 4];
+                    (self.gl.read_pixels)(x + w * (2 * i + 1) / 10, y + h * (2 * j + 1) / 10, 1, 1, GL_RGBA, GL_UNSIGNED_BYTE, px.as_mut_ptr().cast());
+                    for c in 0..4 {
+                        sum[c] += px[c] as u32;
+                    }
+                }
+            }
+            (self.gl.bind_framebuffer)(GL_FRAMEBUFFER, restore);
+        }
+        sum.map(|v| v / 25)
+    }
+
+    /// Copies each offscreen screen `(framebuffer, width, height, [x, y, w, h])` into `host` at its panel
+    /// rectangle: a framebuffer blit, so no GL state X-Plane or the screen drawing left behind can stop it.
+    /// `visible` is the panel area the host viewport shows, in panel pixels `[l, b, r, t]`.
+    pub fn blit_panel(&self, host: Target, quads: &[(c_uint, c_int, c_int, [f32; 4])], visible: [f32; 4]) {
+        let [vx, vy, vw, vh] = host.viewport;
+        let [l, b, r, t] = visible;
+        if r <= l || t <= b {
+            return;
+        }
+        let sx = vw as f32 / (r - l);
+        let sy = vh as f32 / (t - b);
+        unsafe {
+            (self.gl.disable)(GL_SCISSOR_TEST);
+            (self.gl.bind_framebuffer)(GL_DRAW_FRAMEBUFFER, host.framebuffer);
+            for &(fbo, w, h, [x, y, qw, qh]) in quads {
+                let x0 = vx + ((x - l) * sx).round() as c_int;
+                let y0 = vy + ((y - b) * sy).round() as c_int;
+                let x1 = vx + ((x + qw - l) * sx).round() as c_int;
+                let y1 = vy + ((y + qh - b) * sy).round() as c_int;
+                (self.gl.bind_framebuffer)(GL_READ_FRAMEBUFFER, fbo);
+                (self.gl.blit_framebuffer)(0, 0, w, h, x0, y0, x1, y1, GL_COLOR_BUFFER_BIT, GL_LINEAR as c_uint);
+            }
+            (self.gl.bind_framebuffer)(GL_FRAMEBUFFER, host.framebuffer);
+        }
     }
 
     /// Composites `texture` additively over the scene: `triangles` are window pixels, page UVs and an

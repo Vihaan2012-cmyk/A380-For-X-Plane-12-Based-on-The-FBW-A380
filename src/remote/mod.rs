@@ -447,25 +447,4 @@ mod tests {
                 .unwrap();
         }
     }
-
-    /// The real executable as its own process: builds, mirrors, and ticks a
-    /// few thousand frames in lockstep, reporting the round-trip cost.
-    #[test]
-    #[ignore = "needs target/release/fbw_a380_systems_server.exe built"]
-    fn the_systems_process_runs_in_lockstep() {
-        let exe = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-            .join("../fbw-build/target-main/release/fbw_a380_systems_server.exe");
-        let exe = std::env::var("FBW_SERVER_EXE").map(std::path::PathBuf::from).unwrap_or(exe);
-        let mut vars = TestVars::default();
-        let started = std::time::Instant::now();
-        let mut remote = client::RemoteSystems::start(&exe, StartState::Apron, &mut vars).expect("the process starts");
-        eprintln!("PROCESS started and mirrored {} variables in {:?}", remote.variable_count(), started.elapsed());
-        let delta = Duration::from_millis(16);
-        for tick in 0..3000 {
-            inputs(&mut vars, tick);
-            assert!(remote.tick(delta, tick as f64 * 0.016, &mut vars).is_none());
-        }
-        assert_eq!(vars.value("A32NX_ELEC_AC_1_BUS_IS_POWERED"), 1.);
-        eprintln!("PROCESS {}", remote.take_report().unwrap());
-    }
 }

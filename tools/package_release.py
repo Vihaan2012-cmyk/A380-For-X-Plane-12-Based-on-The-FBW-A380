@@ -10,7 +10,7 @@ whole chain from the base, so the installer can build any install from it.
 
 Run after `tools/install.sh` has built and installed everything into the
 aircraft folder. The archive holds the whole converted aircraft (the
-plugin, XPHFBW, FlyByWire's instruments, the converted model and panel) and
+plugin, its pages, FlyByWire's instruments, the converted model and panel) and
 install.json, the steps the installer runs. The liveries are their own
 release (distribution/publish_liveries.sh) for the installer's Liveries page.
 
@@ -95,8 +95,10 @@ INSTALLER_OWNED = {"fbw_xp_installed_version.txt", "FlyByWire A380X Updater.exe"
 
 # Never in the release either: the converter's own notes, dev pages and test
 # fixtures, source maps, logs, backups, and the user's own X-Plane state.
-DEV_FILES = {"README.txt", "cockpit_bindings.txt", "plugins/fbw_a380_systems/XPHFBW/ui/harness.html"}
-DEV_DIRS = ("Output/", "html_ui/Pages/VCockpit/Instruments/A380X/IFE/theme/", "html_ui/Pages/VCockpit/Instruments/A380X/EFB/", "plugins/fbw_a380_systems/XPHFBW/ui/test/", "plugins/fbw_a380_systems/XPHFBW/js/test/")
+DEV_FILES = {"README.txt", "cockpit_bindings.txt", "plugins/fbw_a380_systems/web/ui/harness.html"}
+# The old display app and systems process: never shipped again (a patch lists them as deleted).
+OLD_APP = ("plugins/fbw_a380_systems/XPHFBW/", "plugins/fbw_a380_systems/fbw_a380_systems_server.exe", "plugins/fbw_a380_systems/64/fbw_a380_systems_server.exe")
+DEV_DIRS = ("Output/", "html_ui/Pages/VCockpit/Instruments/A380X/IFE/theme/", "html_ui/Pages/VCockpit/Instruments/A380X/EFB/", "plugins/fbw_a380_systems/web/ui/test/", "plugins/fbw_a380_systems/web/js/test/")
 BACKUP = re.compile(r"\.(before|with|bak|orig|old)\b|\.(map|log|tmp|pdb)$|~$|_prefs\.txt$", re.I)
 
 PATCH_INSTALL = {"aircraft": AIRCRAFT_IN_XPLANE, "steps": [TAKEOVER, {"kind": "copy", "from": "aircraft", "to": ""}, *FROM_XPLANE]}
@@ -110,6 +112,7 @@ def excluded(rel: str) -> bool:
     return (
         rel in INSTALLER_OWNED
         or rel in DEV_FILES
+        or rel.startswith(OLD_APP)
         or rel.startswith(DEV_DIRS)
         or BACKUP.search(name) is not None
         or ".acf" in name.lower()

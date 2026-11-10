@@ -34,12 +34,9 @@ pub mod user_prefs;
 pub mod remote;
 pub mod xphfbw_bridge;
 pub mod xphfbw_bridge_views;
-// [slot modules: xphfbw_datarefs] The xphfbw/ status datarefs, its three
-// commands, and the "XPHFBW settings" aircraft menu entry.
+// [slot modules: xphfbw_datarefs] The xphfbw/ status datarefs and their two commands.
 mod xphfbw_datarefs;
-// The XPHFBW app's own settings (xphfbw.json): pub so app/src/settings.rs
-// can use with_settings_lock (rule 8) and so agent A's start_systems can
-// read systems_out_of_process().
+// The aircraft's own settings (xphfbw.json).
 pub mod app_settings;
 mod big_stack;
 pub mod state_dump;
@@ -104,6 +101,8 @@ mod datalink_native_patches;
 mod spill_lights;
 mod cabin_option;
 mod flight_deck_view;
+mod xp11_audio;
+mod xp11_shim;
 mod light_spills;
 mod panel;
 mod study;
@@ -256,8 +255,6 @@ mod xphfbw_host;
 mod perf;
 pub mod diag;
 pub mod diag_health;
-#[cfg(all(test, feature = "js"))]
-mod xphfbw_harness;
 // [slot modules: display] The cockpit screens FlyByWire's instruments draw on.
 #[cfg(feature = "js")]
 mod display;
@@ -326,6 +323,7 @@ pub fn static_source_patches() -> Vec<source_patch::SourcePatch> {
     patches.extend(source_patch::rmp_start_frequency_patches());
     patches.extend(source_patch::listener_error_patches());
     patches.push(source_patch::mfd_dialog_height_patch());
+    patches.push(source_patch::flight_phase_engine_patch());
     patches.push(source_patch::rmp_start_brightness_patch());
     patches.extend(source_patch::oans_clear_patches());
     patches.extend(ecam_patches::source_patches());
@@ -1542,9 +1540,6 @@ struct Plugin {
     gaps_logged: bool,
     #[cfg(feature = "js")]
     xphfbw: Option<xphfbw_host::XphfbwHost>,
-    /// Times XPHFBW was started again after its process went away.
-    #[cfg(feature = "js")]
-    xphfbw_relaunches: u32,
     /// The `xphfbw/` status datarefs, its three commands, and the "XPHFBW
     /// settings" aircraft menu entry (docs/briefs/xphfbw-js-bridge.md,
     /// "Custom datarefs and commands").
@@ -2233,8 +2228,6 @@ impl Plugin {
             gaps_logged: false,
             #[cfg(feature = "js")]
             xphfbw,
-            #[cfg(feature = "js")]
-            xphfbw_relaunches: 0,
             xphfbw_datarefs: xphfbw_datarefs::XphfbwDatarefs::new(),
             // [slot init: deep]
             deep,
@@ -3093,22 +3086,12 @@ impl Plugin {
         // press replaces self.simulation, so nothing above should still be
         // holding a borrow of the old one.
         let cmds = self.xphfbw_datarefs.poll_commands();
-        if cmds.show_app {
-            xphfbw_datarefs::signal_show_app();
-        }
         if cmds.restart_displays {
-            xphfbw_datarefs::signal_restart_displays();
             #[cfg(feature = "js")]
             browser_screens::request_refresh();
         }
         if cmds.restart_app {
-            log("XPHFBW: restart_app pressed; relaunching the systems backend");
-            self.relaunch_systems(xplm);
-        }
-        #[cfg(feature = "js")]
-        if self.xphfbw.as_ref().is_some_and(|h| h.gone()) && self.xphfbw_relaunches < XPHFBW_MAX_RELAUNCHES {
-            self.xphfbw_relaunches += 1;
-            log(&format!("XPHFBW: its process went away; starting it again ({} of {XPHFBW_MAX_RELAUNCHES})", self.xphfbw_relaunches));
+            log("systems: restart pressed; starting the systems again");
             self.relaunch_systems(xplm);
         }
         let status = xphfbw_status(&self.simulation);
@@ -3328,13 +3311,6 @@ fn xphfbw_status(sim: &remote::Systems) -> xphfbw_datarefs::Status {
     }
 }
 
-/// FlyByWire's systems: in XPHFBW.exe (with the JS bridge and FlyByWire's
-/// own instruments), in `fbw_a380_systems_server.exe` alongside the plugin,
-/// or in the plugin itself, in that fallback order
-/// (docs/briefs/xphfbw-app.md "Plugin changes"; docs/briefs/xphfbw-js-bridge.md
-/// agent A). `xphfbw.json`'s `systemsOutOfProcess` (app_settings.rs, agent B)
-/// gates the first two: off skips straight to the plugin, same as
-/// `FBW_SYSTEMS_IN_PROCESS=1`.
 /// The overhead pushbuttons FlyByWire's systems construct in a position
 /// other than the variable's zero.
 ///
@@ -3521,12 +3497,7 @@ fn seed_overhead_defaults() {
     }
 }
 
-#[cfg(feature = "js")]
-const XPHFBW_MAX_RELAUNCHES: u32 = 2;
-
-/// XPHFBW's bridge (xphfbw_host.rs): only once start_systems actually started
-/// XPHFBW.exe (session_tag() is set only then, in start_xphfbw), with its pid
-/// so the host notices the app going away.
+/// The pages' shared-memory session (xphfbw_host.rs), once start_systems has set the session tag.
 #[cfg(feature = "js")]
 fn start_xphfbw_host(simulation: &remote::Systems, xplm: &Xplm) -> Option<xphfbw_host::XphfbwHost> {
     let tag = session_tag()?;
@@ -3546,77 +3517,21 @@ fn start_xphfbw_host(simulation: &remote::Systems, xplm: &Xplm) -> Option<xphfbw
 
 fn start_systems(start_state: StartState, vars: &mut Vars) -> remote::Systems {
     seed_overhead_defaults();
-    const SERVER_EXE: &str = "fbw_a380_systems_server.exe";
-    let env_in_process = std::env::var("FBW_SYSTEMS_IN_PROCESS").is_ok_and(|v| v == "1");
-    let out_of_process = app_settings::systems_out_of_process() && !env_in_process;
     #[cfg(feature = "js")]
-    let browser = browser_screens::enabled();
-    #[cfg(feature = "js")]
-    if browser {
+    {
+        browser_screens::enabled();
         set_session_tag(format!("browser_{}", std::process::id()));
-    }
-    #[cfg(feature = "js")]
-    if browser && std::env::var("FBW_SYSTEMS_IN_PROCESS").map_or(true, |v| v != "0") {
         match remote::client::RemoteSystems::on_thread(start_state, vars, set_session_tag_str) {
             Ok(r) => {
                 log(&format!("systems: running on a thread of the plugin, {} variables shared, in lockstep with the frame", r.variable_count()));
                 return remote::Systems::Remote(r);
             }
-            Err(e) => {
-                log(&format!("systems: {e}; running them on the main thread"));
-                return remote::Systems::local(start_state, vars);
-            }
-        }
-    }
-    if out_of_process {
-        #[cfg(feature = "js")]
-        if let Some(dir) = js_bridge::plugin_dir() {
-            if browser {
-                let exe = dir.join("64").join(SERVER_EXE);
-                match start_headless_systems(&exe, start_state, vars) {
-                    Ok(r) => {
-                        log(&format!("systems process: running, {} variables shared, for screens in X-Plane's browser", r.variable_count()));
-                        return remote::Systems::Remote(r);
-                    }
-                    Err(e) => {
-                        log(&format!("systems process: {e}; running the systems in the plugin"));
-                        return remote::Systems::local(start_state, vars);
-                    }
-                }
-            }
-            let xphfbw_exe = dir.join("XPHFBW").join("XPHFBW.exe");
-            let aircraft_dir = dir.parent().and_then(|p| p.parent()).map(|p| p.to_path_buf());
-            if !app_settings::native_mode::cef_wanted(aircraft_dir.as_deref()) {
-            } else if xphfbw_exe.is_file() {
-                let xp_root = xp::system_path();
-                match start_xphfbw(&xphfbw_exe, xp_root.as_deref(), aircraft_dir.as_deref(), start_state, vars) {
-                    Ok(r) => {
-                        log(&format!("XPHFBW: running, {} variables shared, in lockstep with the frame", r.variable_count()));
-                        return remote::Systems::Remote(r);
-                    }
-                    Err(e) => log(&format!("XPHFBW: {e}; trying {SERVER_EXE}")),
-                }
-            }
-            let exe = dir.join("64").join(SERVER_EXE);
-            if exe.is_file() {
-                match remote::client::RemoteSystems::start(&exe, start_state, vars) {
-                    Ok(r) => {
-                        log(&format!("systems process: running, {} variables shared, in lockstep with the frame", r.variable_count()));
-                        return remote::Systems::Remote(r);
-                    }
-                    Err(e) => log(&format!("systems process: {e}; running the systems in the plugin")),
-                }
-            }
+            Err(e) => log(&format!("systems: {e}; running them on the main thread")),
         }
     }
     remote::Systems::local(start_state, vars)
 }
 
-/// Start XPHFBW.exe (`XPHFBW.exe <tag> <X-Plane pid> --xp-root=<X-Plane
-/// folder> --aircraft=<aircraft folder>`, docs/briefs/xphfbw-app.md) and
-/// connect to its systems, capturing the session tag `RemoteSystems::connect`
-/// generates so [`session_tag`] can hand it to whoever creates the js-bridge
-/// session with it.
 #[cfg(feature = "js")]
 #[cfg(not(windows))]
 pub(crate) fn set_gpu_preference(_exe: &std::path::Path, _integrated: bool) {}
@@ -3635,66 +3550,8 @@ pub(crate) fn set_gpu_preference(exe: &std::path::Path, integrated: bool) {
     }
     let ok = reg.creation_flags(0x0800_0000).stdout(std::process::Stdio::null()).stderr(std::process::Stdio::null()).status().is_ok_and(|s| s.success());
     if integrated || ok {
-        log(&format!("XPHFBW: screens drawn on the {} ({})", if integrated { "integrated graphics" } else { "graphics card" }, if ok { "set" } else { "could not set" }));
+        log(&format!("screens: Chromium draws on the {} ({})", if integrated { "integrated graphics" } else { "graphics card" }, if ok { "set" } else { "could not set" }));
     }
-}
-
-#[cfg(feature = "js")]
-#[cfg(feature = "js")]
-fn start_headless_systems<V: VariableRegistry + SimulatorReaderWriter>(exe: &std::path::Path, state: StartState, vars: &mut V) -> Result<remote::client::RemoteSystems, String> {
-    let exe = exe.to_path_buf();
-    remote::client::RemoteSystems::connect(state, vars, move |tag| {
-        set_session_tag(tag.to_string());
-        let mut cmd = std::process::Command::new(&exe);
-        cmd.arg(tag).arg(std::process::id().to_string());
-        #[cfg(windows)]
-        {
-            use std::os::windows::process::CommandExt;
-            cmd.creation_flags(0x0800_0000);
-        }
-        cmd.spawn().map(Some).map_err(|e| format!("cannot start {}: {e}", exe.display()))
-    })
-}
-
-#[cfg(feature = "js")]
-fn start_xphfbw<V: VariableRegistry + SimulatorReaderWriter>(
-    exe: &std::path::Path,
-    xp_root: Option<&std::path::Path>,
-    aircraft_dir: Option<&std::path::Path>,
-    state: StartState,
-    vars: &mut V,
-) -> Result<remote::client::RemoteSystems, String> {
-    let exe = exe.to_path_buf();
-    let xp_root = xp_root.map(|p| p.to_path_buf());
-    let aircraft_dir = aircraft_dir.map(|p| p.to_path_buf());
-    let captured_tag: std::rc::Rc<std::cell::RefCell<Option<String>>> = std::rc::Rc::new(std::cell::RefCell::new(None));
-    let holder = captured_tag.clone();
-    let result = remote::client::RemoteSystems::connect(state, vars, move |tag| {
-        *holder.borrow_mut() = Some(tag.to_string());
-        let mut cmd = std::process::Command::new(&exe);
-        cmd.arg(tag).arg(std::process::id().to_string());
-        if let Some(root) = &xp_root {
-            cmd.arg(format!("--xp-root={}", root.display()));
-        }
-        if let Some(dir) = &aircraft_dir {
-            cmd.arg(format!("--aircraft={}", dir.display()));
-        }
-        set_gpu_preference(&exe, crate::app_settings::current().screens_on_integrated_gpu);
-        cmd.env(crate::xphfbw_bridge_views::SCREEN_SUPERSAMPLE_ENV, crate::xphfbw_bridge_views::screen_supersample().to_string());
-        cmd.env(crate::xphfbw_bridge_views::GLASS_SCREENS_ENV, crate::xphfbw_bridge_views::glass_env());
-        #[cfg(windows)]
-        {
-            use std::os::windows::process::CommandExt;
-            cmd.creation_flags(0x0800_0000);
-        }
-        cmd.spawn().map(Some).map_err(|e| format!("cannot start {}: {e}", exe.display()))
-    });
-    if result.is_ok() {
-        if let Some(tag) = captured_tag.borrow_mut().take() {
-            set_session_tag(tag);
-        }
-    }
-    result
 }
 
 static mut PLUGIN: Option<Box<Plugin>> = None;
@@ -3913,6 +3770,7 @@ pub unsafe extern "C" fn XPluginStart(
     #[cfg(not(windows))]
     xp::use_native_paths();
     xp::remember_main_thread();
+    xp11_shim::install();
 
     let Some(xplm) = Xplm::load() else { return 0 };
     let xplm_ref = &raw mut XPLM;
@@ -3953,7 +3811,6 @@ pub unsafe extern "C" fn XPluginEnable() -> c_int {
                 Err(e) => log(&format!("no systems panel: {e}")),
             }
             study::build_menu(xplm);
-            xphfbw_datarefs::build_menu(xplm);
             diag::register_commands(xplm);
             // [slot enable: display] The screens' cockpit devices.
             #[cfg(feature = "js")]
@@ -3981,7 +3838,6 @@ pub unsafe extern "C" fn XPluginDisable() {
     if let Some(xplm) = (*xplm).as_ref() {
         xplm.unregister_loop(flight_loop);
         study::destroy(xplm);
-        xphfbw_datarefs::destroy_menu(xplm);
         // [slot disable: display]
         hud::stop();
         #[cfg(feature = "js")]

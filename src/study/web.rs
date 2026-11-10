@@ -1267,7 +1267,7 @@ mod tests {
 
     /// Writes `/study/pages` to `STUDY_PAGES_OUT`, for previewing the web
     /// pages without X-Plane or the app.
-    /// Writes the whole `app/ui/test/study-fixture.json` to
+    /// Writes the whole `web/ui/test/study-fixture.json` to
     /// `STUDY_FIXTURE_OUT`: the shape the Study app's own `?fixture=1`
     /// mode reads when there is no plugin to talk to, which is the
     /// situation in MSFS and in the app's own preview.

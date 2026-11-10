@@ -1242,6 +1242,48 @@ impl Xplm {
             })
         }
     }
+
+    /// X-Plane 11 has no cockpit devices: the screens draw into its panel texture instead
+    /// (display::panel_xp11), and device calls answer as a bound device that never pops out.
+    pub fn panel_devices(&self) -> Option<AvionicsApi> {
+        unsafe extern "C" fn create(spec: *mut CreateAvionics) -> AvionicsId {
+            ((*spec).refcon as usize + 1) as AvionicsId
+        }
+        unsafe extern "C" fn nothing(_: AvionicsId) {}
+        unsafe extern "C" fn bound(_: AvionicsId) -> c_int {
+            1
+        }
+        unsafe extern "C" fn no(_: AvionicsId) -> c_int {
+            0
+        }
+        unsafe extern "C" fn set_int(_: AvionicsId, _: c_int) {}
+        unsafe extern "C" fn geometry(_: AvionicsId, _: c_int, _: c_int, _: c_int, _: c_int) {}
+        unsafe {
+            Some(AvionicsApi {
+                create,
+                destroy: nothing,
+                is_bound: bound,
+                set_graphics_state: self.graphics_state,
+                bind_texture: std::mem::transmute::<*mut c_void, unsafe extern "C" fn(c_int, c_int)>(Self::xplm_symbol("XPLMBindTexture2d")?),
+                generate_textures: std::mem::transmute::<*mut c_void, unsafe extern "C" fn(*mut c_int, c_int)>(Self::xplm_symbol("XPLMGenerateTextureNumbers")?),
+                set_popup_visible: set_int,
+                pop_out: nothing,
+                set_geometry_os: geometry,
+                get_geometry_os: None,
+                is_popup_visible: no,
+                is_popped_out: no,
+                take_keyboard_focus: nothing,
+                has_keyboard_focus: no,
+                needs_drawing: None,
+            })
+        }
+    }
+}
+
+/// XPLMGetCycleNumber: the sim cycle, the same through every draw callback of one frame.
+pub fn cycle_number() -> i64 {
+    let Some(f) = Xplm::xplm_symbol("XPLMGetCycleNumber") else { return 0 };
+    unsafe { std::mem::transmute::<*mut c_void, unsafe extern "C" fn() -> c_int>(f)() as i64 }
 }
 
 type FindCommandFn = unsafe extern "C" fn(*const c_char) -> CommandRef;
@@ -1251,7 +1293,10 @@ pub fn find_command(name: &str) -> Option<CommandRef> {
     let find = Xplm::xplm_symbol("XPLMFindCommand")?;
     let name = CString::new(name).ok()?;
     let command = unsafe { std::mem::transmute::<*mut c_void, FindCommandFn>(find)(name.as_ptr()) };
-    (!command.is_null()).then_some(command)
+    if command.is_null() {
+        return crate::xp11_shim::alias_command(name.to_str().ok()?);
+    }
+    Some(command)
 }
 type CommandOnceFn = unsafe extern "C" fn(CommandRef);
 
@@ -1284,19 +1329,10 @@ pub fn command_phase(name: &str, phase: i32) -> bool {
         return command_once(name);
     }
     let symbol = if phase == 1 { "XPLMCommandBegin" } else { "XPLMCommandEnd" };
-    let (Some(find), Some(run)) = (Xplm::xplm_symbol("XPLMFindCommand"), Xplm::xplm_symbol(symbol)) else {
+    let (Some(command), Some(run)) = (find_command(name), Xplm::xplm_symbol(symbol)) else {
         return false;
     };
-    let Ok(name) = CString::new(name) else { return false };
-    unsafe {
-        let find = std::mem::transmute::<*mut c_void, FindCommandFn>(find);
-        let run = std::mem::transmute::<*mut c_void, CommandOnceFn>(run);
-        let command = find(name.as_ptr());
-        if command.is_null() {
-            return false;
-        }
-        run(command);
-    }
+    unsafe { std::mem::transmute::<*mut c_void, CommandOnceFn>(run)(command) };
     true
 }
 
@@ -1305,19 +1341,10 @@ pub fn command_once(name: &str) -> bool {
         QUEUED_COMMANDS.lock().unwrap_or_else(std::sync::PoisonError::into_inner).push(name.to_string());
         return true;
     }
-    let (Some(find), Some(once)) = (Xplm::xplm_symbol("XPLMFindCommand"), Xplm::xplm_symbol("XPLMCommandOnce")) else {
+    let (Some(command), Some(once)) = (find_command(name), Xplm::xplm_symbol("XPLMCommandOnce")) else {
         return false;
     };
-    let Ok(name) = CString::new(name) else { return false };
-    unsafe {
-        let find = std::mem::transmute::<*mut c_void, FindCommandFn>(find);
-        let once = std::mem::transmute::<*mut c_void, CommandOnceFn>(once);
-        let command = find(name.as_ptr());
-        if command.is_null() {
-            return false;
-        }
-        once(command);
-    }
+    unsafe { std::mem::transmute::<*mut c_void, CommandOnceFn>(once)(command) };
     true
 }
 
@@ -1391,7 +1418,9 @@ pub fn play_pcm16_on_bus(
     refcon: *mut c_void,
 ) -> Option<FmodChannel> {
     audio_call();
-    let f = Xplm::xplm_symbol("XPLMPlayPCMOnBus")?;
+    let Some(f) = Xplm::xplm_symbol("XPLMPlayPCMOnBus") else {
+        return if crate::xp11_shim::is_xp11() { crate::xp11_audio::play(samples, rate, channels, looped) } else { None };
+    };
     let f = unsafe { std::mem::transmute::<*mut c_void, PlayPcmOnBusFn>(f) };
     let bytes = std::mem::size_of_val(samples) as u32;
     let channel = unsafe {
@@ -1412,7 +1441,7 @@ pub fn play_pcm16_on_bus(
 
 /// Whether this X-Plane has XPLMPlayPCMOnBus.
 pub fn has_pcm_audio() -> bool {
-    Xplm::xplm_symbol("XPLMPlayPCMOnBus").is_some()
+    Xplm::xplm_symbol("XPLMPlayPCMOnBus").is_some() || (crate::xp11_shim::is_xp11() && crate::xp11_audio::available())
 }
 
 /// XPLMStopAudio.
@@ -1420,6 +1449,8 @@ pub fn stop_audio(channel: FmodChannel) {
     audio_call();
     if let Some(f) = Xplm::xplm_symbol("XPLMStopAudio") {
         unsafe { std::mem::transmute::<*mut c_void, StopAudioFn>(f)(channel) };
+    } else if crate::xp11_shim::is_xp11() {
+        crate::xp11_audio::stop(channel);
     }
 }
 
@@ -1428,6 +1459,9 @@ pub fn set_audio_volume(channel: FmodChannel, volume: f32) {
     audio_call();
     if let Some(f) = Xplm::xplm_symbol("XPLMSetAudioVolume") {
         unsafe { std::mem::transmute::<*mut c_void, SetAudioVolumeFn>(f)(channel, volume * crate::sound_levels::fbw_gain()) };
+    } else if crate::xp11_shim::is_xp11() {
+        crate::xp11_audio::set_master(crate::xp11_shim::master_volume());
+        crate::xp11_audio::set_volume(channel, volume * crate::sound_levels::fbw_gain());
     }
 }
 
@@ -1435,6 +1469,8 @@ pub fn set_audio_pitch(channel: FmodChannel, hz: f32) {
     audio_call();
     if let Some(f) = Xplm::xplm_symbol("XPLMSetAudioPitch") {
         unsafe { std::mem::transmute::<*mut c_void, SetAudioVolumeFn>(f)(channel, hz) };
+    } else if crate::xp11_shim::is_xp11() {
+        crate::xp11_audio::set_pitch(channel, hz);
     }
 }
 

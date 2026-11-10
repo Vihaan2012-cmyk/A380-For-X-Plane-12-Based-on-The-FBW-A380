@@ -1,9 +1,8 @@
-//! Experimental: the cockpit screens with no XPHFBW process, off unless the
-//! `browserDisplays` setting is on. The systems run on a thread of the plugin
-//! (`FBW_SYSTEMS_IN_PROCESS=0` puts them in `fbw_a380_systems_server.exe`) and
-//! `server.rs` stands in for the rest of XPHFBW. The pages draw in our own browsers inside X-Plane's Chromium
+//! The cockpit screens: FlyByWire's pages in X-Plane's own Chromium, served by `server.rs`, with the
+//! systems on a thread of the plugin. The pages draw in our own browsers inside X-Plane's Chromium
 //! (`own_cef.rs`, Windows and macOS); `FBW_BROWSER_ROUTE=device` uses X-Plane's browser devices
-//! instead (`xplm_WindowContentTypeBrowser`), which X-Plane runs at about 30 Hz.
+//! instead (`xplm_WindowContentTypeBrowser`), which X-Plane runs at about 30 Hz. Without X-Plane 12.4's
+//! Chromium (X-Plane 11, older X-Plane 12) the native screens and systems take over (native_mode.rs).
 
 mod dead_band;
 pub mod server;
@@ -36,6 +35,10 @@ pub mod own_cef {
     pub fn prepare_chromium_start() {}
 
     pub fn chromium_switches_applied() -> bool {
+        false
+    }
+
+    pub fn chromium_has_switch(_: &str) -> bool {
         false
     }
 }
@@ -99,29 +102,35 @@ pub fn own_route() -> bool {
     *OWN.get_or_init(|| cfg!(any(windows, target_os = "macos")) && std::env::var("FBW_BROWSER_ROUTE").map_or(true, |v| v != "device"))
 }
 
-/// The setting (or `FBW_BROWSER_DISPLAYS=1`), on an X-Plane that has what the route needs.
+/// X-Plane has what the screens need (`FBW_BROWSER_DISPLAYS=0` turns them off).
 pub fn enabled() -> bool {
     static ON: OnceLock<bool> = OnceLock::new();
     *ON.get_or_init(|| {
-        let wanted = std::env::var("FBW_BROWSER_DISPLAYS").map_or_else(|_| !cfg!(windows) || crate::app_settings::load_now().browser_displays, |v| v == "1");
+        if std::env::var("FBW_BROWSER_DISPLAYS").is_ok_and(|v| v == "0") {
+            log("screens: off (FBW_BROWSER_DISPLAYS=0)");
+            return false;
+        }
         // Windows' own route still asks a browser device to start Chromium; macOS's
         // X-Plane has it running already and needs none.
-        if wanted && api().is_none() && !(cfg!(target_os = "macos") && own_route()) {
-            log("this X-Plane has no browser devices (12.4 or later needed); using the app");
+        if api().is_none() && !(cfg!(target_os = "macos") && own_route()) {
+            log("screens: this X-Plane has no browser devices (12.4 or later needed); the native screens draw instead");
             return false;
         }
         #[cfg(any(windows, target_os = "macos"))]
-        if wanted && own_route() {
+        if own_route() {
             if let Err(e) = xp::system_path().ok_or_else(|| "no X-Plane folder".to_string()).and_then(|root| own_cef::available(&root)) {
-                log(&format!("using the app: {e}"));
+                log(&format!("screens: X-Plane's Chromium cannot be used ({e}); the native screens draw instead"));
                 return false;
             }
         }
-        if wanted {
-            log("experimental: screens in X-Plane's browser, XPHFBW stays off");
-        }
-        wanted
+        log("screens: in X-Plane's browser");
+        true
     })
+}
+
+/// Where the EFB and app pages and their scripts are installed: `ui/` and `js/` below it.
+pub fn web_dir(plugin_dir: &std::path::Path) -> std::path::PathBuf {
+    plugin_dir.join("web")
 }
 
 pub(crate) fn log(message: &str) {
@@ -407,7 +416,7 @@ pub fn attach(tag: &str, session: &Session, defs: &[ViewDef]) {
     let Some(plugin_dir) = crate::sound_pack::plugin_dir() else { return };
     let Some(aircraft) = plugin_dir.parent().and_then(|p| p.parent()).map(|p| p.to_path_buf()) else { return };
     let Some(root) = xp::system_path() else { return };
-    let paths = Paths { xplane_root: root, aircraft_dir: aircraft, ui_dir: plugin_dir.join("XPHFBW").join("ui") };
+    let paths = Paths { xplane_root: root, aircraft_dir: aircraft, ui_dir: web_dir(&plugin_dir).join("ui") };
     let open = views::views_to_open(defs.to_vec(), session.slots.header().native_views_off.load(Ordering::Acquire));
     let screens: Vec<&'static ScreenDef> = crate::display::screens::SCREENS.iter().collect();
     let hidden: Vec<(u32, String)> = open.iter().filter(|v| v.screen.is_empty()).map(|v| (v.index, format!("@{}", v.index))).collect();
@@ -953,39 +962,6 @@ mod tests {
             std::thread::sleep(Duration::from_millis(33));
         }
         server::stop();
-    }
-
-    /// The real server exe in lockstep, built and rebuilt as a flight does it:
-    /// FBW_BENCH_SERVER is its path.
-    #[test]
-    #[ignore]
-    fn the_server_exe_ticks_in_lockstep() {
-        use crate::aspects::test_vars::TestVars;
-        use systems::simulation::StartState;
-        let exe = std::path::PathBuf::from(std::env::var("FBW_BENCH_SERVER").unwrap());
-        let mut vars = TestVars::default();
-        let mut remote = crate::remote::client::RemoteSystems::start(&exe, StartState::Apron, &mut vars).unwrap();
-        println!("variables {}", remote.variable_count());
-        let step = |remote: &mut crate::remote::client::RemoteSystems, vars: &mut TestVars, from: usize, n: usize| {
-            for i in from..from + n {
-                vars.set("AMBIENT PRESSURE", 29.92);
-                vars.set("AMBIENT TEMPERATURE", 15.);
-                vars.set("AMBIENT DENSITY", 0.002377);
-                for n in 1..=4 {
-                    vars.set(&format!("A32NX_EXT_PWR_AVAIL:{n}"), 1.);
-                    vars.set(&format!("A32NX_OVHD_ELEC_EXT_PWR_{n}_PB_IS_ON"), 1.);
-                }
-                if let Some(m) = remote.tick(Duration::from_millis(50), i as f64 * 0.05, vars) {
-                    println!("tick {i}: {m}");
-                }
-            }
-        };
-        step(&mut remote, &mut vars, 0, 200);
-        println!("late before rebuild {}", remote.stats.late);
-        remote.rebuild(StartState::Runway);
-        step(&mut remote, &mut vars, 200, 200);
-        println!("ticks {} late {} mean round trip {:.2} ms", remote.stats.ticks, remote.stats.late, remote.stats.round_trip_us as f64 / remote.stats.ticks.max(1) as f64 / 1000.);
-        println!("process {:?} systems mean {:.2} ms AC1 powered {}", remote.process_id(), remote.stats.systems_us as f64 / remote.stats.ticks.max(1) as f64 / 1000., vars.value("A32NX_ELEC_AC_1_BUS_IS_POWERED"));
     }
 
     #[test]

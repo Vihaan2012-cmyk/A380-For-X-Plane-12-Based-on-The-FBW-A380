@@ -8,6 +8,7 @@
 //! small disconnected parts), `sloppy` (positions only, down to `ratio`).
 //! rel: when set, each connected part is simplified on its own to at most
 //! rel x its size (capped at max_error), so small parts keep their shape.
+//! max_error 0 keeps the level's batches exactly as they are.
 //!
 //! objdecimate <in.obj> <out.obj> weld
 //! merges identical vertices and drops unused ones; triangles and commands
@@ -155,7 +156,7 @@ fn decimate(obj: &Obj, levels: &[Level]) -> (Vec<u32>, Vec<String>) {
             let batch = &obj.indices[offset..offset + count];
             let target = ((count as f64 * lv.ratio) as usize / 3 * 3).max(3);
             let mut error = 0f32;
-            let simplified = if count <= 3 * 64 {
+            let simplified = if count <= 3 * 64 || lv.max_error <= 0. {
                 batch.to_vec()
             } else if lv.rel > 0. && lv.mode != "sloppy" {
                 let mut out = Vec::with_capacity(batch.len());

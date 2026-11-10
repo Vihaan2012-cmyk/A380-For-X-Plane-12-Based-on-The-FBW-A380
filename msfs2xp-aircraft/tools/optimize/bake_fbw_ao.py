@@ -24,6 +24,7 @@ from PIL import Image, ImageFilter
 LOCAL = float(os.environ.get("BAKE_AO_LOCAL", 1.0))
 GLOBAL = float(os.environ.get("BAKE_AO_GLOBAL", 0.40))
 FLOOR = float(os.environ.get("BAKE_AO_FLOOR", 0.22))
+UNUSED = float(os.environ.get("BAKE_AO_UNUSED_BELOW", 0.0))
 BLUR_FRACTION = 0.03
 SKIP = re.compile(r"DECAL|EMIS|TXTLIT|_LIT|DISPLAY|GLASS|BLUR|SCREEN|KEYBOARD", re.I)
 
@@ -44,8 +45,10 @@ def occlusion_factor(ao, size):
     radius = max(2, int(max(size) * BLUR_FRACTION))
     around = np.asarray(a.filter(ImageFilter.GaussianBlur(radius))).astype(np.float32) / 255.0
     local = np.minimum(1.0, (ao + 0.02) / (around + 0.02))
-    f = (1 - LOCAL * (1 - local)) * (1 - GLOBAL * (1 - ao))
-    return np.maximum(f, FLOOR)
+    f = np.maximum((1 - LOCAL * (1 - local)) * (1 - GLOBAL * (1 - ao)), FLOOR)
+    if UNUSED > 0:
+        f[ao < UNUSED] = 1.0
+    return f
 
 
 def dds_payload(img, fmt):
@@ -60,15 +63,16 @@ def dds_payload(img, fmt):
 
 
 def comp_for(name, fbw):
-    stem = re.split(r"_ALBEDO", name, flags=re.I)[0]
-    for cand in (f"{stem}_COMP.PNG.DDS", f"{stem}_COMP.png.DDS", f"{stem}_COMP.DDS"):
-        p = fbw / cand
-        if p.is_file():
-            return p
-    low = stem.lower() + "_comp"
-    for p in fbw.iterdir():
-        if p.name.lower().startswith(low) and p.name.lower().endswith(".dds"):
-            return p
+    stem = re.split(r"_ALBEDO|_ALB\.|\.dds$", name, flags=re.I)[0]
+    for kind in ("COMP", "METAL"):
+        for cand in (f"{stem}_{kind}.PNG.DDS", f"{stem}_{kind}.png.DDS", f"{stem}_{kind}.DDS"):
+            p = fbw / cand
+            if p.is_file():
+                return p
+        low = f"{stem.lower()}_{kind.lower()}"
+        for p in fbw.iterdir():
+            if p.name.lower().startswith(low) and p.name.lower().endswith(".dds"):
+                return p
     return None
 
 
@@ -138,7 +142,7 @@ def main(objects_dir, fbw_dir, backup_dir, only=None, out_dir=None, works=(), co
     out = Path(out_dir) if out_dir else objects
     backup.mkdir(parents=True, exist_ok=True)
     out.mkdir(parents=True, exist_ok=True)
-    names = sorted(p.name for p in objects.glob("*.dds") if re.search(r"_ALBEDO", p.name, re.I) and not SKIP.search(p.name))
+    names = sorted(p.name for p in objects.glob("*.dds") if re.search(r"_ALBEDO|_ALB\.dds$|^CARGO_FWD\.dds$", p.name, re.I) and not SKIP.search(p.name))
     if only:
         names = [n for n in names if any(o.lower() in n.lower() for o in only)]
     for n in names:

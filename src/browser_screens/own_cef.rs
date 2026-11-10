@@ -870,7 +870,14 @@ pub fn chromium_switches_applied() -> bool {
     SWITCHES_APPLIED.load(Ordering::SeqCst)
 }
 
+/// macOS keeps X-Plane's own switches, so none of ours is ever on.
+#[cfg(not(windows))]
+pub fn chromium_has_switch(_name: &str) -> bool {
+    false
+}
+
 /// Whether Chromium's own command line carries `name`: ours through the hook, or X-Plane's launch line.
+#[cfg(windows)]
 pub fn chromium_has_switch(name: &str) -> bool {
     const HAS_SWITCH: usize = 11;
     unsafe {
@@ -938,6 +945,7 @@ pub struct Browsers {
     governed_hidden: Vec<bool>,
     governed_at: Option<(u64, Instant)>,
     stats_at: Instant,
+    suspended: Vec<bool>,
 }
 
 const OUTSIDE_RATE: c_int = 5;
@@ -949,6 +957,18 @@ fn rate_for(key: &str, base: c_int, outside: bool) -> c_int {
         return OUTSIDE_RATE.min(base);
     }
     base
+}
+
+const DISPLAY_ONLY: &[&str] = &["SCREEN_DU_PFDL", "SCREEN_DU_PFDR", "SCREEN_DU_NDL", "SCREEN_DU_NDR", "SCREEN_DU_EWD", "SCREEN_DU_SD", "SCREEN_ISIS_1", "SCREEN_ISIS_2", "RTPI", "BAT"];
+const CABIN_ONLY: &[&str] = &["SCREEN_IFE", "SCREEN_FAP"];
+
+/// Whether a page can stop rendering: a flight deck display while the view is outside or misses its
+/// glass, a cabin screen while the eye is outside or in the flight deck.
+fn suspend_when_unseen(key: &str, outside: bool, in_deck: bool, out_of_view: bool) -> bool {
+    if CABIN_ONLY.iter().any(|k| k.eq_ignore_ascii_case(key)) {
+        return outside || in_deck;
+    }
+    DISPLAY_ONLY.iter().any(|k| k.eq_ignore_ascii_case(key)) && (outside || out_of_view)
 }
 
 static RATE_WANTED: AtomicBool = AtomicBool::new(false);
@@ -1010,7 +1030,7 @@ pub fn open_all(tag: &str, port: u16, wanted: &[Wanted], fps_cap: c_int) -> Opti
         list.push(view);
     }
     RATE_WANTED.store(false, Ordering::Relaxed);
-    Some(Browsers { views: list, paints: Some(paints), fps_cap, governed: 0, governed_outside: false, governed_hidden: Vec::new(), governed_at: None, stats_at: Instant::now() })
+    Some(Browsers { views: list, paints: Some(paints), fps_cap, governed: 0, governed_outside: false, governed_hidden: Vec::new(), governed_at: None, stats_at: Instant::now(), suspended: Vec::new() })
 }
 
 impl Browsers {
@@ -1056,9 +1076,33 @@ impl Browsers {
         }
     }
 
+    /// Display-only pages nobody can see stop rendering altogether (CEF's WasHidden) and pick up
+    /// again the moment their screen comes back into view; pages that do the aircraft's work keep running.
+    fn suspend_unseen(&mut self) {
+        let outside = super::VIEW_OUTSIDE.load(Ordering::Relaxed);
+        let in_deck = crate::flight_deck_view::eye_in_flight_deck();
+        if self.suspended.len() != self.views.len() {
+            self.suspended = vec![false; self.views.len()];
+        }
+        for (i, v) in self.views.iter().enumerate() {
+            let key = unsafe { (**v).key.clone() };
+            let want = suspend_when_unseen(&key, outside, in_deck, super::screen_out_of_view(&key));
+            if want == self.suspended[i] {
+                continue;
+            }
+            unsafe {
+                let Some(host) = host_of((**v).browser) else { continue };
+                ((*host).was_hidden)(host, want as c_int);
+                release_host(host);
+            }
+            self.suspended[i] = want;
+        }
+    }
+
     /// No faster than X-Plane shows, as every paint costs its main thread, and never
     /// for a 1-2 fps wobble.
     fn govern(&mut self, session: &Session) {
+        self.suspend_unseen();
         let hidden: Vec<bool> = self.views.iter().map(|v| unsafe { super::screen_out_of_view(&(**v).key) }).collect();
         if self.governed > 0 && hidden != self.governed_hidden {
             self.governed_hidden = hidden;
@@ -1253,6 +1297,19 @@ mod rate_tests {
         assert_eq!(rate_for("SCREEN_DU_EWD", 20, true), OUTSIDE_RATE);
         assert_eq!(rate_for("SCREEN_DU_MFD", 20, true), 20);
         assert_eq!(rate_for("SystemsHost", 20, true), 20);
+    }
+
+    #[test]
+    fn only_display_pages_nobody_sees_stop_rendering() {
+        assert!(suspend_when_unseen("SCREEN_DU_NDR", false, true, true), "ND behind the pilot's head");
+        assert!(!suspend_when_unseen("SCREEN_DU_NDR", false, true, false), "ND in view");
+        assert!(suspend_when_unseen("SCREEN_DU_PFDL", true, false, false), "outside view");
+        assert!(!suspend_when_unseen("SCREEN_DU_MFD", true, false, true), "the MFD runs the FMS");
+        assert!(!suspend_when_unseen("SCREEN_EFB", true, false, true), "the EFB keeps its ground services");
+        assert!(!suspend_when_unseen("Clock", true, false, true), "the chrono keeps counting");
+        assert!(!suspend_when_unseen("@19", true, false, true), "pages with no screen are the systems");
+        assert!(suspend_when_unseen("SCREEN_IFE", false, true, false), "cabin screen from the flight deck");
+        assert!(!suspend_when_unseen("SCREEN_IFE", false, false, false), "walking the cabin");
     }
 }
 

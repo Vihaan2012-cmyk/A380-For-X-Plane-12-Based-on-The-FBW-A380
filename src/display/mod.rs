@@ -20,6 +20,7 @@ pub mod tessellate;
 pub(crate) mod view_scale;
 pub mod text;
 mod gl;
+pub(crate) mod panel_xp11;
 #[cfg(test)]
 mod soft;
 #[cfg(test)]
@@ -287,6 +288,24 @@ struct Bridge {
     view_for_screen: Vec<Option<u32>>,
 }
 
+/// X-Plane 11's panel-texture screens (panel_xp11).
+#[derive(Default)]
+struct PanelState {
+    target: Option<gl::Target>,
+    offscreen: std::collections::HashMap<usize, gl::HudTarget>,
+    cycle: i64,
+    quads: Vec<(std::ffi::c_uint, c_int, c_int, [f32; 4])>,
+    visible: Option<[Option<xp::DataRef>; 4]>,
+    render_type: Option<Option<xp::DataRef>>,
+    click: Option<[Option<xp::DataRef>; 2]>,
+    pressed: Option<usize>,
+    pointer: panel_xp11::Pointer,
+    logged: u32,
+    diag_count: u32,
+    probe: bool,
+    diag_at: Option<std::time::Instant>,
+}
+
 /// What X-Plane's main thread draws from: the meshes tessellation made, a
 /// copy of the glyph atlas and the images they use, and the devices. The
 /// instruments' thread holds it only briefly, to hand over a new mesh.
@@ -299,6 +318,8 @@ pub struct Displays {
     /// The atlas and images as the meshes need them; no fonts.
     res: Resources,
     hud_targets: std::collections::HashMap<usize, gl::HudTarget>,
+    /// X-Plane 11's panel-texture screens (panel_xp11).
+    panel: PanelState,
     renderer: Option<Result<gl::Renderer, String>>,
     fbo: Option<xp::DataRef>,
     /// `sim/graphics/view/viewport` (int[4], read-only): the current OpenGL
@@ -694,6 +715,7 @@ impl Displays {
             screens,
             res: Resources { fonts: Fonts::default(), atlas: Atlas::default(), images: Images::new(html_ui) },
             hud_targets: std::collections::HashMap::new(),
+            panel: PanelState::default(),
             renderer: None,
             gpu_reported_at: None,
             view_scale: view_scale::ViewScale::new(xplm),
@@ -756,6 +778,175 @@ impl Displays {
         }
     }
 
+    fn ensure_renderer(&mut self) -> bool {
+        if self.renderer.is_none() {
+            let Some(api) = self.api else { return false };
+            let r = gl::Renderer::new(api);
+            match &r {
+                Ok(_) => log("OpenGL ready for the panel screens"),
+                Err(e) => log(&format!("cannot draw: {e}")),
+            }
+            self.renderer = Some(r);
+        }
+        matches!(self.renderer, Some(Ok(_)))
+    }
+
+    /// X-Plane 11: every screen drawn offscreen once a frame, then as quads into the panel X-Plane is drawing.
+    fn draw_panel(&mut self) {
+        let (Some(xplm), Some(atlas)) = (self.xplm, panel_xp11::atlas()) else { return };
+        let kind = *self.panel.render_type.get_or_insert_with(|| xplm.find("sim/graphics/view/panel_render_type"));
+        if kind.is_some_and(|d| xplm.get_i(d) == 0) || !self.ensure_renderer() {
+            return;
+        }
+        let cycle = xp::cycle_number();
+        self.panel_diag(xplm, kind, cycle);
+        if cycle != self.panel.cycle {
+            self.panel.cycle = cycle;
+            self.panel_poll();
+            let Some(Ok(r)) = self.renderer.as_ref() else { return };
+            let host = r.bound_target();
+            let mut quads = Vec::new();
+            for (index, def) in SCREENS.iter().enumerate() {
+                let Some(rect) = atlas.screens.get(def.id) else { continue };
+                let (w, h) = (rect.w.round().max(1.) as u32, rect.h.round().max(1.) as u32);
+                let mut t = self.panel.offscreen.remove(&index).unwrap_or_default();
+                let made = match self.renderer.as_mut() {
+                    Some(Ok(r)) => r.offscreen(&mut t, w, h, host.framebuffer),
+                    _ => None,
+                };
+                if let Some((target, texture)) = made {
+                    if let Some(Ok(r)) = self.renderer.as_ref() {
+                        r.clear_target(target);
+                    }
+                    self.panel.target = Some(target);
+                    self.draw_screen_timed(index);
+                    self.panel.target = None;
+                    let _ = texture;
+                    quads.push((target.framebuffer, w as c_int, h as c_int, [rect.x, rect.y, rect.w, rect.h]));
+                }
+                self.panel.offscreen.insert(index, t);
+            }
+            if let Some(Ok(r)) = self.renderer.as_ref() {
+                r.restore_target(host);
+            }
+            self.panel.quads = quads;
+        }
+        let refs = *self.panel.visible.get_or_insert_with(|| ["l", "b", "r", "t"].map(|e| xplm.find(&format!("sim/graphics/view/panel_visible_pnl_{e}"))));
+        if let Some(Ok(r)) = self.renderer.as_ref() {
+            let host = r.bound_target();
+            let [vx, vy, vw, vh] = host.viewport;
+            let fallback = [vx as f32, vy as f32, (vx + vw) as f32, (vy + vh) as f32];
+            let mut visible = fallback;
+            for (i, d) in refs.iter().enumerate() {
+                if let Some(d) = d {
+                    visible[i] = xplm.get_f(*d);
+                }
+            }
+            r.blit_panel(host, &self.panel.quads, visible);
+            if std::mem::take(&mut self.panel.probe) {
+                let pfd = SCREENS.iter().position(|d| d.id == "SCREEN_DU_PFDL");
+                let rect = pfd.and_then(|i| atlas.screens.get(SCREENS[i].id).map(|a| (i, *a)));
+                if let Some((i, a)) = rect {
+                    let own = self.panel.quads.iter().find(|q| q.3 == [a.x, a.y, a.w, a.h]).map(|q| r.probe(q.0, [0, 0, q.1, q.2], host.framebuffer));
+                    let sx = vw as f32 / (visible[2] - visible[0]).max(1.);
+                    let sy = vh as f32 / (visible[3] - visible[1]).max(1.);
+                    let on_panel = [vx + ((a.x - visible[0]) * sx) as c_int, vy + ((a.y - visible[1]) * sy) as c_int, (a.w * sx) as c_int, (a.h * sy) as c_int];
+                    let panel = r.probe(host.framebuffer, on_panel, host.framebuffer);
+                    log(&format!("xp11: {} picture {own:?}, on the panel at {on_panel:?} {panel:?} (fbo {})", SCREENS[i].id, host.framebuffer));
+                }
+            }
+        }
+    }
+
+    /// What X-Plane 11 hands the panel callback and what the screens hold: the first passes, then every 20 s.
+    fn panel_diag(&mut self, xplm: &'static Xplm, kind: Option<xp::DataRef>, cycle: i64) {
+        let now = std::time::Instant::now();
+        if self.panel.diag_count >= 6 && self.panel.diag_at.is_some_and(|t| now - t < std::time::Duration::from_secs(20)) {
+            return;
+        }
+        self.panel.diag_count += 1;
+        self.panel.probe = true;
+        self.panel.diag_at = Some(now);
+        let Some(Ok(r)) = self.renderer.as_ref() else { return };
+        let host = r.bound_target();
+        let scissor = r.scissor_state();
+        let f = |n: &str| xplm.find(n).map_or(f32::NAN, |d| xplm.get_f(d));
+        let total = ["l", "b", "r", "t"].map(|s| f(&format!("sim/graphics/view/panel_total_pnl_{s}")));
+        let visible = ["l", "b", "r", "t"].map(|s| f(&format!("sim/graphics/view/panel_visible_pnl_{s}")));
+        let render_type = kind.map_or(-1, |d| xplm.get_i(d));
+        let mut shown = Vec::new();
+        for id in ["SCREEN_DU_PFDL", "SCREEN_DU_EWD", "SCREEN_EFB"] {
+            let Some(i) = SCREENS.iter().position(|d| d.id == id) else { continue };
+            let bridge = self.bridge.as_ref().and_then(|b| b.screens.get(i)?.as_ref()).map(|bs| {
+                let h = bs.block.header();
+                (h.width.load(Ordering::Relaxed), h.height.load(Ordering::Relaxed), h.frame.load(Ordering::Relaxed), h.gpu_generation.load(Ordering::Relaxed), bs.uploads)
+            });
+            shown.push(format!("{id} brightness {:?} bridge {bridge:?}", self.screens[i].brightness));
+        }
+        log(&format!(
+            "xp11: panel pass cycle {cycle} type {render_type}: fbo {} viewport {:?} scissor {scissor:?}; panel total {total:?} visible {visible:?}; {} quads; {}",
+            host.framebuffer,
+            host.viewport,
+            self.panel.quads.len(),
+            shown.join("; ")
+        ));
+    }
+
+    /// X-Plane 11's last 3D panel click, 0..1 across the panel texture (or panel pixels).
+    fn panel_click_uv(&mut self) -> Option<(f32, f32)> {
+        let xplm = self.xplm?;
+        let refs = *self.panel.click.get_or_insert_with(|| [xplm.find("sim/graphics/view/click_3d_x_pixels"), xplm.find("sim/graphics/view/click_3d_y_pixels")]);
+        let (Some(xr), Some(yr)) = (refs[0], refs[1]) else { return None };
+        Some((xplm.get_f(xr), xplm.get_f(yr)))
+    }
+
+    /// X-Plane 11 tells plugins nothing about clicks on the panel texture, so each frame the reported
+    /// click position and the left button become presses, drags and releases.
+    fn panel_poll(&mut self) {
+        let Some(uv) = self.panel_click_uv() else { return };
+        let events = self.panel.pointer.step(uv, panel_xp11::left_button_down(), panel_xp11::mouse_location());
+        for (status, u, v) in events {
+            self.panel_pointer(status, u, v);
+        }
+    }
+
+    /// fbw/xp11/screen_click, for a manipulator on the glass.
+    fn panel_click(&mut self, phase: c_int) {
+        let Some((u, v)) = self.panel_click_uv() else { return };
+        let status = match phase {
+            0 => xp::MOUSE_DOWN,
+            1 => xp::MOUSE_DRAG,
+            _ => xp::MOUSE_UP,
+        };
+        self.panel_pointer(status, u, v);
+    }
+
+    fn panel_pointer(&mut self, status: c_int, u: f32, v: f32) {
+        let Some(atlas) = panel_xp11::atlas() else { return };
+        let (px, py) = atlas.click_to_panel(u, v);
+        let hit = atlas.hit(px, py, |id| atlas.screens.get(id).map(|r| (r.w.round() as u32, r.h.round() as u32)));
+        if self.panel.logged < 40 {
+            self.panel.logged += 1;
+            log(&format!("xp11: pointer {status} at {u:.4},{v:.4} -> panel {px:.0},{py:.0} -> {hit:?}"));
+        }
+        let target = match (&hit, status) {
+            (Some((id, _, _)), xp::MOUSE_DOWN) => SCREENS.iter().position(|d| d.id == id.as_str()),
+            _ => self.panel.pressed,
+        };
+        let Some(index) = target else { return };
+        if status == xp::MOUSE_DOWN {
+            self.panel.pressed = Some(index);
+        }
+        let (x, y) = match &hit {
+            Some((id, x, y)) if id.as_str() == SCREENS[index].id => (*x, *y),
+            _ => self.screens[index].hover.unwrap_or((0, 0)),
+        };
+        self.mouse(index, x, y, status, 0);
+        if status == xp::MOUSE_UP {
+            self.panel.pressed = None;
+        }
+    }
+
     /// Draw a screen, from its device's X-Plane draw callback.
     fn draw_screen_timed(&mut self, index: usize) {
         if let Some(Ok(r)) = self.renderer.as_mut() {
@@ -814,9 +1005,15 @@ impl Displays {
             let mut v = [0; 4];
             (xplm.get_vi(d, &mut v) == 4).then_some(v)
         });
-        let windowed = popout::is_shown(self, index) || popout::is_out(self, index);
+        let windowed = self.panel.target.is_none() && (popout::is_shown(self, index) || popout::is_out(self, index));
         let Some(Ok(renderer)) = self.renderer.as_mut() else { return };
-        let viewport = if windowed {
+        let (framebuffer, viewport) = match self.panel.target {
+            Some(t) => (t.framebuffer, Some(t.viewport)),
+            None => (framebuffer, None),
+        };
+        let viewport = if let Some(v) = viewport {
+            v
+        } else if windowed {
             let gl_viewport = renderer.viewport();
             if !self.screens[index].window_viewport_logged {
                 self.screens[index].window_viewport_logged = true;
@@ -2165,7 +2362,8 @@ pub fn snapshot_screens() -> Vec<(String, u32, u32, Vec<u8>)> {
 /// Create the cockpit devices, one per screen. Called once the plugin is
 /// enabled.
 pub fn start(xplm: &'static Xplm) {
-    let Some(api) = xplm.avionics() else {
+    let xp11 = crate::xp11_shim::is_xp11();
+    let Some(api) = xplm.avionics().or_else(|| if xp11 { xplm.panel_devices() } else { None }) else {
         log("this X-Plane has no cockpit device API (12.1 or later needed); the screens are not shown");
         return;
     };
@@ -2239,6 +2437,9 @@ pub fn start(xplm: &'static Xplm) {
         }
         log(&format!("{} cockpit devices made", d.screens.iter().filter(|s| !s.handle.is_null()).count()));
     });
+    if xp11 {
+        panel_xp11::start(xplm);
+    }
     if xplm.register_key_sniffer(key_sniffer, false, std::ptr::null_mut()) {
         log("key sniffer registered: click the MCDU or an OIT and type into it where it sits in the cockpit");
     } else {
@@ -2280,6 +2481,9 @@ unsafe extern "C" fn popout_menu(_: *mut c_void, item: *mut c_void) {
 
 /// Destroy the devices and free what was made on the GPU.
 pub fn stop(xplm: &'static Xplm) {
+    if crate::xp11_shim::is_xp11() {
+        panel_xp11::stop();
+    }
     crate::browser_screens::stop(xplm.avionics().as_ref());
     xplm.unregister_key_sniffer(key_sniffer, false, std::ptr::null_mut());
     release_keyboard("the displays are shutting down");
