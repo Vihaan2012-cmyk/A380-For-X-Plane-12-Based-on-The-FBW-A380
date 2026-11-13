@@ -2,10 +2,10 @@ import shutil
 import sys
 from pathlib import Path
 
-FORK = Path("E:/fbw-int/fbw-aircraft-ts")
+FORK = Path("E:/A380/fbw-int/fbw-aircraft-ts")
 HTML_UI = FORK / "fbw-a380x/out/flybywire-aircraft-a380-842/html_ui"
 PANEL = FORK / "fbw-a380x/src/base/flybywire-aircraft-a380-842/SimObjects/AirPlanes/FlyByWire_A380X/attachments/flybywire/Part_Interior_Cockpit/panel"
-DEFAULT_DEST = Path("E:/fbw-build/fms-oracle-pkg")
+DEFAULT_DEST = Path("E:/A380/fbw-build/fms-oracle-pkg")
 
 
 def mfd_only(cfg: str) -> str:

@@ -28,7 +28,7 @@ No `*.spec.ts` exists in FBW for any of these; the tests are written from the Ty
 - `cost_index.rs`: CostIndex.ts economy formulas that do not need the engine model.
 - `phase.rs`: flight phase manager.
 - `outputs.rs`: LVar names and units produced.
-- `tests/oracle.rs`: comparator against `E:/fbw-build/fms-oracle/*.json` (SPEEDS_* LVars at the first FMS update) and `E:/golden-tour/flight-v4` captures (phase, flap handle, weight and CG words).
+- `tests/oracle.rs`: comparator against `E:/A380/fbw-build/fms-oracle/*.json` (SPEEDS_* LVars at the first FMS update) and `E:/golden-tour/flight-v4` captures (phase, flap handle, weight and CG words).
 
 ## Outputs for src/prim.rs
 

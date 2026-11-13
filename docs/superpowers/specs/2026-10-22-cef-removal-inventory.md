@@ -6,7 +6,7 @@ Date: 22 October 2026. Read-only research. Line counts are TS/TSX/JS source line
 
 Views = panel.cfg `[VCockpitNN]` first surviving htmlgauge (`src/xphfbw_bridge_views.rs` `view_list`; excluded: A380X/EFB/, A380X/OITlegacy/, A380X/popup/, WasmInstrument/). The EFB screen is the app's own UI (`app/ui`, `app/src/views.rs` `spawn_efb_view`), not FBW's flyPad (flyPad TS, 32903 lines in fbw-common plus 307 in a380x, is not loaded).
 
-Source roots: A=`fbw-a380x/src/systems`, C=`fbw-common/src/systems`, N=`fbw-a32nx/src/systems` (the A380 imports fmgc, tcas, shared and extras modules from fbw-a32nx via tsconfig paths) under E:/fbw-int/fbw-aircraft.
+Source roots: A=`fbw-a380x/src/systems`, C=`fbw-common/src/systems`, N=`fbw-a32nx/src/systems` (the A380 imports fmgc, tcas, shared and extras modules from fbw-a32nx via tsconfig paths) under E:/A380/fbw-int/fbw-aircraft.
 
 | View (panel.cfg) | URL | FBW TS lines (own + shared dirs) | Main classes |
 |---|---|---|---|
@@ -84,7 +84,7 @@ H `RMP_{1,2,3}_VHF_CALL_n_PRESSED/RELEASED`; L `A380X_RMP_n_VHF_VOL_*`, `A32NX_C
 ## 4. Native already in the repo (do not port twice)
 
 - FWS/ECAM: NOT native. `src/deep/ecam` (10.8k lines incl. `fbw/ata*.rs` triggers, codegen, `deep_ecam_bridge.js`, `patches.rs`) feeds triggers into FBW's `FwsCore` through source patches. The logic of FwsCore stays JS.
-- FMS: NOT native. No `crates/fms` exists (planned in docs/superpowers/plans/2026-10-21-native-fms-mfd.md). Phase 1 oracle done: `src/js/msfs/fms_oracle.rs` (240), `fms_offline.rs` (880), `fms_oracle_snapshot.js`, `tools/fms_oracle/`, 4 scenarios with goldens in E:/fbw-build/fms-oracle (uplink-egll-kjfk, city-pair-procedures, edits-tmpy, secondary). Native nav data exists: `src/navdata` (5076), `src/airac.rs`.
+- FMS: NOT native. No `crates/fms` exists (planned in docs/superpowers/plans/2026-10-21-native-fms-mfd.md). Phase 1 oracle done: `src/js/msfs/fms_oracle.rs` (240), `fms_offline.rs` (880), `fms_oracle_snapshot.js`, `tools/fms_oracle/`, 4 scenarios with goldens in E:/A380/fbw-build/fms-oracle (uplink-egll-kjfk, city-pair-procedures, edits-tmpy, secondary). Native nav data exists: `src/navdata` (5076), `src/airac.rs`.
 - OANS: only data. `src/oans` (1164) serves AMDB (`hf.rs`, `plugin.rs`); OANC logic (4971) and BTV (509) are JS.
 - ND layers: native terrain/WXR (`src/mapdata` 4935, `src/wxr` 1278, `terronnd.rs`).
 - TCAS/GPWS: `src/surveillance.rs` (511) reads the JS outputs; JS computers still run.
@@ -112,7 +112,7 @@ Framework (must not be translated or read): `@microsoft/msfs-sdk`/WT `wtsdk.ts`,
 | # | Group | Size | Depends on | Proof |
 |---|---|---|---|---|
 | 0 | Drop idle pages: BAT, RTPI, IFE, SND, FCU, and (after moving small state) Clock, ISIS, EWD, PFD, SD, SDv2 | under 600 lines of native/plugin glue | native displays at 98% on goldens; input routing to native screens | golden-tour all-display run with these views not loaded; compare vars written (diff the `writes`) |
-| 1 | FMS: `crates/fms` plan, LNAV, VNAV, perf, fuel, messages, efis (vectors/symbols), phase, fms_live | fmgc 49k + FMC 5.4k (about 55k TS) | Phase 1 oracle (done), `src/navdata` NavDatabase trait | 4 oracle goldens in E:/fbw-build/fms-oracle (every var and GD event matches); then 3 simulated flights from golden-tour (flight-v4) |
+| 1 | FMS: `crates/fms` plan, LNAV, VNAV, perf, fuel, messages, efis (vectors/symbols), phase, fms_live | fmgc 49k + FMC 5.4k (about 55k TS) | Phase 1 oracle (done), `src/navdata` NavDatabase trait | 4 oracle goldens in E:/A380/fbw-build/fms-oracle (every var and GD event matches); then 3 simulated flights from golden-tour (flight-v4) |
 | 2 | MFD pages as native page trees on DomDisplay/mfdx painter, no DOM from CEF | pages ~25k TS + shared | group 1 (model) | mfd.dom.html / mfd.png goldens at 98% strict; action-to-state replay of the oracle scenarios |
 | 3 | FWS: `FwsCore` and Fws* into Rust, deep ecam triggers feed it directly (no source patches) | CpiomC 15.7k | none for logic; ECP buttons, SD page vars | ECAM goldens (flight-v4 ewd/sd captures with exact inputs, 46 captures), fws_* bus topics compared per frame, plus existing `src/deep/ecam/fbw_tests.rs` |
 | 4 | OANS/BTV (OANC 4971 + BTV 509 + OansControlPanel), TCAS (3.7k), GPWS (971), EfisTawsBridge (604) | about 11k | group 1 for runway data; AMDB server exists | BTV/OANS L vars and `oans_*` topics replayed from golden states; TCAS vars vs recorded traffic scenarios |

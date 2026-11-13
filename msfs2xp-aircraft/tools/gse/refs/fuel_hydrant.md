@@ -5,7 +5,7 @@
 - Aircraft side: GSE requirements article, International Airport Review (airport.internationalairportreview.com, "A380 GSE requirements"), which cites the Airbus aircraft characteristics: two refuel couplings per wing about 18 m outboard of the centreline, maximum connector height 5.94 m; operator platforms on dispensers raise to about 4 m. AviationPros "The Airbus A380" gives underwing ports 5.9 m above ground.
 - Truck proportions are generic of the Garsite / Rampmaster / BETA hydrant dispenser class (light truck chassis, two filter vessels, meter, hose reels, elevating operator platform). No manufacturer drawing was retrieved in the time available; every truck dimension below is an estimate (p).
 - Coupling distance from the nose was not found; it is not needed for the model.
-- No photos downloaded; `E:/fbw-gse/refs/fuel_hydrant/` is empty.
+- No photos downloaded; `E:/A380/fbw-gse/refs/fuel_hydrant/` is empty.
 
 ## Frame
 

@@ -14,7 +14,7 @@ import numpy as np
 from PIL import Image
 from scipy.ndimage import binary_dilation, gaussian_filter, zoom
 
-DDSTOOL = "E:/fbw-build/target/release/ddstool.exe"
+DDSTOOL = "E:/A380/fbw-build/target/release/ddstool.exe"
 SAME = 1.5 / 255
 MAX_ERROR = 3.0 / 255
 

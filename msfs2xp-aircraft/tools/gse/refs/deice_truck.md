@@ -7,7 +7,7 @@
 - Inavia GSE datasheet for a Volvo FL7 / Elephant Beta: service height 13.1 m. A used-unit listing gives an 8,000 L tank, 25.1 t GVW and 17.1 t empty.
 - Overall length, width and height of the Beta-15 were not found. They are estimates (e) for a 6x4 chassis with a tank behind the cab.
 
-No photos were downloaded; `E:/fbw-gse/refs/deice_truck/` is empty.
+No photos were downloaded; `E:/A380/fbw-gse/refs/deice_truck/` is empty.
 
 ## Frame
 

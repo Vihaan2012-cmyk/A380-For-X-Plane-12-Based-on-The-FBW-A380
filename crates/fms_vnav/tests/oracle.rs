@@ -5,7 +5,7 @@ use fms_vnav::strategy::ClimbThrustClimbStrategy;
 use fms_vnav::{climb::*, cruise::*, takeoff::*};
 use serde_json::Value;
 
-const ORACLE: &str = "E:/fbw-build/fms-oracle";
+const ORACLE: &str = "E:/A380/fbw-build/fms-oracle";
 
 fn load(name: &str) -> Option<Value> {
     let text = std::fs::read_to_string(format!("{ORACLE}/{name}.json")).ok()?;

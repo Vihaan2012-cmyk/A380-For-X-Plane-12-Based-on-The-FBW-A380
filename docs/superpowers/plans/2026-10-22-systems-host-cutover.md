@@ -39,7 +39,7 @@ native_systems_host::tick(&mut self.vars, self.time);
 h_events.extend(native_systems_host::take_h_events());
 ```
 
-(`h_events` must be `let mut` unconditionally then.) Tests: `cargo test --features js native_s` (harness run: E:/fbw-build/syshost69/harness, 37 pass incl. the real-bundle anchor test with `FBW_HTML_UI`).
+(`h_events` must be `let mut` unconditionally then.) Tests: `cargo test --features js native_s` (harness run: E:/A380/fbw-build/syshost69/harness, 37 pass incl. the real-bundle anchor test with `FBW_HTML_UI`).
 
 ## Module table
 

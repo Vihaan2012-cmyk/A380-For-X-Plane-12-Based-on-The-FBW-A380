@@ -18,7 +18,7 @@ FRONT_AXLE = 2900.0
 TRACK = 1360.0
 TYRE_D = 400.0
 TYRE_W = 130.0
-ART = os.environ.get('G3_ART', 'E:/fbw-gse/export/_g3/art')
+ART = os.environ.get('G3_ART', 'E:/A380/fbw-gse/export/_g3/art')
 CURTAIN_ANIM = [{'kind': 'trans', 'offset0': (0.0, 0.0, 0.0), 'offset1': (0.0, 0.0, 0.9), 'v0': 0.0, 'v1': 1.0, 'dataref': 'fbw/gse/bulk_cart/curtain'}]
 
 VIEWS = {

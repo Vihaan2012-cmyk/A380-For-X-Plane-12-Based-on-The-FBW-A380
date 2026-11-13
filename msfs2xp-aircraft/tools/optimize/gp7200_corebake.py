@@ -19,7 +19,7 @@ import gp7200_core as core  # noqa: E402
 from gp7200_geom import Mesh, box  # noqa: E402
 
 BLENDER = "C:/Program Files/Blender Foundation/Blender 5.2/blender.exe"
-WORK = Path("E:/fbw-build/gp7200-model/corebake")
+WORK = Path("E:/A380/fbw-build/gp7200-model/corebake")
 
 
 def tag_arrays(mesh):

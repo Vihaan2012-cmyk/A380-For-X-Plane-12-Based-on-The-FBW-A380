@@ -6,7 +6,7 @@ import bpy
 import gselib as g
 
 NAME = 'bag_tractor'
-ART = os.environ.get('G3_ART', 'E:/fbw-gse/export/_g3/art')
+ART = os.environ.get('G3_ART', 'E:/A380/fbw-gse/export/_g3/art')
 HALF_WIDTH = 625.0
 REAR_AXLE = 520.0
 FRONT_AXLE = 2220.0

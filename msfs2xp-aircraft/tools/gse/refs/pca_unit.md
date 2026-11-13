@@ -5,7 +5,7 @@
 - Airbus A380 Aircraft Characteristics, Airport and Maintenance Planning (AC_A380): section 5-4 ground service connections, low-pressure pre-conditioned air. Four ISO 1034 LP connectors under the belly; total intake limited to 6.5 kg/s. The exact connector positions were not read from the PDF in this wave and the model uses an estimate.
 - Generic towed PCA class (ITW GSE 2400 / JBT / TLD ACU): twin-axle trailer, grey enclosed housing, two 8 in (about 200 mm) flexible hoses. No manufacturer drawing or photo was downloaded in this wave; all dimensions are class estimates **(e)**.
 
-No photos downloaded; folder for them: `E:/fbw-gse/refs/pca_unit/`.
+No photos downloaded; folder for them: `E:/A380/fbw-gse/refs/pca_unit/`.
 
 ## Frame
 

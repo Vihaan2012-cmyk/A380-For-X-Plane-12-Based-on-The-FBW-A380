@@ -1,4 +1,4 @@
-param([string]$Out = "E:\fbw-build\tmp\vram-flight.txt")
+param([string]$Out = "E:\A380\fbw-build\tmp\vram-flight.txt")
 "time`tprocess`tdedicated_MB`tshared_MB" | Out-File -Encoding utf8 $Out
 $idle = 0
 for ($n = 0; $n -lt 720; $n++) {

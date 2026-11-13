@@ -4,9 +4,9 @@
 //   npm run compare                                  every state and screen found
 //   npm run compare -- --state approach --screen PFD_L,EWD
 //
-// Reference: E:/fbw-build/reference-png/<state>/<SCREEN>.png
-// Ours:      E:/fbw-build/display-snapshots/<state>/<SCREEN>.png
-// Output:    E:/fbw-build/reference-report/index.html, report.json and, per
+// Reference: E:/A380/fbw-build/reference-png/<state>/<SCREEN>.png
+// Ours:      E:/A380/fbw-build/display-snapshots/<state>/<SCREEN>.png
+// Output:    E:/A380/fbw-build/reference-report/index.html, report.json and, per
 //            pair, <state>/<SCREEN>.{diff,overlay,ssim}.png plus copies of both
 //            inputs so the report stays valid when either side is re-rendered.
 import fs from 'node:fs';

@@ -142,7 +142,7 @@ def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument('aircraft', type=Path)
     parser.add_argument('--node-modules', type=Path, default=Path('D:/fbw-aircraft/node_modules'))
-    parser.add_argument('--vendor', type=Path, default=Path(os.environ.get('XPJS_FORK', 'E:/fbw-int/fbw-own-api')) / 'xplane' / 'vendor')
+    parser.add_argument('--vendor', type=Path, default=Path(os.environ.get('XPJS_FORK', 'E:/A380/fbw-int/fbw-own-api')) / 'xplane' / 'vendor')
     a = parser.parse_args()
 
     out = [

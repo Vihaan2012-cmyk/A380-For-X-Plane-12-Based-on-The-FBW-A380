@@ -4,7 +4,7 @@ import gselib as g
 import liverylib as L
 
 NAME = 'water_truck'
-LIVERY_DIR = 'E:/fbw-gse/out/water_truck/liveries'
+LIVERY_DIR = 'E:/A380/fbw-gse/out/water_truck/liveries'
 X0 = 3300.0
 WHEELBASE = 3600.0
 REAR_AXLE = 1000.0

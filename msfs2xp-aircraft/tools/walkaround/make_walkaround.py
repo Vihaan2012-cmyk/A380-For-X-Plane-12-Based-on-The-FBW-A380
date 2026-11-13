@@ -12,7 +12,7 @@ size, and for the click-test finding this script's --acf mode depends on.
 
 Everything this script reads is under D:/Microsoft Flight Simulator 2020 or
 D:/Steam Games (read-only references). Everything it writes goes under
-E:/fbw-int/msfs2xp-aircraft/tools/walkaround/ (this file, README.md) or the
+E:/A380/fbw-int/msfs2xp-aircraft/tools/walkaround/ (this file, README.md) or the
 --out directory (intended: D:/A380/fbw-build/walkaround-stage/). It never
 touches the plugin, the Rust converter, or Converter itself.
 """

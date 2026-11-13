@@ -53,7 +53,7 @@ Caveats: X-Plane has no discrete microbursts, so PWS only fires on whatever hori
 - `vd`: `VdScanner` builds a range-by-altitude `VdImage` of `Level`s, coherent per sweep, with attenuation along each row.
 - `synthetic`: test fields (microburst with outflow ring and downdraft, convective cells) also usable by plugin tests.
 
-Tests: `cargo test --manifest-path crates/wxr_extras/Cargo.toml` with `CARGO_TARGET_DIR=E:/fbw-build/target`.
+Tests: `cargo test --manifest-path crates/wxr_extras/Cargo.toml` with `CARGO_TARGET_DIR=E:/A380/fbw-build/target`.
 
 ## Plugin hooks (not done; plugin src untouched)
 

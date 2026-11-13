@@ -13,7 +13,7 @@ Goal: the two OITs drawn by oitx from a document the plugin builds itself (crate
 - Input: pointer presses hit-tested against oitx's boxes (`data-act` marks), console keys while a field has focus.
 - Shadow: the CEF snapshot is compared element by element (`oit_native::compare`), logged as `native shadow: oit N a/b elements agree` on the first and every 600th mismatch, then dropped.
 
-Tests: 19 unit tests in the module (state machine, navigation, loading, login/menu flow, domain switch and laptop loss, menus, field typing and synchro, T.O PERF runways/dropdowns/compute, AOC compose/read, AVNCS navigation and inbox, remote C/B, FLT FOLDER fetch, charts ICAO entry, IN-FLT PERF steppers, loadsheet to AOC, hit testing, key map, compare, navdb facility). They run in the stub harness `E:/fbw-build/oit-host` (`CARGO_TARGET_DIR=E:/fbw-build/target cargo test --release`), which includes the file by path with stand-ins for the plugin modules it calls; once hooked they run with the plugin's own tests.
+Tests: 19 unit tests in the module (state machine, navigation, loading, login/menu flow, domain switch and laptop loss, menus, field typing and synchro, T.O PERF runways/dropdowns/compute, AOC compose/read, AVNCS navigation and inbox, remote C/B, FLT FOLDER fetch, charts ICAO entry, IN-FLT PERF steppers, loadsheet to AOC, hit testing, key map, compare, navdb facility). They run in the stub harness `E:/A380/fbw-build/oit-host` (`CARGO_TARGET_DIR=E:/A380/fbw-build/target cargo test --release`), which includes the file by path with stand-ins for the plugin modules it calls; once hooked they run with the plugin's own tests.
 
 ## Hook lines (not applied)
 

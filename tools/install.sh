@@ -14,19 +14,19 @@ AIRCRAFT="${1:-/d/Steam Games/steamapps/common/X-Plane 12/Aircraft/A380 for X-Pl
 # plugin library (a dependency of the app) overwrote release/
 # fbw_a380_systems.dll -- the gnu plugin with the js feature -- and the
 # wrong 11.8 MB DLL was installed as win.xpl (2026-09-27).
-TARGET="${CARGO_TARGET_DIR:-/e/fbw-build/target}"
+TARGET="${CARGO_TARGET_DIR:-/e/A380/fbw-build/target}"
 TARGET_APP="${CARGO_TARGET_DIR_APP:-$TARGET}"
 APP_OUT="$TARGET_APP/x86_64-pc-windows-msvc/release"
-CEF_PATH="${CEF_PATH:-/e/fbw-build/cef}"
+CEF_PATH="${CEF_PATH:-/e/A380/fbw-build/cef}"
 # FlyByWire's instruments converted onto JS Library for X-Plane (the fork's
 # xp-own-api branch), built by `node xplane/build.mjs --out <XPJS_BUILD>`, and
 # FlyByWire's fonts and images from the same fork.
-FORK="${XPJS_FORK:-/e/fbw-int/fbw-own-api}"
-XPJS_BUILD="${XPJS_BUILD:-/e/fbw-build/xpjs/out}"
+FORK="${XPJS_FORK:-/e/A380/fbw-int/fbw-own-api}"
+XPJS_BUILD="${XPJS_BUILD:-/e/A380/fbw-build/xpjs/out}"
 BUILD="$XPJS_BUILD/html_ui"
 ASSETS="$FORK/fbw-a380x/src/base/flybywire-aircraft-a380-842/html_ui"
-STAGE="${XPJS_STAGE:-/e/fbw-build/xpjs/stage}"
-GATES="${XPJS_GATES:-/e/fbw-build/xpjs/gates-install}"
+STAGE="${XPJS_STAGE:-/e/A380/fbw-build/xpjs/stage}"
+GATES="${XPJS_GATES:-/e/A380/fbw-build/xpjs/gates-install}"
 PANEL="/d/Microsoft Flight Simulator 2020/Microsoft Flight Simulator 2020 Packages/Community/flybywire-aircraft-a380-842/SimObjects/AirPlanes/FlyByWire_A380_842/panel"
 
 cd "$(dirname "$0")/.."
@@ -151,7 +151,7 @@ if tasklist 2>/dev/null | grep -qi '^X-Plane.exe'; then
   echo "install.sh: FAIL: X-Plane is running" >&2
   exit 1
 fi
-/e/fbw-build/backup-plugin.sh
+/e/A380/fbw-build/backup-plugin.sh
 # The pages, the page runtime and the gate reports are replaced whole, so
 # nothing from an earlier install (the old page shims, html_ui/JS) survives.
 rm -rf "$AIRCRAFT/html_ui" "$AIRCRAFT/plugins/fbw_a380_systems/XPHFBW/js" "$AIRCRAFT/gates"

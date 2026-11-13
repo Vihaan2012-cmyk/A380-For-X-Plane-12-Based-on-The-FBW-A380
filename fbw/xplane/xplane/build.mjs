@@ -15,8 +15,8 @@ if (!fs.existsSync(path.join(fork, 'node_modules'))) fs.symlinkSync(path.join(he
 const require = createRequire(path.join(here, 'package.json'));
 const args = process.argv.slice(2);
 const opt = (n, d) => (args.includes('--' + n) ? args[args.indexOf('--' + n) + 1] : d);
-const out = path.resolve(opt('out', 'E:/fbw-build/xpjs/out'));
-const library = path.resolve(opt('library', 'E:/fbw-int/clean-avionics'));
+const out = path.resolve(opt('out', 'E:/A380/fbw-build/xpjs/out'));
+const library = path.resolve(opt('library', 'E:/A380/fbw-int/clean-avionics'));
 const only = opt('only', '') ? new Set(opt('only').split(',')) : null;
 
 const lock = fs.readFileSync(path.join(here, 'package-lock.json'), 'utf8');

@@ -7,8 +7,8 @@ report it instead), src/remote/ (systems process bridge, already working).
 
 Build commands
 - Plugin: `CARGO_TARGET_DIR=/d/A380/fbw-build/target-main cargo +stable-x86_64-pc-windows-gnu build --release --features js` (tests: `... test --release --features js --lib <filter>`)
-- App: `cd D:/A380/fbw-xp-systems/app && CEF_PATH=E:/fbw-build/cef CARGO_TARGET_DIR=/d/A380/fbw-build/target-app cargo +stable-x86_64-pc-windows-msvc build --release`
-- Staged app for manual runs: E:\fbw-build\xphfbw-stage (XPHFBW.exe + CEF runtime + ui/).
+- App: `cd D:/A380/fbw-xp-systems/app && CEF_PATH=E:/A380/fbw-build/cef CARGO_TARGET_DIR=/d/A380/fbw-build/target-app cargo +stable-x86_64-pc-windows-msvc build --release`
+- Staged app for manual runs: E:\A380\fbw-build\xphfbw-stage (XPHFBW.exe + CEF runtime + ui/).
 - X-Plane: do not launch/close it; do not run tools/install.sh except agent A who edits it (A may run it only if X-Plane is not running: `tasklist | grep -i x-plane`).
 - No sub-agents. Shared target dirs; builds queue on cargo's lock — expected.
 

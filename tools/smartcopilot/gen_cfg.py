@@ -1,7 +1,7 @@
 """Write smartcopilot.cfg from sync_list.json (see derive_list.py).
 
     python tools/smartcopilot/gen_cfg.py tools/smartcopilot/sync_list.json \
-        --out E:/fbw-build/smartcopilot/smartcopilot.cfg
+        --out E:/A380/fbw-build/smartcopilot/smartcopilot.cfg
 """
 
 import argparse

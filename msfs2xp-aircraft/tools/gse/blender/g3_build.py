@@ -11,7 +11,7 @@ GSE_DIR = os.path.dirname(BLENDER_DIR)
 sys.path.insert(0, BLENDER_DIR)
 sys.path.insert(0, GSE_DIR)
 
-EXPORT = 'E:/fbw-gse/export'
+EXPORT = 'E:/A380/fbw-gse/export'
 ART = os.path.join(EXPORT, '_g3', 'art')
 os.environ['G3_ART'] = ART
 
@@ -25,7 +25,7 @@ import g3_obj8 as ob
 import g3_paint
 import gselib as g
 
-OBJDECIMATE = 'E:/fbw-gse/tools/objdecimate.exe'
+OBJDECIMATE = 'E:/A380/fbw-gse/tools/objdecimate.exe'
 LOD_ARGS = ['0:80:0.0008:keep', '80:250:0.02:prune', '250:1500:0.06:sloppy:0.12']
 AXES = 'X-Plane object axes in metres: x right, y up, z towards the rear (the front is -Z)'
 OPS = list(g3_paint.OPS)

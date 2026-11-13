@@ -4,7 +4,7 @@ use fms_data::service::PerfDataStore;
 use fms_data::{CostIndexMode, PerformanceData, TakeoffPowerSetting};
 use serde_json::Value;
 
-const GOLDEN: &str = "E:/fbw-build/fms-oracle/perf-data-egll-kjfk.json";
+const GOLDEN: &str = "E:/A380/fbw-build/fms-oracle/perf-data-egll-kjfk.json";
 
 fn dump(golden: &Value, label: &str) -> Value {
     for e in golden["events"].as_array().unwrap() {

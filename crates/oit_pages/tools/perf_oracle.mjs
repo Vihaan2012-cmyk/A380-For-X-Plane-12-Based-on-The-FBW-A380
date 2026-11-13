@@ -3,9 +3,9 @@ import { mkdirSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
-const FBW = 'E:/fbw-int/fbw-aircraft';
+const FBW = 'E:/A380/fbw-int/fbw-aircraft';
 const OUT = join(dirname(new URL(import.meta.url).pathname.replace(/^\//, '')), '..', 'tests', 'fixtures', 'perf_oracle.json');
-const BUNDLE = 'E:/fbw-build/oit-pages/oracle/perfmodel.mjs';
+const BUNDLE = 'E:/A380/fbw-build/oit-pages/oracle/perfmodel.mjs';
 
 mkdirSync(dirname(BUNDLE), { recursive: true });
 execFileSync(
@@ -14,7 +14,7 @@ execFileSync(
   { shell: true, stdio: 'inherit' },
 );
 const pm = await import(pathToFileURL(BUNDLE).href);
-const BUNDLE2 = 'E:/fbw-build/oit-pages/oracle/inflightperf.mjs';
+const BUNDLE2 = 'E:/A380/fbw-build/oit-pages/oracle/inflightperf.mjs';
 execFileSync(
   join(FBW, 'node_modules/.bin/esbuild.CMD'),
   [join(FBW, 'fbw-a380x/src/systems/instruments/src/OIT/System/InFlightPerf.ts'), '--bundle', '--format=esm', `--outfile=${BUNDLE2}`, '--log-level=warning'],

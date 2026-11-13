@@ -12,7 +12,7 @@ path = "src/main.rs"
 
 [dependencies]
 # Chromium Embedded Framework. The runtime (CEF 152) is exported once to
-# E:\fbw-build\cef; builds find it through CEF_PATH.
+# E:\A380\fbw-build\cef; builds find it through CEF_PATH.
 cef = { version = "=152.3.0", default-features = false }
 v8 = "=152.2.0"
 glass_render = { path = "../glass/render", package = "glass-render" }

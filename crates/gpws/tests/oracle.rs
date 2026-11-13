@@ -5,7 +5,7 @@ use serde_json::Value;
 use std::path::PathBuf;
 
 fn golden_dir() -> PathBuf {
-    PathBuf::from(std::env::var("GPWS_ORACLE_DIR").unwrap_or_else(|_| "E:/fbw-build/gpws-oracle/goldens".to_string()))
+    PathBuf::from(std::env::var("GPWS_ORACLE_DIR").unwrap_or_else(|_| "E:/A380/fbw-build/gpws-oracle/goldens".to_string()))
 }
 
 fn names(v: &Value) -> Vec<String> {

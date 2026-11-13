@@ -4,7 +4,7 @@ Crate `crates/fws_data` (standalone, no dependencies, own `[workspace]`): FlyByW
 
 ## Source
 
-All under `E:/fbw-int/fbw-aircraft/fbw-a380x/src/systems`:
+All under `E:/A380/fbw-int/fbw-aircraft/fbw-a380x/src/systems`:
 
 | FBW file | Content | Rust |
 |---|---|---|

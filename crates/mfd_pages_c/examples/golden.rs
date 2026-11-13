@@ -5,7 +5,7 @@ use mfd_pages_c::data_waypoint::*;
 use std::fs;
 
 fn main() {
-    let out = std::env::args().nth(1).unwrap_or_else(|| "E:/fbw-build/mfd-pages-c".to_string());
+    let out = std::env::args().nth(1).unwrap_or_else(|| "E:/A380/fbw-build/mfd-pages-c".to_string());
     let w = |name: &str, n: mfd_tree::Node| {
         fs::write(format!("{}/{}.json", out, name), n.to_json()).unwrap();
     };

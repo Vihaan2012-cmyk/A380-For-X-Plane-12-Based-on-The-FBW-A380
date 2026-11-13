@@ -6,7 +6,7 @@
 - TLD product pages: https://www.tld-group.com/products/towbarless-aircraft-tractors/tpx-500/ (also -S for A380, -MTS).
 - Used-unit listing (Truck1), indicative only and doubtful: 9,206 x 4,465 x 2,272 mm.
 
-Official length, width and wheelbase were not found. The dimensions below are estimates (p) sized to a 23.7 t two-axle wide-body tug and need checking against a TLD datasheet or photos. No photos were downloaded; `E:/fbw-gse/refs/tow_tpx500/` is empty.
+Official length, width and wheelbase were not found. The dimensions below are estimates (p) sized to a 23.7 t two-axle wide-body tug and need checking against a TLD datasheet or photos. No photos were downloaded; `E:/A380/fbw-gse/refs/tow_tpx500/` is empty.
 
 ## Frame
 

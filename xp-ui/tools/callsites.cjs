@@ -7,8 +7,8 @@ const path = require('path');
 const fs = require('fs');
 const { slash, entries, compilerOptions, cleanHost } = require('./lib/project.cjs');
 
-const fork = slash(path.resolve(process.argv[2] || 'E:/fbw-int/fbw-own-api'));
-const out = process.argv[3] || 'E:/fbw-int/xplane-js-private/callsites.json';
+const fork = slash(path.resolve(process.argv[2] || 'E:/A380/fbw-int/fbw-own-api'));
+const out = process.argv[3] || 'E:/A380/fbw-int/xplane-js-private/callsites.json';
 const libEntry = path.resolve(__dirname, '../lib/src/index.ts');
 const libModules = { '@microsoft/msfs-sdk': libEntry, 'xp-kit': libEntry, 'xp-ui': libEntry };
 const TYPINGS = (fork + '/fbw-common/src/typings/').toLowerCase();

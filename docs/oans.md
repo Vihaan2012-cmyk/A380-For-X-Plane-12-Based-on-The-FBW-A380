@@ -248,7 +248,7 @@ AIRPORT" (ICAO EXMP, IATA XMP).
 
 ## Tests
 
-`cargo +stable-x86_64-pc-windows-gnu test --release --features js` (`CARGO_TARGET_DIR=E:\fbw-build\target-oans`):
+`cargo +stable-x86_64-pc-windows-gnu test --release --features js` (`CARGO_TARGET_DIR=E:\A380\fbw-build\target-oans`):
 313 passed, 0 failed, 4 ignored (unrelated: `mapdata`/`js_worker` tests that need X-Plane or a
 running worker). `src/oans/mod.rs`'s tests cover parsing the example airport and finding its
 reference point, `searchForAirports` matching ICAO/IATA/name case-insensitively (and an empty query

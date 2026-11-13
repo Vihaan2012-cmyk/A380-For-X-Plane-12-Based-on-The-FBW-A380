@@ -206,7 +206,7 @@ New EFB page (FBW-style, own layout) "Saved states" under the existing EFB shell
 
 ### 7a. Exact hook lines for `src/lib.rs`, root `Cargo.toml` and `src/panel.rs` (state35, 22 Oct)
 
-`src/state_save.rs` is written and tested but is not compiled into the plugin until these lines are applied. They were applied to a shadow copy (`E:/fbw-build/state35/shadow`), which built and passed 7 tests.
+`src/state_save.rs` is written and tested but is not compiled into the plugin until these lines are applied. They were applied to a shadow copy (`E:/A380/fbw-build/state35/shadow`), which built and passed 7 tests.
 
 1. Root `Cargo.toml`, `[dependencies]`, after `fms = { path = "crates/fms" }`:
    ```toml

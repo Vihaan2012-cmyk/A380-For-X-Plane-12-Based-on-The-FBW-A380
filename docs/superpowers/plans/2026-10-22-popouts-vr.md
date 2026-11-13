@@ -147,7 +147,7 @@ rotary. Bindings: `command`, `knob` (dec/inc commands), `dataref` (value
 list, cycles or steps), `axis` (min/max/step). Generated, not hand-written:
 
 1. `tools/panels/extract.py` parses `a380_cockpit_click.obj` (approach in
-   `E:/fbw-build/popout34/manips.py`: manipulator line + the `TRIS` range
+   `E:/A380/fbw-build/popout34/manips.py`: manipulator line + the `TRIS` range
    after it -> vertex bounds; applies static `ANIM_trans` offsets, and must
    be extended to apply the animation's rest-pose rotations too), groups by
    tooltip and panel plane, fits the panel plane (SVD), and writes each

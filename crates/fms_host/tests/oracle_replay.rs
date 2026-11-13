@@ -7,7 +7,7 @@ use fms::uplink::{NavlogFix, Ofp, OfpAirport};
 use fms_host::{Envelope, FmsCore, FmsHost, HostCommand, Inputs, Outputs};
 use serde_json::Value;
 
-const ORACLE: &str = "E:/fbw-build/fms-oracle/uplink-egll-kjfk.json";
+const ORACLE: &str = "E:/A380/fbw-build/fms-oracle/uplink-egll-kjfk.json";
 
 fn db() -> MemoryNavDb {
     MemoryNavDb::from_fixture_json(include_str!("../../fms/tests/fixtures/navdb.json")).expect("fixture")
@@ -468,7 +468,7 @@ fn vnav_dump(raw: &Value, label: &str) -> Option<Value> {
 
 #[test]
 fn preflight_predictions_reach_the_snapshot_and_match_the_js_vnav_dump() {
-    let Some(rec) = load_from("E:/fbw-build/fms-oracle/predictions-egll-kjfk.json") else {
+    let Some(rec) = load_from("E:/A380/fbw-build/fms-oracle/predictions-egll-kjfk.json") else {
         eprintln!("oracle missing, skipping");
         return;
     };

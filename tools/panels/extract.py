@@ -1,6 +1,6 @@
 """Panel descriptions for pop-out panels from the installed cockpit OBJs.
 
-python extract.py [--aircraft DIR] [--out E:/fbw-build/panels] [--px-per-mm 4]
+python extract.py [--aircraft DIR] [--out E:/A380/fbw-build/panels] [--px-per-mm 4]
 """
 import argparse
 import collections
@@ -192,7 +192,7 @@ def project(P, fr):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--aircraft", default=DEFAULT_AIRCRAFT)
-    ap.add_argument("--out", default="E:/fbw-build/panels")
+    ap.add_argument("--out", default="E:/A380/fbw-build/panels")
     ap.add_argument("--px-per-mm", type=float, default=4.0)
     args = ap.parse_args()
     objs = os.path.join(args.aircraft, "objects")

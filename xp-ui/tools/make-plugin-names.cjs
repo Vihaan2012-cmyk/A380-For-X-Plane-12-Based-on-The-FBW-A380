@@ -4,8 +4,8 @@
 
 const fs = require('fs');
 
-const map = JSON.parse(fs.readFileSync(process.argv[2] || 'E:/fbw-int/xplane-js-private/api-map.json', 'utf8'));
-const out = process.argv[3] || 'E:/fbw-int/plugin/src/xp_names.txt';
+const map = JSON.parse(fs.readFileSync(process.argv[2] || 'E:/A380/fbw-int/xplane-js-private/api-map.json', 'utf8'));
+const out = process.argv[3] || 'E:/A380/fbw-int/plugin/src/xp_names.txt';
 
 const ENV = new Set(['SIMULATION TIME', 'ABSOLUTE TIME', 'SIMULATION RATE', 'ZULU DAY OF MONTH', 'ZULU MONTH OF YEAR', 'ZULU YEAR', 'ZULU TIME', 'LOCAL TIME', 'TIME OF DAY', 'ZULU SUNRISE TIME', 'ZULU SUNSET TIME', 'IS AIRCRAFT']);
 const GAME = new Set(['FLIGHT NAVDATA DATE RANGE', 'FROM MACH TO KIAS', 'FROM KIAS TO MACH']);

@@ -1036,7 +1036,7 @@ mod tests {
         let (b, f, n, c) = (get(&p::BYTES), get(&p::FAULTS), get(&p::NS), get(&p::PAINTS));
         println!("PROBE paints/s {:.1}; MB per paint {:.2}; ms per paint {:.3}; GB/s {:.2}; faults per MB {:.0}", c / 18., b / c.max(1.) / 1e6, n / c.max(1.) / 1e6, b / n.max(1.), f / (b / 1e6).max(1.));
         let (w, h, px) = t::tga_like_dump(&blocks[0]);
-        std::fs::write(format!("E:/fbw-build/tmp/probe-{w}x{h}.bgra"), &px).unwrap();
+        std::fs::write(format!("E:/A380/fbw-build/tmp/probe-{w}x{h}.bgra"), &px).unwrap();
         browsers.close();
     }
 
@@ -1087,7 +1087,7 @@ mod tests {
         let env = |k: &str| std::env::var(k).unwrap_or_else(|_| panic!("{k}"));
         let aircraft = std::path::PathBuf::from(env("FBW_BENCH_AIRCRAFT"));
         let panel = std::fs::read_to_string(aircraft.join("panel").join("panel.cfg")).unwrap();
-        t::start_chromium(&env("FBW_BENCH_CEF"), r"E:\fbw-build\tmp\oc-cache");
+        t::start_chromium(&env("FBW_BENCH_CEF"), r"E:\A380\fbw-build\tmp\oc-cache");
         for line in logs().lock().unwrap().drain(..) {
             println!("log: {line}");
         }

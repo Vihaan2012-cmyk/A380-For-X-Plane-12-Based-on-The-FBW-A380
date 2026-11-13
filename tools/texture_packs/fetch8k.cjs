@@ -2,8 +2,8 @@ const path = require('path');
 const { FragmenterContext, FragmenterInstaller } = require('D:/A380/fbw-installer-xp/node_modules/@flybywiresim/fragmenter');
 
 const url = 'https://flybywirecdn.com/addons/msfs2020/a380x/stable-8k';
-const dest = 'E:/fbw-texpacks/fbw-8k-package';
-const temp = 'E:/fbw-texpacks/fbw-8k-tmp';
+const dest = 'E:/A380/fbw-texpacks/fbw-8k-package';
+const temp = 'E:/A380/fbw-texpacks/fbw-8k-tmp';
 
 (async () => {
   const ctx = new FragmenterContext({ useConsoleLog: false }, new AbortController().signal);

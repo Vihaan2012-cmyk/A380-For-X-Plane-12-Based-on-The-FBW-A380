@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -u
 HERE=$(cd "$(dirname "$0")" && pwd)
-SNAP=${SNAP:-E:/fbw-build/emu-snapshots}
+SNAP=${SNAP:-E:/A380/fbw-build/emu-snapshots}
 OUT=${1:-E:/golden-tour/flight-v1}
 SCENARIOS=${2:-emu-06-taxi emu-07-takeoff-roll emu-08-initial-climb emu-09-climb emu-10-cruise emu-11-descent emu-12-approach emu-15-eng2-fire emu-17-elec-emer}
 mkdir -p "$OUT/seeds"

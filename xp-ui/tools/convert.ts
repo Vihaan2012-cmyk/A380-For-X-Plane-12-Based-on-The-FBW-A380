@@ -29,7 +29,7 @@ type ApiMap = {
   plugin?: { names: Record<string, string> };
 };
 
-const PRIVATE = 'E:/fbw-int/xplane-js-private';
+const PRIVATE = 'E:/A380/fbw-int/xplane-js-private';
 let LIB_DIR = '';
 const argv = process.argv.slice(2);
 const opt = (name: string, def?: string): string | undefined => {
@@ -518,11 +518,11 @@ function convert(mode: Mode, direction: 'forward' | 'reverse') {
   const reverse = direction === 'reverse';
   const src = slash(path.resolve(opt('src')!));
   const out = slash(path.resolve(opt('out')!));
-  const fork = slash(path.resolve(opt('fork', mode === 'fbw' ? src : 'E:/fbw-int/fbw-own-api')!));
+  const fork = slash(path.resolve(opt('fork', mode === 'fbw' ? src : 'E:/A380/fbw-int/fbw-own-api')!));
   const lib = slash(path.resolve(opt('lib', mode === 'lib' ? path.join(src, 'lib/src') : '')!));
   const data = opt('data') ? slash(path.resolve(opt('data')!)) : undefined;
   LIB_DIR = lower(lib) + '/';
-  const plugin = slash(path.resolve(opt('plugin', 'E:/fbw-int/plugin')!));
+  const plugin = slash(path.resolve(opt('plugin', 'E:/A380/fbw-int/plugin')!));
   const mapFile = opt('map', path.join(PRIVATE, 'api-map.json'))!;
   const map: ApiMap = JSON.parse(fs.readFileSync(mapFile, 'utf8'));
   const t0 = Date.now();

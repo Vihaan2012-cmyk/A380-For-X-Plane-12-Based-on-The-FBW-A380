@@ -15,7 +15,7 @@ Sources (FlyByWire A380X): `fbw-a380x/src/systems/systems-host/Misc/tcas/compone
 
 ## Oracle
 
-- `E:/fbw-build/tcas-oracle/`: esbuild bundles the real `LegacyTcasComputer.ts` with stubs for the SDK/event bus/sound manager/SimVar/Coherent and runs scripted scenarios in Node (V8, not QuickJS; trig results are compared with tolerance).
+- `E:/A380/fbw-build/tcas-oracle/`: esbuild bundles the real `LegacyTcasComputer.ts` with stubs for the SDK/event bus/sound manager/SimVar/Coherent and runs scripted scenarios in Node (V8, not QuickJS; trig results are compared with tolerance).
 - `gen.mjs` writes `golden/<scenario>.json` (inputs and per-tick outputs, non-finite numbers as strings). Copies live in `crates/tcas/tests/golden/`.
 - `tests/oracle.rs` replays every golden through the Rust crate and compares discrete outputs exactly, contact positions to 1e-12 and tracked taus, rates and distances to 1e-6 relative.
 - Scenarios (74, 3,000+ ticks): head-on above/below with and without RA compliance, reversal against a counter-manoeuvring intruder, crossing, overtaking, TA-only, altitude-select and EFIS traffic filters, ground and bugged traffic, junk zero positions, slew, radio-altitude inhibition bands, FL410, STBY, XPDR/air-data/IR switching, power loss, ARINC failures, GPWS warning, display cap, 300-contact memory cull, and 40 seeded random encounters.

@@ -3,7 +3,7 @@ import sys
 
 from PIL import Image, ImageDraw, ImageFont
 
-EXPORT = 'E:/fbw-gse/export'
+EXPORT = 'E:/A380/fbw-gse/export'
 VEHICLES = ['stairs_main', 'stairs_upper', 'cat_highloader', 'udcat_highloader']
 COLS = [('min_front34', 'min height, front'), ('max_front34', 'max height, front'), ('min_side', 'min height, side'), ('max_side', 'max height, side'),
         ('min_door', 'min, platform edge'), ('max_door', 'max, platform edge'), ('dnata_front34', 'dnata'), ('swissport_front34', 'Swissport'), ('menzies_front34', 'Menzies')]

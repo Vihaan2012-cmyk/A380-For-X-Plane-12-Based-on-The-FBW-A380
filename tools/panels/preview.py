@@ -1,6 +1,6 @@
 """Offline check: panel art with control, lamp and screen rects drawn on top.
 
-python preview.py [--panels E:/fbw-build/panels] [--only glareshield] [--lit]
+python preview.py [--panels E:/A380/fbw-build/panels] [--only glareshield] [--lit]
 """
 import argparse
 import json
@@ -13,7 +13,7 @@ COLORS = {"button": (0, 220, 255), "switch": (255, 200, 0), "knob": (0, 255, 120
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--panels", default="E:/fbw-build/panels")
+    ap.add_argument("--panels", default="E:/A380/fbw-build/panels")
     ap.add_argument("--only", default="")
     ap.add_argument("--lit", action="store_true")
     args = ap.parse_args()

@@ -21,7 +21,7 @@ from mathutils import Matrix, Vector
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import fan_case_dressing as fcd  # noqa: E402
 
-SPEC = json.load(open("E:/fbw-int/msfs2xp-aircraft/tools/optimize/gp7200_spec.json", encoding="utf-8"))
+SPEC = json.load(open("E:/A380/fbw-int/msfs2xp-aircraft/tools/optimize/gp7200_spec.json", encoding="utf-8"))
 CASE_R = fcd.CASE_R
 DOOR_T = 0.10
 CLEAR = 0.010

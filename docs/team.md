@@ -6,7 +6,7 @@ The goal is a study-level FlyByWire A380X in X-Plane 12: FBW's own code (Rust sy
 - **Plugin (Rust cdylib):** D:\A380\fbw-xp-systems. It is not a git repo.
   - `src/lib.rs` has the tick order, the Vars registry and `// [slot ...: name]` comments marking where each engineer inserts lines. Add your own slot lines and never rearrange others'.
   - `src/xp.rs` has the XPLM bindings through GetProcAddress, with no SDK crate. Append only.
-  - Headers for exact struct layouts are in E:\fbw-build\xpsdk.
+  - Headers for exact struct layouts are in E:\A380\fbw-build\xpsdk.
 - **Systems modules already done:** fadec, throttle, engine_commands, prim/fbw_controllers (compiled FBW C++), fuel/fuel_network/fuel_transfer, flight_controls, handling (gear, brakes, flaps, steering), sensors (incl. ILS on nav 3), aspects, correctness, failures, start_state, study (the in-sim study panel).
 - **JS engine:** `src/js/` (QuickJS via rquickjs 0.13, Oxc TS/JSX transpile, module resolver, prelude) and `src/js_bridge.rs`, behind cargo feature `js`.
 - **Display contract:** docs/display-stream.md.
@@ -37,7 +37,7 @@ The goal is a study-level FlyByWire A380X in X-Plane 12: FBW's own code (Rust sy
 ## Rules
 - Deliver working, tested code. Partial files from earlier engineers may exist: read them, keep what is sound, and finish.
 - **Keep the whole tree building** at every stopping point, because everyone builds the same tree. If a build error is in someone else's file and trivially fixable (a warning or a lifetime), fix it minimally; otherwise leave it and mention it.
-- **Build and test** with `cargo +stable-x86_64-pc-windows-gnu test --release --features js` and `CARGO_TARGET_DIR=E:\fbw-build\target-<your area>`. Never build on C: (nearly full).
+- **Build and test** with `cargo +stable-x86_64-pc-windows-gnu test --release --features js` and `CARGO_TARGET_DIR=E:\A380\fbw-build\target-<your area>`. Never build on C: (nearly full).
 - **No fake values or behaviours.** Everything comes from FBW source, the MSFS package, X-Plane or official specs, cited with file:line where it isn't obvious. If there's no real source, leave it out and say so.
 - Don't install into X-Plane, don't launch X-Plane and don't commit.
 - Match the surrounding code's style and comment density. No warnings in your files.

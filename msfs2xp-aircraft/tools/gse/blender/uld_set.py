@@ -5,7 +5,7 @@ import subprocess
 import gselib as g
 
 NAME = 'uld_set'
-LIVERY_DIR = os.environ.get('ULD_LIVERY_DIR', 'E:/fbw-gse/out/uld_set/liveries')
+LIVERY_DIR = os.environ.get('ULD_LIVERY_DIR', 'E:/A380/fbw-gse/out/uld_set/liveries')
 VARIANTS = {'a': ('AKE 12345 EK', (200, 30, 40)), 'b': ('AKE 48213 QR', (110, 20, 70)), 'c': ('AKE 90377 LH', (20, 40, 110))}
 
 DOLLY_LEN = 1700.0
@@ -256,7 +256,7 @@ def build(with_connection=True):
     c = g.collection(NAME)
     m = materials()
     dec = decal_materials('a')
-    art = os.environ.get('G3_ART', 'E:/fbw-gse/export/_g3/art')
+    art = os.environ.get('G3_ART', 'E:/A380/fbw-gse/export/_g3/art')
     op_short = g.image_mat('decal_dolly_short', os.path.join(art, 'dolly_short_dnata.png'), roughness=0.5)
     op_long = g.image_mat('decal_dolly_long', os.path.join(art, 'dolly_long_dnata.png'), roughness=0.5)
     ld3_tracks = [(-740, -640, 120, 1600), (-60, 60, 120, 1600), (640, 740, 120, 1600)]

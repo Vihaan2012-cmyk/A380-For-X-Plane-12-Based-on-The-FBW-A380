@@ -172,6 +172,6 @@ not rasterised here: the DOM side sends SVG as drawing commands.
 `src/display/tests.rs`, with the software renderer `soft.rs` carrying out
 the same plan as the GL renderer (multisample positions, stencil,
 scissor, filtering, blending). Snapshots go to
-`E:\fbw-build\display-snapshots`: `shapes.png` (with `shapes-tiny-skia.png`
+`E:\A380\fbw-build\display-snapshots`: `shapes.png` (with `shapes-tiny-skia.png`
 and `shapes-diff.png`), `text.png`, `images.png`, `pfd-like.png`,
 `large.png`, `mfd-dimming.png`.

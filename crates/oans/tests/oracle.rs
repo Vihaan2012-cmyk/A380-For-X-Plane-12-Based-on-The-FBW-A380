@@ -210,7 +210,7 @@ fn same(a: &Value, b: &Value) -> bool {
 }
 
 fn golden_dir() -> PathBuf {
-    PathBuf::from(std::env::var("OANS_ORACLE_DIR").unwrap_or_else(|_| "E:/fbw-build/oans-oracle".into()))
+    PathBuf::from(std::env::var("OANS_ORACLE_DIR").unwrap_or_else(|_| "E:/A380/fbw-build/oans-oracle".into()))
 }
 
 #[test]

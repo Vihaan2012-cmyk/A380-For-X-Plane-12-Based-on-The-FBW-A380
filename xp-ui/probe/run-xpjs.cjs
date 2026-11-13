@@ -8,8 +8,8 @@ const fs = require('fs');
 const path = require('path');
 const vm = require('vm');
 
-const FORK = 'E:/fbw-int/fbw-aircraft-ts';
-const PRIVATE = 'E:/fbw-int/xplane-js-private';
+const FORK = 'E:/A380/fbw-int/fbw-aircraft-ts';
+const PRIVATE = 'E:/A380/fbw-int/xplane-js-private';
 const forkRequire = require('module').createRequire(path.join(FORK, 'package.json'));
 const esbuild = forkRequire('esbuild');
 const { JSDOM } = forkRequire('jsdom');

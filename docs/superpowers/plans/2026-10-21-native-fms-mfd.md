@@ -16,12 +16,12 @@
 ## Global Constraints
 
 - **Builds:**
-  - Cargo uses only `CARGO_TARGET_DIR=E:/fbw-build/target`.
-  - Build the instruments from the fork with `XP_UI=E:/fbw-int/clean-avionics/lib` and `XP_KIT` unset.
+  - Cargo uses only `CARGO_TARGET_DIR=E:/A380/fbw-build/target`.
+  - Build the instruments from the fork with `XP_UI=E:/A380/fbw-int/clean-avionics/lib` and `XP_KIT` unset.
 - **Never open or read:**
-  - E:/fbw-int/xp-avionics, E:/fbw-int/xp-kit, E:/fbw-int/adapt-orig;
+  - E:/A380/fbw-int/xp-avionics, E:/A380/fbw-int/xp-kit, E:/A380/fbw-int/adapt-orig;
   - any node_modules/@microsoft;
-  - E:/fbw-build/golden, E:/fbw-build/kit-new, E:/fbw-build/html-ui-xpkit.
+  - E:/A380/fbw-build/golden, E:/A380/fbw-build/kit-new, E:/A380/fbw-build/html-ui-xpkit.
 - **Do not translate:** framework utilities used by the FMS (EventBus, Subject, MathUtils, AeroMath, UnitType, BitFlags, UUID, Wait). Rust gets its own. Also do not translate `utils/LzUtf8.js` or `wtsdk.ts`.
 - **Comments:** no explanatory comment paragraphs in code.
 - **Commits:** commit as `git -c user.name=vihaan2012-cmyk -c user.email=vihaan2012-cmyk@users.noreply.github.com`, with no co-author line. The user pushes.
@@ -35,12 +35,12 @@
 
 | Phase | Deliverable | Done when |
 |---|---|---|
-| 1 Oracle | `src/js/msfs/fms_oracle.rs`, `tools/fms_oracle/`, goldens in `E:/fbw-build/fms-oracle/` | 4 scenarios recorded twice with identical output |
+| 1 Oracle | `src/js/msfs/fms_oracle.rs`, `tools/fms_oracle/`, goldens in `E:/A380/fbw-build/fms-oracle/` | 4 scenarios recorded twice with identical output |
 | 2 Plan + uplink | `crates/fms` with `plan`, `uplink`, `NavDatabase` trait, comparator | Phase 1 scenarios match on every plan field |
 | 3 LNAV | `lnav` geometry, transitions, path vectors, sequencing, guidance laws; `fly` scenario op | EFIS vector events and guidance vars match along 3 simulated flights |
 | 4 VNAV + rest | `vnav`, `perf`, `fuel`, `messages`, `efis` symbols, `phase` | every recorded var and generic-data event matches in all scenarios |
 | 5 Live | `src/fms_live.rs`: shadow mode (`fms shadow:` log), then authoritative when `a380_displays` claims the MFD | one user flight with zero shadow differences |
-| 6 C++ foundation | `E:/fbw-int/a380-displays`: device claim, NanoVG, fonts, input, model/action datarefs, headless PNG renderer | a test page drawn in the sim (user launches); under 0.3 ms per frame |
+| 6 C++ foundation | `E:/A380/fbw-int/a380-displays`: device claim, NanoVG, fonts, input, model/action datarefs, headless PNG renderer | a test page drawn in the sim (user launches); under 0.3 ms per frame |
 | 7 MFD pages | every page the current MFD has, drawn from the model | each page's PNG matches its Chromium capture; user check in the sim |
 | 8 Cut-over | release ships native FMS + MFD; the CEF MFD page leaves the install | release built from the exact install |
 
@@ -61,7 +61,7 @@ Phases 2 to 8 each get their own detailed plan when they start, written against 
 - Create `tools/fms_oracle/make_pkg.py`: builds the MFD-only oracle package.
 - Create `tools/fms_oracle/test_make_pkg.py`.
 - Create `tools/fms_oracle/scenarios/*.json`: four scenarios.
-- Fork `E:/fbw-int/fbw-aircraft-ts`: `FlightManagementComputer.ts` exposes `globalThis.__xpFmc`.
+- Fork `E:/A380/fbw-int/fbw-aircraft-ts`: `FlightManagementComputer.ts` exposes `globalThis.__xpFmc`.
 
 ### Task 1: Recording host
 
@@ -122,7 +122,7 @@ mod fms_oracle;
 
 - [ ] **Step 2: Run the test and confirm it fails**
 
-Run: `CARGO_TARGET_DIR=E:/fbw-build/target cargo test --release --features js --lib fms_oracle::tests`
+Run: `CARGO_TARGET_DIR=E:/A380/fbw-build/target cargo test --release --features js --lib fms_oracle::tests`
 Expected: compile error, because `Recording` is not defined.
 
 - [ ] **Step 3: Implement**
@@ -229,7 +229,7 @@ impl<H: Host> Host for Recording<H> {
 
 - [ ] **Step 4: Run the test and confirm it passes**
 
-Run: `CARGO_TARGET_DIR=E:/fbw-build/target cargo test --release --features js --lib fms_oracle::tests`
+Run: `CARGO_TARGET_DIR=E:/A380/fbw-build/target cargo test --release --features js --lib fms_oracle::tests`
 Expected: PASS.
 
 Then run `cargo test --release --features js --lib js::` (same target dir). Expected: no new failures against the count before the change. Run it once before Step 3 to get that count.
@@ -244,7 +244,7 @@ git commit -m "fms oracle: record the MFD's variable writes and generic-data eve
 ### Task 2: FMC handle in the fork
 
 **Files:**
-- Modify: `E:/fbw-int/fbw-aircraft-ts/fbw-a380x/src/systems/instruments/src/MFD/FMC/FlightManagementComputer.ts` (constructor, after `this.#mfdReference = mfdReference;`)
+- Modify: `E:/A380/fbw-int/fbw-aircraft-ts/fbw-a380x/src/systems/instruments/src/MFD/FMC/FlightManagementComputer.ts` (constructor, after `this.#mfdReference = mfdReference;`)
 
 **Interfaces:**
 - Produces: `globalThis.__xpFmc`, an array indexed by `FmcIndex` that holds each `FlightManagementComputer`.
@@ -258,10 +258,10 @@ git commit -m "fms oracle: record the MFD's variable writes and generic-data eve
 
 - [ ] **Step 2: Build the instruments**
 
-From `E:/fbw-int/fbw-aircraft-ts`, with `XP_UI=E:/fbw-int/clean-avionics/lib` set and `XP_KIT` unset, run:
+From `E:/A380/fbw-int/fbw-aircraft-ts`, with `XP_UI=E:/A380/fbw-int/clean-avionics/lib` set and `XP_KIT` unset, run:
 
 ```
-node E:/fbw-int/plugin/tools/js-build/fbw-mach.cjs build --config fbw-a380x/mach.config.js --work-in-config-dir
+node E:/A380/fbw-int/plugin/tools/js-build/fbw-mach.cjs build --config fbw-a380x/mach.config.js --work-in-config-dir
 ```
 
 Expected: the build succeeds, and `grep -l __xpFmc fbw-a380x/out/flybywire-aircraft-a380-842/html_ui/Pages/VCockpit/Instruments/A380X/MFD/*.js` prints the MFD bundle.
@@ -269,8 +269,8 @@ Expected: the build succeeds, and `grep -l __xpFmc fbw-a380x/out/flybywire-aircr
 - [ ] **Step 3: Commit in the fork**
 
 ```bash
-git -C E:/fbw-int/fbw-aircraft-ts add fbw-a380x/src/systems/instruments/src/MFD/FMC/FlightManagementComputer.ts
-git -C E:/fbw-int/fbw-aircraft-ts commit -m "mfd: expose the FMCs on globalThis.__xpFmc for the offline oracle"
+git -C E:/A380/fbw-int/fbw-aircraft-ts add fbw-a380x/src/systems/instruments/src/MFD/FMC/FlightManagementComputer.ts
+git -C E:/A380/fbw-int/fbw-aircraft-ts commit -m "mfd: expose the FMCs on globalThis.__xpFmc for the offline oracle"
 ```
 
 ### Task 3: Oracle package
@@ -280,7 +280,7 @@ git -C E:/fbw-int/fbw-aircraft-ts commit -m "mfd: expose the FMCs on globalThis.
 - Create: `tools/fms_oracle/test_make_pkg.py`
 
 **Interfaces:**
-- Produces `E:/fbw-build/fms-oracle-pkg/` containing `html_ui/` (from the fork's build), a `panel.cfg` with only `[VCockpit01]` (the MFD), and `panel.xml`.
+- Produces `E:/A380/fbw-build/fms-oracle-pkg/` containing `html_ui/` (from the fork's build), a `panel.cfg` with only `[VCockpit01]` (the MFD), and `panel.xml`.
 - The runner reads it from `FMS_ORACLE_PKG`.
 
 - [ ] **Step 1: Write the failing test** in `tools/fms_oracle/test_make_pkg.py`:
@@ -314,10 +314,10 @@ import shutil
 import sys
 from pathlib import Path
 
-FORK = Path("E:/fbw-int/fbw-aircraft-ts")
+FORK = Path("E:/A380/fbw-int/fbw-aircraft-ts")
 HTML_UI = FORK / "fbw-a380x/out/flybywire-aircraft-a380-842/html_ui"
 PANEL = FORK / "fbw-a380x/src/base/flybywire-aircraft-a380-842/SimObjects/AirPlanes/FlyByWire_A380X/attachments/flybywire/Part_Interior_Cockpit/panel"
-DEFAULT_DEST = Path("E:/fbw-build/fms-oracle-pkg")
+DEFAULT_DEST = Path("E:/A380/fbw-build/fms-oracle-pkg")
 
 
 def mfd_only(cfg: str) -> str:
@@ -353,7 +353,7 @@ Run: `python tools/fms_oracle/test_make_pkg.py`
 Expected: `ok`.
 
 Run: `python tools/fms_oracle/make_pkg.py`
-Expected: `E:\fbw-build\fms-oracle-pkg: html_ui + MFD-only panel.cfg`. The new `panel.cfg` contains `SCREEN_DU_MFD` and no other `texture=` line.
+Expected: `E:\A380\fbw-build\fms-oracle-pkg: html_ui + MFD-only panel.cfg`. The new `panel.cfg` contains `SCREEN_DU_MFD` and no other `texture=` line.
 
 - [ ] **Step 5: Commit**
 
@@ -488,7 +488,7 @@ git commit -m "fms oracle: snapshot script for FlyByWire's flight plans and FMGC
   - `{"page": ["ACTIVE", "F-PLN"]}`
   - `{"var": ["L:NAME", "unit", value]}`
   - `{"snapshot": "label"}`
-- Golden: `E:/fbw-build/fms-oracle/<name>.json` = `{ scenario, navdata, snapshots: [{ label, t, state, mfd }], events }`.
+- Golden: `E:/A380/fbw-build/fms-oracle/<name>.json` = `{ scenario, navdata, snapshots: [{ label, t, state, mfd }], events }`.
   - `state` is the parsed snapshot JSON, and `mfd` is `Mfd::positioned_texts`.
   - The navdata field is `nav.date_range()`.
 
@@ -519,7 +519,7 @@ In `fms_oracle.rs` tests:
     #[ignore]
     fn record_fms_oracle() {
         let dir = std::path::PathBuf::from(std::env::var("FMS_ORACLE_SCENARIOS").unwrap_or_else(|_| "tools/fms_oracle/scenarios".into()));
-        let out = std::path::PathBuf::from(std::env::var("FMS_ORACLE_OUT").unwrap_or_else(|_| r"E:\fbw-build\fms-oracle".into()));
+        let out = std::path::PathBuf::from(std::env::var("FMS_ORACLE_OUT").unwrap_or_else(|_| r"E:\A380\fbw-build\fms-oracle".into()));
         let only = std::env::var("FMS_ORACLE_ONLY").ok();
         std::fs::create_dir_all(&out).unwrap();
         let mut names: Vec<_> = std::fs::read_dir(&dir).unwrap().filter_map(|e| e.ok()).map(|e| e.path()).filter(|p| p.extension().is_some_and(|x| x == "json")).collect();
@@ -540,7 +540,7 @@ In `fms_oracle.rs` tests:
 
 - [ ] **Step 2: Run it and confirm it fails**
 
-Run: `CARGO_TARGET_DIR=E:/fbw-build/target cargo test --release --features js --lib fms_oracle -- --ignored --nocapture`
+Run: `CARGO_TARGET_DIR=E:/A380/fbw-build/target cargo test --release --features js --lib fms_oracle -- --ignored --nocapture`
 Expected: compile error, because `run_scenario` is not defined.
 
 - [ ] **Step 3: Implement the runner** in `fms_oracle.rs`, above the tests:
@@ -595,7 +595,7 @@ fn snapshot(cockpit: &Cockpit, host: &OracleHost, mfd: &Mfd, label: &str) -> Res
 }
 
 pub fn run_scenario(scenario: &serde_json::Value) -> Result<serde_json::Value, String> {
-    let pkg = PathBuf::from(std::env::var("FMS_ORACLE_PKG").unwrap_or_else(|_| r"E:\fbw-build\fms-oracle-pkg".into()));
+    let pkg = PathBuf::from(std::env::var("FMS_ORACLE_PKG").unwrap_or_else(|_| r"E:\A380\fbw-build\fms-oracle-pkg".into()));
     let xplane = PathBuf::from(std::env::var("FMS_XPLANE_ROOT").unwrap_or_else(|_| r"D:\Steam Games\steamapps\common\X-Plane 12".into()));
     let mut cockpit = new_cockpit(&pkg)?;
     let mut host = attach_navdata(Recording::new(VarStore::new()), &xplane)?;
@@ -645,11 +645,11 @@ pub fn run_scenario(scenario: &serde_json::Value) -> Result<serde_json::Value, S
 
 - [ ] **Step 4: Build the package, run the test, and check the result**
 
-Run: `python tools/fms_oracle/make_pkg.py --replace`, then `CARGO_TARGET_DIR=E:/fbw-build/target cargo test --release --features js --lib fms_oracle -- --ignored --nocapture`.
+Run: `python tools/fms_oracle/make_pkg.py --replace`, then `CARGO_TARGET_DIR=E:/A380/fbw-build/target cargo test --release --features js --lib fms_oracle -- --ignored --nocapture`.
 
 Expected:
 - the test prints `uplink-egll-kjfk: 2 snapshots, N events` and passes;
-- in `E:/fbw-build/fms-oracle/uplink-egll-kjfk.json`, `snapshots[0].state.plans.active.legs` lists EGLL ... KJFK, with lat/lon on every non-discontinuity leg;
+- in `E:/A380/fbw-build/fms-oracle/uplink-egll-kjfk.json`, `snapshots[0].state.plans.active.legs` lists EGLL ... KJFK, with lat/lon on every non-discontinuity leg;
 - `snapshots[1].mfd` contains the F-PLN page texts.
 
 - [ ] **Step 5: Commit**
@@ -764,9 +764,9 @@ sys.exit(1 if bad else 0)
 
 - [ ] **Step 2: Record twice and compare**
 
-1. Run the Task 5 command with `FMS_ORACLE_OUT=E:/fbw-build/fms-oracle-run2`.
+1. Run the Task 5 command with `FMS_ORACLE_OUT=E:/A380/fbw-build/fms-oracle-run2`.
 2. Run it again with the default output folder.
-3. Run `python tools/fms_oracle/same.py E:/fbw-build/fms-oracle E:/fbw-build/fms-oracle-run2`.
+3. Run `python tools/fms_oracle/same.py E:/A380/fbw-build/fms-oracle E:/A380/fbw-build/fms-oracle-run2`.
 
 Expected: `4/4 identical`.
 
@@ -801,7 +801,7 @@ git commit -m "fms oracle: procedures, temporary-plan edits and secondary-plan s
   - Add `src/fms_live.rs`. In shadow mode it rebuilds the pilot's entries from FlyByWire's flight plan sync events, and logs `fms shadow:` differences.
   - It is authoritative only when `a380_displays` has claimed `SCREEN_DU_MFD`. The Rust display code skips claimed screens.
 - **Phase 6:**
-  - Create the C++ repo `E:/fbw-int/a380-displays` (CMake, X-Plane SDK `D:/A380/SDK`, NanoVG, nlohmann/json).
+  - Create the C++ repo `E:/A380/fbw-int/a380-displays` (CMake, X-Plane SDK `D:/A380/SDK`, NanoVG, nlohmann/json).
   - It covers: the device claim message, dimming and power, fonts, input callbacks, the model/action datarefs, and a headless renderer executable that writes PNGs from a model file.
   - Its first page is a test pattern for an in-sim check that the user launches.
 - **Phase 7:**

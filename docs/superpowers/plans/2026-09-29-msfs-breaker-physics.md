@@ -17,18 +17,18 @@
 
 **Tech Stack:** Rust (the plugin crate, FlyByWire `systems`/`a380_systems`/`systems_wasm`, target `wasm32-wasip1`), TypeScript/React (FlyByWire EFB), MSFS model behaviour XML, PowerShell, and Docker (`ghcr.io/flybywiresim/dev-env@sha256:28b1f55c047b9ec338c3d676a82225fe135b0b1061fa7993c03b9a75b5e470cd`).
 
-**Spec:** `E:/fbw-int/plugin/docs/superpowers/specs/2026-09-29-msfs-breaker-physics-design.md`
+**Spec:** `E:/A380/fbw-int/plugin/docs/superpowers/specs/2026-09-29-msfs-breaker-physics-design.md`
 
 ## Global Constraints
 
 - **No git commits.** Every "commit" step is a diff save: `git diff > a local diff file.
 - **Agents:** at most 6 running at once, no agent starts another, and Sonnet first.
-- **Build directory:** all native Rust builds use `CARGO_TARGET_DIR=E:/fbw-build/target` and toolchain `+stable-x86_64-pc-windows-gnu`. The Docker build uses `E:/fbw-build/target/wasm-docker`.
+- **Build directory:** all native Rust builds use `CARGO_TARGET_DIR=E:/A380/fbw-build/target` and toolchain `+stable-x86_64-pc-windows-gnu`. The Docker build uses `E:/A380/fbw-build/target/wasm-docker`.
 - **Never launch** X-Plane or MSFS.
 - **Don't fake values.** Every mapping (input variable, RESET name → unit) must cite the file and line it came from, and an unmapped item stays unmapped.
 - **X-Plane output must not change.** The golden run (Task 1) must match bit for bit, and the plugin suite must stay at 2800 tests with only the known failure `prim::tests::zero_pedal_never_lets_the_sec_command_a_sustained_rudder_trim_over_300_simulated_seconds`. The timing-only tests `remote::tests::the_systems_in_their_own_process_switch_on_the_same_frame_as_in_the_plugin` and `physics::engine::tests::the_per_frame_cost_is_small` may fail under load; if they do, rerun them alone.
 - **Paths:**
-  - Plugin: `E:/fbw-int/plugin` (builds FlyByWire from `E:/fbw-int/fbw-aircraft`).
+  - Plugin: `E:/A380/fbw-int/plugin` (builds FlyByWire from `E:/A380/fbw-int/fbw-aircraft`).
   - Development-build FlyByWire worktree: `D:/A380/fbw-xp-worktrees/fs2020-672384b`.
   - MSFS package: `D:/Microsoft Flight Simulator 2020/Microsoft Flight Simulator 2020 Packages/Community/flybywire-aircraft-a380-842`.
 - **Commit pinning:** the Development-build commit is pinned. The installer refuses any package whose `manifest.json` `package_version` doesn't contain `672384b9602a84d6832b8852cd6ec0abdd006f85`.
@@ -37,7 +37,7 @@
 
 ## File Structure
 
-**Plugin (`E:/fbw-int/plugin`)**
+**Plugin (`E:/A380/fbw-int/plugin`)**
 
 | File | Responsibility |
 |---|---|
@@ -68,7 +68,7 @@
 | `fbw-common/src/systems/instruments/src/EFB/Study/**`, `Efb.tsx`, `ToolBar/ToolBar.tsx` | EFB Study tab and live `BreakerPanels`. |
 | gate patch targets | The files the electrical patch subset touches. |
 
-**Delivery (`E:/fbw-build/wasm-fs2020/`)**
+**Delivery (`E:/A380/fbw-build/wasm-fs2020/`)**
 
 | File | Responsibility |
 |---|---|
@@ -85,8 +85,8 @@
 - [ ] **Step 1: Back up the trees this plan touches**
 
 ```bash
-B=/e/fbw-backup/2026-09-29-msfs-cb; mkdir -p $B
-cd /e/fbw-int/plugin && git diff > $B/plugin-before.diff && git status --short > $B/plugin-before.status
+B=/e/A380/fbw-backup/2026-09-29-msfs-cb; mkdir -p $B
+cd /e/A380/fbw-int/plugin && git diff > $B/plugin-before.diff && git status --short > $B/plugin-before.status
 cd /d/A380/fbw-xp-worktrees/fs2020-672384b && git diff > $B/fs2020-before.diff
 P="/d/Microsoft Flight Simulator 2020/Microsoft Flight Simulator 2020 Packages/Community/flybywire-aircraft-a380-842"
 mkdir -p $B/msfs && cp "$P/layout.json" "$P/SimObjects/AirPlanes/FlyByWire_A380_842/model/A380_COCKPIT.xml" $B/msfs/
@@ -94,15 +94,15 @@ mkdir -p $B/msfs && cp "$P/layout.json" "$P/SimObjects/AirPlanes/FlyByWire_A380_
 
 - [ ] **Step 2: Record the plugin suite baseline**
 
-Run: `cd /e/fbw-int/plugin && CARGO_TARGET_DIR=/d/A380/fbw-build/target cargo +stable-x86_64-pc-windows-gnu test --lib -q 2>&1 | grep -E "test result|panicked at" > /e/fbw-backup/2026-09-29-msfs-cb/plugin-baseline.txt`
+Run: `cd /e/A380/fbw-int/plugin && CARGO_TARGET_DIR=/d/A380/fbw-build/target cargo +stable-x86_64-pc-windows-gnu test --lib -q 2>&1 | grep -E "test result|panicked at" > /e/A380/fbw-backup/2026-09-29-msfs-cb/plugin-baseline.txt`
 Expected: `2799 passed; 1 failed` (the known `prim` test), give or take the load-sensitive timing tests.
 
 ### Task 1: Golden run (before anything moves)
 
 **Files:**
-- Create: `E:/fbw-int/plugin/src/deep/golden_electrical.rs`
-- Modify: `E:/fbw-int/plugin/src/deep/mod.rs` (add `#[cfg(test)] mod golden_electrical;`)
-- Create (by the test): `E:/fbw-int/plugin/crates/deep_electrical/tests/golden/deep_electrical.json`
+- Create: `E:/A380/fbw-int/plugin/src/deep/golden_electrical.rs`
+- Modify: `E:/A380/fbw-int/plugin/src/deep/mod.rs` (add `#[cfg(test)] mod golden_electrical;`)
+- Create (by the test): `E:/A380/fbw-int/plugin/crates/deep_electrical/tests/golden/deep_electrical.json`
 
 **Interfaces:**
 - Consumes: `deep::breakers::live::BreakersLive::new`, `deep::electrical::live::ElectricalLive::new`, `deep::wiring::live::WiringLive::new`, `Area::{tick, publish, derived_failures}`, `BreakersLive::breaker_mut(&str) -> Option<&mut Breaker>`, `Breaker::pull`, `Truth::default`, `Faults::from_pairs`.
@@ -209,7 +209,7 @@ Adjust field names only if the compiler rejects one. Use the exact names from `l
 
 - [ ] **Step 2: Record it**
 
-Run: `cd /e/fbw-int/plugin && GOLDEN_RECORD=1 CARGO_TARGET_DIR=/d/A380/fbw-build/target cargo +stable-x86_64-pc-windows-gnu test --lib -q -- deep_electrical_golden_run`
+Run: `cd /e/A380/fbw-int/plugin && GOLDEN_RECORD=1 CARGO_TARGET_DIR=/d/A380/fbw-build/target cargo +stable-x86_64-pc-windows-gnu test --lib -q -- deep_electrical_golden_run`
 Expected: PASS, and the file exists with 600 frames.
 
 - [ ] **Step 3: Compare mode is stable**
@@ -472,14 +472,14 @@ fn published_names_cover_one_ticks_output() {
 
 Write `facade_matches_the_golden_run` in full, reusing the golden scenario helper moved in Task 3.
 
-- [ ] **Step 2: Implement.** Build `GATES` from `E:/fbw-int/plugin/src/breakers.rs`: every `BreakerDef` with `plugin_var: Some(var)` whose `id` is also a deep catalogue id, as `Gate { breaker_id: id, variable: var, open_when_true: var.ends_with("_OPEN") }`.
+- [ ] **Step 2: Implement.** Build `GATES` from `E:/A380/fbw-int/plugin/src/breakers.rs`: every `BreakerDef` with `plugin_var: Some(var)` whose `id` is also a deep catalogue id, as `Gate { breaker_id: id, variable: var, open_when_true: var.ends_with("_OPEN") }`.
 - [ ] **Step 3: Run** `cargo test -p deep_electrical`. Expected: PASS.
 - [ ] **Step 4: Save the diff** to `task4.diff`.
 
 ### Task 5: Sync script and vendoring
 
 **Files:**
-- Create: `E:/fbw-int/plugin/scripts/sync-deep-electrical.sh`
+- Create: `E:/A380/fbw-int/plugin/scripts/sync-deep-electrical.sh`
 
 - [ ] **Step 1: Write the script**
 
@@ -502,7 +502,7 @@ echo "synced $(cat "$DST/SOURCE_HASH")"
 
 ### Task 6: Gate patches onto `672384b`
 
-**Files:** the files touched by `E:/fbw-int/plugin/patches/fbw-rust/{power-path-cabinfan,power-path-fire-loops,power-path-lgciu,power-path-operating-channel,power-path-pending-egpwc,power-path-radioaltimeter,power-path-valve-breakers,power-path-pending-TR-GEN,bus-feeder-breakers,bus-feeder-breakers-2,breaker-open-polarity,breakers,generator-overload-trip,tr-thermal-model,static-inverter-efficiency,battery-thermal-runaway,electrical}.patch`, in the worktree.
+**Files:** the files touched by `E:/A380/fbw-int/plugin/patches/fbw-rust/{power-path-cabinfan,power-path-fire-loops,power-path-lgciu,power-path-operating-channel,power-path-pending-egpwc,power-path-radioaltimeter,power-path-valve-breakers,power-path-pending-TR-GEN,bus-feeder-breakers,bus-feeder-breakers-2,breaker-open-polarity,breakers,generator-overload-trip,tr-thermal-model,static-inverter-efficiency,battery-thermal-runaway,electrical}.patch`, in the worktree.
 
 - [ ] **Step 1: Apply in dependency order.** `electrical`, `static-inverter-efficiency`, `tr-thermal-model`, `battery-thermal-runaway`, `generator-overload-trip`, `bus-feeder-breakers`, `bus-feeder-breakers-2`, then the seven `power-path-*` that apply, each with `git apply --ignore-whitespace`. After each, run `cargo test -p systems -p a380_systems --lib -q`. Stop on the first failure.
 - [ ] **Step 2: Hand-port** `breakers.patch`, `breaker-open-polarity.patch` and `power-path-pending-TR-GEN.patch`. For each rejected hunk, read the patch's intent (its own comments) and apply the same change to this commit's code. Keep variable names identical to the patch.
@@ -570,7 +570,7 @@ mod tests {
 - Consumes: `deep_electrical::{DeepElectrical, ElectricalInputs, ElectricalControls, BreakerCommand, GATES, lvar_key, frame::Faults}`.
 - Produces: `CircuitProtection::new(&mut InitContext)`, `update(&mut self, &UpdateContext)`, `derived_failure_ids(&self) -> Vec<u64>`, and the `SimulationElement` impl.
 
-Input variables (the names `E:/fbw-int/plugin/src/deep/plugin.rs` registers; in MSFS they're the same FlyByWire variables, prefixed `A32NX_` by the registry):
+Input variables (the names `E:/A380/fbw-int/plugin/src/deep/plugin.rs` registers; in MSFS they're the same FlyByWire variables, prefixed `A32NX_` by the registry):
 
 | `ElectricalInputs` field | Variable (per index) | Source line in `deep/plugin.rs` |
 |---|---|---|
@@ -713,7 +713,7 @@ It must match the Rust `lvar_key` exactly. Add a unit test if the EFB has a test
 ### Task 10: RESET panel XML (agent)
 
 **Files:**
-- Modify: a copy of the package's `SimObjects/AirPlanes/FlyByWire_A380_842/model/A380_COCKPIT.xml` → `E:/fbw-build/wasm-fs2020/out/A380_COCKPIT.xml`
+- Modify: a copy of the package's `SimObjects/AirPlanes/FlyByWire_A380_842/model/A380_COCKPIT.xml` → `E:/A380/fbw-build/wasm-fs2020/out/A380_COCKPIT.xml`
 
 - [ ] **Step 1: Add the 42 unwired buttons.** Next to the existing 10 `<UseTemplate Name="FBW_Airbus_RESET_PANEL_BUTTON">` uses (around line 4732), add one per `CB_<NAME>` node in `a380_cockpit.gltf` that isn't already used and isn't `CB_EMPTY*`:
 
@@ -728,7 +728,7 @@ It must match the Rust `lvar_key` exactly. Add a unit test if the EFB has a test
 
 ### Task 11: Catalogue regeneration
 
-- [ ] **Step 1:** Regenerate `catalogue.json` from the current plugin with the documented exporter (`E:/fbw-int/plugin/docs/catalogue-export.md`). Write it to `E:/fbw-build/wasm-fs2020/out/catalogue.json`.
+- [ ] **Step 1:** Regenerate `catalogue.json` from the current plugin with the documented exporter (`E:/A380/fbw-int/plugin/docs/catalogue-export.md`). Write it to `E:/A380/fbw-build/wasm-fs2020/out/catalogue.json`.
 - [ ] **Step 2:** Check that it has 399 breakers, and that the failure IDs 27_101, 27_102, 32_130..=32_134 and 34_109..=34_111 are present (the catalogue must reflect today's failures).
 
 ### Task 12: Build, install script, guide

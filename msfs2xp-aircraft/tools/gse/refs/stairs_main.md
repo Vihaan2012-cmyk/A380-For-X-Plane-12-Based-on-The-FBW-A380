@@ -4,7 +4,7 @@
 
 - Door sill heights: published passenger-stair service-range table ("Door Sill Heights, Passenger Stairs", aviationspares.com): A380 main deck 5.10-5.42 m; JetPhotos forum quoting older Airbus data: main deck doors 5.08-5.33 m, upper deck 7.86-8.09 m. Airbus A380 Aircraft Characteristics (AC) not read directly; confirm 5.1-5.4 m there.
 - Vehicle proportions are estimates from general knowledge of truck-mounted stairs of this class (Mallaghan PS series, TLD ABS-580). No manufacturer brochure was downloaded in this wave, so all vehicle dimensions are (p) estimates.
-- Photos: none downloaded; folder `E:/fbw-gse/refs/stairs_main/` is empty.
+- Photos: none downloaded; folder `E:/A380/fbw-gse/refs/stairs_main/` is empty.
 
 ## Frame
 

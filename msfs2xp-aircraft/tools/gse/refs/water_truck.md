@@ -6,7 +6,7 @@
 - Fortbrand PNX WT450: chassis-mounted 450 gal truck, about 233 x 86 x 87 in.
 - Tronair potable water carts and AviationGSE PWV-40, for the general layout.
 - Airbus A380 Aircraft Characteristics (AC), potable water servicing: not found by web search. The service panel is on the lower aft fuselage; the height used here (about 3.5 m reach, platform travel 2.3 m from a 1.1 m deck) is an estimate to be checked against AC section 5-4.
-- No photos were downloaded; `E:/fbw-gse/refs/water_truck/` is empty.
+- No photos were downloaded; `E:/A380/fbw-gse/refs/water_truck/` is empty.
 
 ## Frame
 

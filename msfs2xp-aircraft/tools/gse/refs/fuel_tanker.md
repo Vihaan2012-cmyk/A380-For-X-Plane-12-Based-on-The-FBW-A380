@@ -5,7 +5,7 @@
 - Mercedes-Benz Special Trucks, airport pages (Econic 1824 LL refuellers at Farnborough, 36 000 L semi-trailer; eEconic refueller with Esterer body, 40 000 L, height under 2.80 m, length 18.50 m with tank body): special.mercedes-benz-trucks.com (airport section).
 - Mercedes-Benz eEconic technical data: chassis 4x2, width 2 490, height 2 850, wheelbases 4 000 / 5 500.
 - No manufacturer drawing of a rigid diesel refueller was found. All other dimensions are **(p)**, estimated from photos of Econic / Esterer style rigid refuellers, and are uncertain.
-- No photos downloaded; `E:/fbw-gse/refs/fuel_tanker/` unused.
+- No photos downloaded; `E:/A380/fbw-gse/refs/fuel_tanker/` unused.
 
 ## Frame
 

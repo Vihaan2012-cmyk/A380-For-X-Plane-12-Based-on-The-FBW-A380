@@ -9,7 +9,7 @@ const RELEVANT: [&str; 6] = ["RMP", "VHF", "TRANSPONDER", "FBW_HF", "FBW_TEL", "
 const KEYS: [&str; 7] = ["XPNDR_SET", "XPNDR_IDENT_ON", "COM_RADIO_SET_HZ", "COM2_RADIO_SET_HZ", "COM3_RADIO_SET_HZ", "ELECTRICAL_CIRCUIT_TOGGLE", "LIGHT_POTENTIOMETER_SET"];
 
 fn golden_dir() -> PathBuf {
-    PathBuf::from(std::env::var("RMP_ORACLE_GOLDEN").unwrap_or_else(|_| "E:/fbw-build/rmp-oracle/golden".into()))
+    PathBuf::from(std::env::var("RMP_ORACLE_GOLDEN").unwrap_or_else(|_| "E:/A380/fbw-build/rmp-oracle/golden".into()))
 }
 
 struct World {

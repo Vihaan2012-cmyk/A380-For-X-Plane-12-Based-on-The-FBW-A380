@@ -207,7 +207,7 @@ fn env_or(name: &str, default: &str) -> String {
 
 /// Feature `native-displays`: builds `a380_displays.dll` (a380-displays, Skia
 /// M152 with Ganesh GL linked statically inside it) with CMake, Ninja and MSVC
-/// through vcvars in `E:/fbw-build/a380-displays/plugin-<profile>`, and copies
+/// through vcvars in `E:/A380/fbw-build/a380-displays/plugin-<profile>`, and copies
 /// it next to the build output. Nothing of Skia is linked into the plugin
 /// (the GNU toolchain cannot link MSVC libraries); the plugin loads the DLL at
 /// run time (src/native_displays). `A380_DISPLAYS_DLL_BUILT` carries the
@@ -224,7 +224,7 @@ fn native_displays() {
     let src = std::fs::canonicalize(&src).unwrap_or_else(|e| panic!("a380-displays not found at {src}: {e}"));
     let src = src.to_string_lossy().replace('\\', "/");
     let src = src.trim_start_matches("//?/").to_string();
-    let build = env_or("A380_DISPLAYS_BUILD_DIR", &format!("E:/fbw-build/a380-displays/plugin-{profile}"));
+    let build = env_or("A380_DISPLAYS_BUILD_DIR", &format!("E:/A380/fbw-build/a380-displays/plugin-{profile}"));
     let skia_root = env_or("A380_SKIA_ROOT", "E:/skia-c152");
     let skia_lib = env_or("A380_SKIA_LIB_DIR", &format!("{skia_root}/out/c152v"));
     let vcvars = env_or("A380_VCVARS", "E:/VS/2022/Community/VC/Auxiliary/Build/vcvars64.bat").replace('/', "\\");

@@ -10,7 +10,7 @@ from pathlib import Path
 
 import numpy as np
 
-DDSTOOL = "E:/fbw-build/target/release/ddstool.exe"
+DDSTOOL = "E:/A380/fbw-build/target/release/ddstool.exe"
 TILE = 32
 
 
@@ -36,7 +36,7 @@ def tile_mismatch(inst, small):
 
 def main(backup, pack, names_path):
     backup, pack = Path(backup), Path(pack)
-    work = Path("E:/fbw-build/tmp/relit4k")
+    work = Path("E:/A380/fbw-build/tmp/relit4k")
     out = {}
     for name in json.loads(Path(names_path).read_text()):
         if not (backup / name).is_file() or not (pack / name).is_file():

@@ -28,4 +28,4 @@ Out of scope here (other agents): captures where the page is DIRECT-TO, HOLD, AI
 
 ## Model source
 
-Models are parsed from the capture text by `tools/capture_to_model.py` (in the output folder `E:/fbw-build/mfd-pages-a`), because the fms-oracle goldens hold procedures and secondary plans, not the displayed F-PLN rows. The Rust example `build_capture` reads the model JSON, builds the tree, and writes `<capture>.json`.
+Models are parsed from the capture text by `tools/capture_to_model.py` (in the output folder `E:/A380/fbw-build/mfd-pages-a`), because the fms-oracle goldens hold procedures and secondary plans, not the displayed F-PLN rows. The Rust example `build_capture` reads the model JSON, builds the tree, and writes `<capture>.json`.

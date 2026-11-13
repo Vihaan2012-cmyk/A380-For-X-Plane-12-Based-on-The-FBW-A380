@@ -31,7 +31,7 @@ def to_png(data):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('--ui', default=UI)
-    ap.add_argument('--out', default='E:/fbw-build/efb-native/bg')
+    ap.add_argument('--out', default='E:/A380/fbw-build/efb-native/bg')
     args = ap.parse_args()
     os.makedirs(args.out, exist_ok=True)
     sources = []

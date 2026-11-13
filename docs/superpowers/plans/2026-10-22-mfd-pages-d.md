@@ -27,10 +27,10 @@ Goal: each page is a pure function from a page model struct to a `mfd_tree::Node
 
 ## Proof
 
-- `proof/extract_models.py` reads each v15 capture (read only), parses the model from the capture text (UI state and values that have no other source), writes `E:/fbw-build/mfd-pages-d/models/<capture>.model.json` and `manifest.tsv`.
-- `examples/proof.rs` builds the page tree from each model and writes `E:/fbw-build/mfd-pages-d/<capture>.json`.
+- `proof/extract_models.py` reads each v15 capture (read only), parses the model from the capture text (UI state and values that have no other source), writes `E:/A380/fbw-build/mfd-pages-d/models/<capture>.model.json` and `manifest.tsv`.
+- `examples/proof.rs` builds the page tree from each model and writes `E:/A380/fbw-build/mfd-pages-d/<capture>.json`.
 - `python tools/pagetree/compare.py <json> <capture>/mfd.dom.html cls=mfd-navigator-container`. The default page root class `mfd-page-container` matches the first such element, which in the captures is the "FMS PAGE NOT AVAIL" dialog, so the navigator container (title bar, page body, overlay, footer) is the root compared.
-- `E:/fbw-build/mfd-pages-d/run_compare.sh` repeats the comparisons; results in `compare-results.txt`.
+- `E:/A380/fbw-build/mfd-pages-d/run_compare.sh` repeats the comparisons; results in `compare-results.txt`.
 
 ## Not done
 

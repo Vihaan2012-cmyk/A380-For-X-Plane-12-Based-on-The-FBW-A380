@@ -5,13 +5,13 @@ import re
 import subprocess
 import sys
 
-sys.path.insert(0, 'E:/fbw-int/a380-displays/tools/layout_lab')
-sys.path.insert(0, 'E:/fbw-int/plugin/tools/pagetree')
+sys.path.insert(0, 'E:/A380/fbw-int/a380-displays/tools/layout_lab')
+sys.path.insert(0, 'E:/A380/fbw-int/plugin/tools/pagetree')
 import compare  # noqa: E402
 
 ROOT = 'E:/golden-tour/yssy-omdb-v15/captures'
-OUT = 'E:/fbw-build/oit-pages'
-BIN = 'E:/fbw-build/target/release/oit_build.exe'
+OUT = 'E:/A380/fbw-build/oit-pages'
+BIN = 'E:/A380/fbw-build/target/release/oit_build.exe'
 
 
 def tag(n):
@@ -390,7 +390,7 @@ def main():
         tp = f'{OUT}/{d}.json'
         json.dump(model, open(mp, 'w', encoding='utf-8'))
         subprocess.run([BIN, mp, tp], check=True)
-        r = subprocess.run([sys.executable, 'E:/fbw-int/plugin/tools/pagetree/compare.py', tp, dom, 'id=OIT_CONTENT'],
+        r = subprocess.run([sys.executable, 'E:/A380/fbw-int/plugin/tools/pagetree/compare.py', tp, dom, 'id=OIT_CONTENT'],
                            capture_output=True, text=True)
         first_line = r.stdout.splitlines()[0] if r.stdout else r.stderr[-200:]
         results.append((d, first_line))

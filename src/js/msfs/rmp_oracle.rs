@@ -135,7 +135,7 @@ impl Host for RmpHost {
 }
 
 fn pkg_dir() -> PathBuf {
-    PathBuf::from(std::env::var("RMP_ORACLE_PKG").unwrap_or_else(|_| r"E:\fbw-build\rmp-oracle-pkg".into()))
+    PathBuf::from(std::env::var("RMP_ORACLE_PKG").unwrap_or_else(|_| r"E:\A380\fbw-build\rmp-oracle-pkg".into()))
 }
 
 fn rmp_view(cockpit: &Cockpit, index: usize) -> Option<String> {
@@ -262,7 +262,7 @@ pub fn run_scenario(scenario: &Value) -> Result<Value, String> {
 #[ignore]
 fn record_rmp_oracle() {
     let dir = PathBuf::from(std::env::var("RMP_ORACLE_SCENARIOS").unwrap_or_else(|_| "tools/rmp_oracle/scenarios".into()));
-    let out = PathBuf::from(std::env::var("RMP_ORACLE_OUT").unwrap_or_else(|_| "E:/fbw-build/rmp-oracle/golden".into()));
+    let out = PathBuf::from(std::env::var("RMP_ORACLE_OUT").unwrap_or_else(|_| "E:/A380/fbw-build/rmp-oracle/golden".into()));
     let only = std::env::var("RMP_ORACLE_ONLY").ok();
     std::fs::create_dir_all(&out).unwrap();
     let mut paths: Vec<_> = std::fs::read_dir(&dir).unwrap().filter_map(|e| e.ok()).map(|e| e.path()).filter(|p| p.extension().is_some_and(|x| x == "json")).collect();

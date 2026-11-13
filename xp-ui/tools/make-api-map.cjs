@@ -6,10 +6,10 @@ const path = require('path');
 const fs = require('fs');
 const { slash, entries, compilerOptions, cleanHost } = require('./lib/project.cjs');
 
-const PRIVATE = 'E:/fbw-int/xplane-js-private';
+const PRIVATE = 'E:/A380/fbw-int/xplane-js-private';
 const namesFile = process.argv[2] || path.join(PRIVATE, 'names.json');
 const out = process.argv[3] || path.join(PRIVATE, 'api-map.json');
-const fork = slash(path.resolve(process.argv[4] || 'E:/fbw-int/fbw-own-api'));
+const fork = slash(path.resolve(process.argv[4] || 'E:/A380/fbw-int/fbw-own-api'));
 const LIB = slash(path.resolve(process.env.OLD_LIB || path.resolve(__dirname, '../lib/src')));
 const libEntry = path.join(LIB, 'index.ts');
 const names = JSON.parse(fs.readFileSync(namesFile, 'utf8'));

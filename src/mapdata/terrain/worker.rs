@@ -625,15 +625,15 @@ mod xplane_tests {
     }
 
     /// The captain's ND over the Alps from X-Plane's own scenery: timings,
-    /// and the gauge image written to E:/fbw-build/terrain-nd-left.ppm to
+    /// and the gauge image written to E:/A380/fbw-build/terrain-nd-left.ppm to
     /// look at. Needs X-Plane; the first run converts every tile within
-    /// 800 nm into E:/fbw-build/terrain-cache.
+    /// 800 nm into E:/A380/fbw-build/terrain-cache.
     #[test]
     #[ignore]
     fn alps_from_xplane_scenery() {
         let root = std::path::Path::new("D:/Steam Games/steamapps/common/X-Plane 12");
         let t = Instant::now();
-        let provider = Arc::new(TileSource::new(Scenery::of_installation(root), Some("E:/fbw-build/terrain-cache".into())));
+        let provider = Arc::new(TileSource::new(Scenery::of_installation(root), Some("E:/A380/fbw-build/terrain-cache".into())));
         let shared = Arc::new(Mutex::new(Shared::default()));
         let mut worker = TerrainWorker::new(provider, 3, shared.clone());
         worker.handle(Message::Paused(false));
@@ -668,7 +668,7 @@ mod xplane_tests {
         for p in image.rgba.chunks(4) {
             ppm.extend(&p[0..3]);
         }
-        std::fs::write("E:/fbw-build/terrain-nd-left.ppm", ppm).unwrap();
+        std::fs::write("E:/A380/fbw-build/terrain-nd-left.ppm", ppm).unwrap();
         let thresholds: Vec<_> = shared.writes.iter().rev().take(4).collect();
         println!("last threshold writes {thresholds:?}");
     }

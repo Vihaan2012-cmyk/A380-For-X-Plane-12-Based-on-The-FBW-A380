@@ -68,7 +68,7 @@ The contract is whatever FlyByWire's FMS produces today, and the oracle (below) 
   - the flight plan sync events.
 - Because Rust sends these with the same keys and payloads, the Chromium ND and PFD keep working unchanged until they too go native.
 
-### a380_displays (C++ plugin, `E:/fbw-int/a380-displays`)
+### a380_displays (C++ plugin, `E:/A380/fbw-int/a380-displays`)
 
 - **Build and libraries:**
   - CMake, built for Windows first; Linux and Mac stay buildable (`linux-mac-port-goal`).
@@ -98,7 +98,7 @@ The contract is whatever FlyByWire's FMS produces today, and the oracle (below) 
 
 1. **Oracle.** FlyByWire's FMS runs offline in the plugin's QuickJS harness (`src/js/msfs/fms_offline.rs`) on the xp-ui build.
    - Scripted scenarios (uplink, manual entries, procedures, edits, a simulated flight along the route) drive it.
-   - The harness records the flight plans, the predictions, every variable the MFD writes and every generic-data event, as JSON goldens in `E:/fbw-build/fms-oracle/`.
+   - The harness records the flight plans, the predictions, every variable the MFD writes and every generic-data event, as JSON goldens in `E:/A380/fbw-build/fms-oracle/`.
 2. **Comparator.** The Rust FMS runs the same scenarios through the same navdata. A comparator checks every recorded value against tolerances: positions 1e-6 deg, distances 0.01 NM, angles 0.01 deg, predictions 1 ft / 0.5 kt / 1 s / 10 kg. Every scenario must pass.
 3. **Shadow flight.** Before the switch, the Rust FMS runs alongside FlyByWire's in the sim.
    - It gets the pilot's entries from FlyByWire's flight plan sync events.

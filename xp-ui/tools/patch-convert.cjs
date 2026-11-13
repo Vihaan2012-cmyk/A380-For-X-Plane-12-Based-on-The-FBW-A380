@@ -11,8 +11,8 @@ const path = require('path');
 const args = process.argv.slice(2);
 const opt = (n, d) => (args.includes('--' + n) ? args[args.indexOf('--' + n) + 1] : d);
 const [patchFile, oldRoot, newRoot, outFile] = args;
-const map = JSON.parse(fs.readFileSync(opt('map', 'E:/fbw-int/xplane-js-private/api-map.json'), 'utf8'));
-const namesFile = opt('names', 'E:/fbw-int/plugin/src/xp_names.txt');
+const map = JSON.parse(fs.readFileSync(opt('map', 'E:/A380/fbw-int/xplane-js-private/api-map.json'), 'utf8'));
+const namesFile = opt('names', 'E:/A380/fbw-int/plugin/src/xp_names.txt');
 
 const K = ts.SyntaxKind;
 const ENDS_EXPR = new Set([K.Identifier, K.NumericLiteral, K.StringLiteral, K.CloseParenToken, K.CloseBracketToken, K.CloseBraceToken, K.ThisKeyword, K.SuperKeyword, K.TrueKeyword, K.FalseKeyword, K.NullKeyword, K.NoSubstitutionTemplateLiteral, K.TemplateTail, K.RegularExpressionLiteral, K.PlusPlusToken, K.MinusMinusToken]);

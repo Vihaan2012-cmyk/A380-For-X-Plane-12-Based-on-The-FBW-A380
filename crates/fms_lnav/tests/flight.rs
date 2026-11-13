@@ -3,9 +3,9 @@ use fms_lnav::geometry::string_missed_approach;
 use fms_lnav::*;
 use serde_json::Value;
 
-const DIRS: [&str; 5] = [r"E:\fbw-build\fms-oracle", r"E:\fbw-build\fms-oracle-fly", r"E:\fbw-build\lnav62\out", r"E:\fbw-build\lnav36\out", r"E:\fbw-build\lnav77\out"];
-const STATIC_DIR: &str = r"E:\fbw-build\lnav77\out";
-const STATIC_SCENARIOS: &str = r"E:\fbw-build\lnav77\static";
+const DIRS: [&str; 5] = [r"E:\A380\fbw-build\fms-oracle", r"E:\A380\fbw-build\fms-oracle-fly", r"E:\A380\fbw-build\lnav62\out", r"E:\A380\fbw-build\lnav36\out", r"E:\A380\fbw-build\lnav77\out"];
+const STATIC_DIR: &str = r"E:\A380\fbw-build\lnav77\out";
+const STATIC_SCENARIOS: &str = r"E:\A380\fbw-build\lnav77\static";
 const SCENARIOS: [&str; 7] = ["flight-egll-kjfk-sid", "flight-egll-kjfk-star", "flight2-egll-kjfk-sid", "flight2-egll-kjfk-arr-app", "flight2-egll-kjfk-arr-hold", "flight2-egll-kjfk-app-missed", "flight2-egll-kjfk-arr-hold-long"];
 
 const RECOMPUTE_MS: f64 = 5000.;

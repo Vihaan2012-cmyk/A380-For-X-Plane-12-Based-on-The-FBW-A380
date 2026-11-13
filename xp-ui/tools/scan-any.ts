@@ -12,10 +12,10 @@ const { compilerOptions, entries, slash } = require('./lib/project.cjs');
 
 const argv = process.argv.slice(2);
 const opt = (name: string, def: string): string => (argv.includes('--' + name) ? argv[argv.indexOf('--' + name) + 1] : def);
-const fork = slash(path.resolve(opt('fork', 'E:/fbw-int/fbw-own-api')));
+const fork = slash(path.resolve(opt('fork', 'E:/A380/fbw-int/fbw-own-api')));
 const out = opt('out', '');
 const library = slash(path.resolve(path.dirname(new URL(import.meta.url).pathname.replace(/^\/(\w:)/, '$1')), '..'));
-const map = JSON.parse(fs.readFileSync('E:/fbw-int/xplane-js-private/api-map.json', 'utf8'));
+const map = JSON.parse(fs.readFileSync('E:/A380/fbw-int/xplane-js-private/api-map.json', 'utf8'));
 
 const renamed = new Map<string, Set<string>>();
 for (const s of map.symbols) {

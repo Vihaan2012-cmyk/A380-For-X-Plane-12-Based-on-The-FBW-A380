@@ -3,7 +3,7 @@ use hosts_misc::Command;
 use serde_json::Value;
 
 fn golden() -> Option<Vec<Value>> {
-    let dir = std::env::var("HOSTS_ORACLE_DIR").unwrap_or_else(|_| "E:/fbw-build/hosts-oracle".to_string());
+    let dir = std::env::var("HOSTS_ORACLE_DIR").unwrap_or_else(|_| "E:/A380/fbw-build/hosts-oracle".to_string());
     let text = std::fs::read_to_string(format!("{dir}/light_sync.golden.json")).ok()?;
     serde_json::from_str(&text).ok()
 }
@@ -49,7 +49,7 @@ fn same(a: &[(String, String, f64, Option<f64>)], b: &[(String, String, f64, Opt
 #[test]
 fn light_sync_matches_the_original_typescript() {
     let Some(cases) = golden() else {
-        eprintln!("light_sync.golden.json not found, skipping (run E:/fbw-build/hosts-oracle/light_sync_oracle.mjs)");
+        eprintln!("light_sync.golden.json not found, skipping (run E:/A380/fbw-build/hosts-oracle/light_sync_oracle.mjs)");
         return;
     };
     assert!(cases.len() > 2000);

@@ -5,7 +5,7 @@
 - Aviation Pros, "Catering to the A380" (https://www.aviationpros.com/gse/catering-cleaning-equipment/article/21257016/catering-to-the-a380): A380 catering trucks need about 2.5 m more reach than A330-class units; LSG A380 truck reaches 8.4 m (upper deck).
 - Airbus A380 Aircraft Characteristics, main-deck door sill about 5.1 m (taken as 5100 mm; not re-checked in this wave).
 - No manufacturer datasheet was found for the GH9000; chassis, box and cab sizes are generic estimates (e).
-- No photos downloaded; folder `E:/fbw-gse/refs/cat_highloader/` is empty.
+- No photos downloaded; folder `E:/A380/fbw-gse/refs/cat_highloader/` is empty.
 
 ## Frame
 

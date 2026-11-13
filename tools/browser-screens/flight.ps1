@@ -5,7 +5,7 @@ foreach ($pair in ($Set -split ";" | Where-Object { $_ })) {
   $name, $value = $pair -split "=", 2
   Set-Item -Path "env:$name" -Value $value
 }
-$dir = "E:\fbw-build\perf-runs\{0:yyyyMMdd-HHmm}-{1}" -f (Get-Date), $Label
+$dir = "E:\A380\fbw-build\perf-runs\{0:yyyyMMdd-HHmm}-{1}" -f (Get-Date), $Label
 New-Item -ItemType Directory -Force $dir | Out-Null
 Copy-Item "$XPlane\Aircraft\A380 for X-Plane 12\plugins\fbw_a380_systems\64\win.xpl" "$dir\win.xpl"
 if ($Grabs) {

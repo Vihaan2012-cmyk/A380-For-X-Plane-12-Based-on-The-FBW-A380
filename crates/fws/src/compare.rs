@@ -385,11 +385,11 @@ pub fn scenarios_dir() -> PathBuf {
 }
 
 pub fn golden_dir() -> PathBuf {
-    PathBuf::from(std::env::var("FWS_ORACLE_OUT").unwrap_or_else(|_| r"E:\fbw-build\fws-oracle".into()))
+    PathBuf::from(std::env::var("FWS_ORACLE_OUT").unwrap_or_else(|_| r"E:\A380\fbw-build\fws-oracle".into()))
 }
 
 pub fn states_dir() -> PathBuf {
-    PathBuf::from(std::env::var("FWS_ORACLE_STATES").unwrap_or_else(|_| r"E:\fbw-build\emu-snapshots".into()))
+    PathBuf::from(std::env::var("FWS_ORACLE_STATES").unwrap_or_else(|_| r"E:\A380\fbw-build\emu-snapshots".into()))
 }
 
 pub fn run_all(refresh_offset_ms: f64) -> Vec<(String, Report)> {

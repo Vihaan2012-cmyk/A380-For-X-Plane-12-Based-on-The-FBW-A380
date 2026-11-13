@@ -6,7 +6,7 @@
 - IAG Cargo A380-800 page: forward lower-deck cargo door 283 x 173 cm, aft door 254 x 173 cm (width x height).
 - Airbus A380 Aircraft Characteristics (ac_a380_1223.pdf, airport and maintenance planning): door clearance figures for forward and aft cargo doors hold the sill heights. NOT read in this session; the model assumes a bridge deck that raises to about 2.8 m, which still needs checking against that document.
 
-Photos: none downloaded; folder `E:/fbw-gse/refs/ldcl_loader/` is reserved.
+Photos: none downloaded; folder `E:/A380/fbw-gse/refs/ldcl_loader/` is reserved.
 
 ## Frame
 

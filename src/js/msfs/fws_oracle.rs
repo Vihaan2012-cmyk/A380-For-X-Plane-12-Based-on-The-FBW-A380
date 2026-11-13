@@ -179,7 +179,7 @@ impl Host for FwsHost {
 }
 
 fn states_dir() -> PathBuf {
-    PathBuf::from(std::env::var("FWS_ORACLE_STATES").unwrap_or_else(|_| r"E:\fbw-build\emu-snapshots".into()))
+    PathBuf::from(std::env::var("FWS_ORACLE_STATES").unwrap_or_else(|_| r"E:\A380\fbw-build\emu-snapshots".into()))
 }
 
 pub struct Outcome {
@@ -188,7 +188,7 @@ pub struct Outcome {
 }
 
 pub fn run_scenario(scenario: &serde_json::Value) -> Result<Outcome, String> {
-    let pkg = PathBuf::from(std::env::var("FWS_ORACLE_PKG").unwrap_or_else(|_| r"E:\fbw-build\fws-oracle-pkg".into()));
+    let pkg = PathBuf::from(std::env::var("FWS_ORACLE_PKG").unwrap_or_else(|_| r"E:\A380\fbw-build\fws-oracle-pkg".into()));
     let mut cockpit = new_cockpit(&pkg)?;
     let mut host = FwsHost::new();
     let steps = scenario["steps"].as_array().ok_or("scenario steps")?;
@@ -270,7 +270,7 @@ mod tests {
     #[ignore]
     fn record_fws_oracle() {
         let dir = PathBuf::from(std::env::var("FWS_ORACLE_SCENARIOS").unwrap_or_else(|_| "tools/fws_oracle/scenarios".into()));
-        let out = PathBuf::from(std::env::var("FWS_ORACLE_OUT").unwrap_or_else(|_| r"E:\fbw-build\fws-oracle".into()));
+        let out = PathBuf::from(std::env::var("FWS_ORACLE_OUT").unwrap_or_else(|_| r"E:\A380\fbw-build\fws-oracle".into()));
         let only = std::env::var("FWS_ORACLE_ONLY").ok();
         std::fs::create_dir_all(&out).unwrap();
         let mut names: Vec<_> = std::fs::read_dir(&dir).unwrap().filter_map(|e| e.ok()).map(|e| e.path()).filter(|p| p.extension().is_some_and(|x| x == "json")).collect();

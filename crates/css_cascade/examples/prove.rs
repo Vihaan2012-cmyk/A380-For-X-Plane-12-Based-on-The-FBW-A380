@@ -20,7 +20,7 @@ fn main() {
     let args: Vec<String> = std::env::args().collect();
     let root = args.get(1).cloned().unwrap_or_else(|| "E:/golden-tour/yssy-omdb-v15/captures".into());
     let html_ui = args.get(2).cloned().unwrap_or_else(|| "D:/Steam Games/steamapps/common/X-Plane 12/Aircraft/A380 for X-Plane 12/html_ui".into());
-    let out_path = args.get(3).cloned().unwrap_or_else(|| "E:/fbw-build/css-cascade/report.txt".into());
+    let out_path = args.get(3).cloned().unwrap_or_else(|| "E:/A380/fbw-build/css-cascade/report.txt".into());
     let filter = args.get(4).cloned().unwrap_or_default();
 
     let mut dirs: Vec<_> = fs::read_dir(&root).unwrap().filter_map(|e| e.ok()).map(|e| e.path()).collect();

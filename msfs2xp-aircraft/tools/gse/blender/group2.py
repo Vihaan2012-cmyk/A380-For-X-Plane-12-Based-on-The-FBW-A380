@@ -18,8 +18,8 @@ import export_obj8 as ex
 import gselib as g
 import liverylib as L
 
-EXPORT = 'E:/fbw-gse/export'
-OBJDECIMATE = 'E:/fbw-gse/tools/objdecimate.exe'
+EXPORT = 'E:/A380/fbw-gse/export'
+OBJDECIMATE = 'E:/A380/fbw-gse/tools/objdecimate.exe'
 LOD_ARGS = ['0:80:0.0008:keep', '80:250:0.02:prune', '250:1500:0.06:sloppy:0.12']
 AXES = 'X-Plane object axes in metres: x right, y up, z towards the rear (the front is -Z)'
 
@@ -270,7 +270,7 @@ def export_vehicle(name):
     spec = SPECS[name]
     out = os.path.join(EXPORT, name)
     os.makedirs(out, exist_ok=True)
-    tmp = f'E:/fbw-gse/out/{name}/g2_bake'
+    tmp = f'E:/A380/fbw-gse/out/{name}/g2_bake'
     size = getattr(model, 'TEXTURE_SIZE', 2048)
     for op in L.OPS:
         coll = build(model, op)

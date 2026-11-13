@@ -3,11 +3,11 @@ import os
 import re
 import sys
 
-sys.path.insert(0, 'E:/fbw-int/a380-displays/tools/layout_lab')
+sys.path.insert(0, 'E:/A380/fbw-int/a380-displays/tools/layout_lab')
 import dom2tree  # noqa: E402
 
 CAPTURES = 'E:/golden-tour/yssy-omdb-v15/captures'
-OUT = 'E:/fbw-build/mfd-pages-d'
+OUT = 'E:/A380/fbw-build/mfd-pages-d'
 
 
 def find_all(node, pred, acc=None):

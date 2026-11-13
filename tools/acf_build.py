@@ -17,7 +17,7 @@ Whatever is left is carried over unchanged and listed in the report as still to 
 inferring those from other aircraft gave nonsense (a Boeing manufacturer, 24-blade propellers,
 a 6 s gear cycle), so each needs an A380 value of its own.
 
-python -I tools/acf_build.py --xplane "D:/X-Plane 12" --out E:/fbw-build/acf
+python -I tools/acf_build.py --xplane "D:/X-Plane 12" --out E:/A380/fbw-build/acf
 """
 import argparse
 import collections

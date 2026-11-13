@@ -290,7 +290,7 @@ fn k2() -> f64 {
 }
 
 pub fn run_scenario(scenario: &serde_json::Value) -> Result<serde_json::Value, String> {
-    let pkg = PathBuf::from(std::env::var("FMS_ORACLE_PKG").unwrap_or_else(|_| r"E:\fbw-build\fms-oracle-pkg".into()));
+    let pkg = PathBuf::from(std::env::var("FMS_ORACLE_PKG").unwrap_or_else(|_| r"E:\A380\fbw-build\fms-oracle-pkg".into()));
     let xplane = PathBuf::from(std::env::var("FMS_XPLANE_ROOT").unwrap_or_else(|_| r"D:\Steam Games\steamapps\common\X-Plane 12".into()));
     let mut cockpit = new_cockpit(&pkg)?;
     let mut host = attach_navdata(Recording::new(VarStore::new()), &xplane)?;
@@ -369,7 +369,7 @@ mod tests {
     #[ignore]
     fn record_fms_oracle() {
         let dir = std::path::PathBuf::from(std::env::var("FMS_ORACLE_SCENARIOS").unwrap_or_else(|_| "tools/fms_oracle/scenarios".into()));
-        let out = std::path::PathBuf::from(std::env::var("FMS_ORACLE_OUT").unwrap_or_else(|_| r"E:\fbw-build\fms-oracle".into()));
+        let out = std::path::PathBuf::from(std::env::var("FMS_ORACLE_OUT").unwrap_or_else(|_| r"E:\A380\fbw-build\fms-oracle".into()));
         let only = std::env::var("FMS_ORACLE_ONLY").ok();
         std::fs::create_dir_all(&out).unwrap();
         let mut names: Vec<_> = std::fs::read_dir(&dir).unwrap().filter_map(|e| e.ok()).map(|e| e.path()).filter(|p| p.extension().is_some_and(|x| x == "json")).collect();

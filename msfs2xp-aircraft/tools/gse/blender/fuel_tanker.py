@@ -8,7 +8,7 @@ import liverylib as L
 
 NAME = 'fuel_tanker'
 X0 = 4700.0
-LIVERY_DIR = 'E:/fbw-gse/out/fuel_tanker/liveries'
+LIVERY_DIR = 'E:/A380/fbw-gse/out/fuel_tanker/liveries'
 HALF_W = 1245.0
 TANK_X0 = 1300.0
 TANK_X1 = 7000.0

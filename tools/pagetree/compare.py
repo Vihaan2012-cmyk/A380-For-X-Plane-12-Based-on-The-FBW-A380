@@ -1,7 +1,7 @@
 import json
 import sys
 
-sys.path.insert(0, 'E:/fbw-int/a380-displays/tools/layout_lab')
+sys.path.insert(0, 'E:/A380/fbw-int/a380-displays/tools/layout_lab')
 import dom2tree  # noqa: E402
 
 STYLES = False

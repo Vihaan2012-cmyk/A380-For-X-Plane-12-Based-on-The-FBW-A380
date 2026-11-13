@@ -804,7 +804,7 @@ pub fn nd_strings(cockpit: &Cockpit, gauge_needle: &str, screen: &str) -> Vec<St
 #[test]
 #[ignore]
 fn fms_offline_flight_plan() {
-    let package = std::path::PathBuf::from(std::env::var("FMS_GOLDEN").unwrap_or_else(|_| r"E:\fbw-build\golden\2026-10-13".into()));
+    let package = std::path::PathBuf::from(std::env::var("FMS_GOLDEN").unwrap_or_else(|_| r"E:\A380\fbw-build\golden\2026-10-13".into()));
     let xplane = std::path::PathBuf::from(std::env::var("FMS_XPLANE_ROOT").unwrap_or_else(|_| r"D:\Steam Games\steamapps\common\X-Plane 12".into()));
     let mut cockpit = new_cockpit(&package).expect("cockpit");
     let mut store = VarStore::new();

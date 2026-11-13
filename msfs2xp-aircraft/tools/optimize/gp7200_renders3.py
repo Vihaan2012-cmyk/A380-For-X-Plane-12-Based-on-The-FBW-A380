@@ -45,7 +45,7 @@ def main(install, stage, out):
         a = one(stage, "after", e, name)
         r2.pair(b, a, rr.find_photo(rr.PHOTO[photo]), f"{LIV.split()[0]} e{e} {name}", out / f"r3_e{e}_{name}.png")
         print("pair", name, e)
-    ev = Path("E:/fbw-build/gp7200-model/work/dbg/dbg_synth.png")
+    ev = Path("E:/A380/fbw-build/gp7200-model/work/dbg/dbg_synth.png")
     if ev.is_file():
         shutil.copy2(ev, out / "evidence_synthetic_cone_in_viewer.png")
 

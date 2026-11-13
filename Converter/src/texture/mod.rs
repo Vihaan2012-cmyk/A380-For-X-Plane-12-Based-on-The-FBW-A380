@@ -1542,7 +1542,7 @@ fn half_in_linear_light(rgba: &[u8], w: u32, h: u32) -> (u32, u32, Vec<u8>) {
 /// suddenly get a different sharpness profile than one that took the other
 /// crate's `encode_dds` path. Capped at 0.18 for anything deeper, since
 /// that is as far as either chain was measured and validated
-/// (`E:/fbw-debug/fixes/W66.md`).
+/// (`E:/A380/fbw-debug/fixes/W66.md`).
 fn mip_sharpen_amount(level: u32) -> f32 {
     (0.09 * (level as f32 - 1.0)).clamp(0.0, 0.18)
 }
@@ -2577,7 +2577,7 @@ mod tests {
     /// ordinary flat map's own noise by any statistic run over it (see
     /// `msfs2xp-aircraft`'s `LETTERED_MATERIAL_MAPS`, measured directly
     /// against FlyByWire's own GLARESHIELD/KEYBOARD/MIP03/MIP_KNOBS_02 COMP
-    /// textures: E:/fbw-debug/fixes/W105.md) can raise `material_png`'s
+    /// textures: E:/A380/fbw-debug/fixes/W105.md) can raise `material_png`'s
     /// `floor` to keep a guaranteed minimum size.
     #[test]
     fn material_png_floor_overrides_the_flatness_heuristic() {

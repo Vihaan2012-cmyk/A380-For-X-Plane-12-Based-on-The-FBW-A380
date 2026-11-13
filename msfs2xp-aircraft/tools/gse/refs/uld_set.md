@@ -4,7 +4,7 @@
 
 - IATA ULD Technical Manual dimensions for the LD3 (AKE) and PMC (96 × 125 in pallet), taken from the widely published spec tables: AKE base 1534 × 1562 mm, 2007 mm wide at the top, 1626 mm high, tare about 85 kg, max gross 1588 kg. PMC 3175 × 2438 mm, contoured net load about 1600 mm high.
 - No web search and no photos were done in the time box. Dolly and pallet-dolly dimensions are **(e)** estimates from typical industry units (deck about 1.7 × 1.66 m for the LD3 dolly, 3.4 × 2.6 m for the pallet dolly).
-- Photos, if added later, go in `E:/fbw-gse/refs/uld_set/` (empty now).
+- Photos, if added later, go in `E:/A380/fbw-gse/refs/uld_set/` (empty now).
 
 ## Frame
 
@@ -27,4 +27,4 @@
 
 ## Liveries
 
-Three own-artwork variants (serial plus 3-letter owner code): a = EK, b = QR, c = LH. Decals are drawn by `draw_liveries()` into `E:/fbw-gse/out/uld_set/liveries/` (`ake_*`, `band_*`, `pmc_*`). The model uses variant a. `liveries(out)` returns `{}` for now.
+Three own-artwork variants (serial plus 3-letter owner code): a = EK, b = QR, c = LH. Decals are drawn by `draw_liveries()` into `E:/A380/fbw-gse/out/uld_set/liveries/` (`ake_*`, `band_*`, `pmc_*`). The model uses variant a. `liveries(out)` returns `{}` for now.

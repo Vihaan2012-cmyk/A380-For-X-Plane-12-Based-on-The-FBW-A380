@@ -8,7 +8,7 @@
   - BW-53: 4080 x 1510 x 1686, tara 582 kg.
   - https://sps.aero/wp-content/uploads/2025/10/BW-05_DataSheet_SPS_2025_GSE_12.pdf
   - https://sps.aero/wp-content/uploads/2025/10/BW-40_DataSheet_SPS_GSE_08.pdf
-- No AVIOGEI, TUG or Fast Global Solutions sheet found, and no photos downloaded (E:/fbw-gse/refs/bulk_cart is empty). Roof arch, curtain layout and wheel size are **(p)**, estimated from memory of typical carts.
+- No AVIOGEI, TUG or Fast Global Solutions sheet found, and no photos downloaded (E:/A380/fbw-gse/refs/bulk_cart is empty). Roof arch, curtain layout and wheel size are **(p)**, estimated from memory of typical carts.
 
 ## Frame
 

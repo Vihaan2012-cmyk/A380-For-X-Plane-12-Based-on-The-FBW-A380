@@ -21,7 +21,7 @@ SILL = 420.0
 DOOR_X0, DOOR_X1 = 2750.0, 4150.0
 DOOR_Z0, DOOR_Z1 = 520.0, 2330.0
 CAB_DOOR_X0, CAB_DOOR_X1 = 4950.0, 5650.0
-LIVERY_DIR = os.path.join('E:/fbw-gse/out', NAME, 'liveries')
+LIVERY_DIR = os.path.join('E:/A380/fbw-gse/out', NAME, 'liveries')
 DOOR_ANIM = [{'kind': 'trans', 'offset0': (0.0, 0.0, 0.0), 'offset1': (0.0, -1.2, 0.0), 'v0': 0.0, 'v1': 1.0, 'dataref': 'fbw/gse/clean_van/door'}]
 
 

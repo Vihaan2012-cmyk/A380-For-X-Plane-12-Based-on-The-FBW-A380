@@ -1,6 +1,6 @@
 # Native FMS Phase 2: crates/fms, flight plan and uplink
 
-Date: 22 October 2026. Spec: `docs/superpowers/specs/2026-10-21-native-fms-mfd-design.md`. Oracle: `E:/fbw-build/fms-oracle/*.json` (navdata JUN13JUL10/24).
+Date: 22 October 2026. Spec: `docs/superpowers/specs/2026-10-21-native-fms-mfd-design.md`. Oracle: `E:/A380/fbw-build/fms-oracle/*.json` (navdata JUN13JUL10/24).
 
 ## File map
 

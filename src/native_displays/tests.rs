@@ -5,7 +5,7 @@ use serde_json::Value;
 use super::{Display, DrawError, GpuInit, Inputs};
 
 const STATE: &str = "E:/golden-tour/flight-v4/emu-10-cruise/captures/0001_baseline/nd-1.state.json";
-const REFERENCE: &str = "E:/fbw-build/a380-displays/gpu152/a380disp_render.exe";
+const REFERENCE: &str = "E:/A380/fbw-build/a380-displays/gpu152/a380disp_render.exe";
 
 fn parse_maybe(v: &Value) -> Value {
     match v {

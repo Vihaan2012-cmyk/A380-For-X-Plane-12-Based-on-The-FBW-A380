@@ -215,7 +215,7 @@ New plugin datarefs (TRIGGERS, both ways):
 - `tools/smartcopilot/gen_cfg.py sync_list.json --out <cfg>`: writes
   `smartcopilot.cfg` (CRLF), refuses unknown sections, a dataref in two
   sync sections, or `[INFO]` values over 20 characters.
-- Output: `E:/fbw-build/smartcopilot/smartcopilot.cfg`. Ship it in the
+- Output: `E:/A380/fbw-build/smartcopilot/smartcopilot.cfg`. Ship it in the
   aircraft root only after H1-H4 exist; without them both sides run full
   systems and fight over every value.
 

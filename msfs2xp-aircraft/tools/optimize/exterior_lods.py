@@ -14,7 +14,7 @@ import sys
 import tempfile
 from pathlib import Path
 
-OBJDECIMATE = r"E:/fbw-build/target/release/objdecimate.exe"
+OBJDECIMATE = r"E:/A380/fbw-build/target/release/objdecimate.exe"
 LEVELS = ["0:90:0", "90:250:0.012:keep:0.02:0.02", "250:800:0.04:prune:0.02", "800:30000:0.12:prune:0.02"]
 SKIP = re.compile(r"(_hail|walkaround|engdetach|cowldetach|partdetach|detach|debris|sep_scars|separation|brake_fire|evac_slides|door_arms|cowl_rods|crushed|burnt|damage|fan_blur|blur|_lamps|lights|spill|a380_hud)", re.I)
 MARK = "# exterior_lods"

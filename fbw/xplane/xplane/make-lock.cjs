@@ -11,7 +11,7 @@ const fs = require('fs');
 const path = require('path');
 
 const here = __dirname;
-const ref = path.resolve(process.argv[2] || 'E:/fbw-int/fbw-aircraft-ts/node_modules');
+const ref = path.resolve(process.argv[2] || 'E:/A380/fbw-int/fbw-aircraft-ts/node_modules');
 const root = path.dirname(ref);
 const pkg = JSON.parse(fs.readFileSync(path.join(here, 'package.json'), 'utf8'));
 const read = (dir) => {

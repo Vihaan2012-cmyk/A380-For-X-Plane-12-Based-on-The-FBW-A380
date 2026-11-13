@@ -1,6 +1,6 @@
 """usage: gp7200_closeups.py <objects dir> <out dir> <tag> [--livery NAME ...] [--views a,b,...] [--engine N]
 
-Close-up renders of the GP7200 skin through the E:/fbw-gse/preview viewer with a livery's engine textures: the cowl split, the inlet lip,
+Close-up renders of the GP7200 skin through the E:/A380/fbw-gse/preview viewer with a livery's engine textures: the cowl split, the inlet lip,
 the barrel, the plug and the core nozzle, plus the doors-open, separated-core and dressing views. Output <out dir>/<tag>_<livery>_<view>.png."""
 
 import json

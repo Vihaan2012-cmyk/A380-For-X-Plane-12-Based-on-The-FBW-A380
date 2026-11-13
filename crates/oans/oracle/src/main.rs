@@ -8,7 +8,7 @@ use rquickjs::module::Declared;
 use rquickjs::{CatchResultExt, Context, Ctx, Function, Module, Runtime};
 use serde_json::{json, Value};
 
-const FBW: &str = "E:/fbw-int/fbw-aircraft";
+const FBW: &str = "E:/A380/fbw-int/fbw-aircraft";
 
 fn alias(name: &str) -> Option<String> {
     let common = format!("{FBW}/fbw-common/src/systems");
@@ -185,7 +185,7 @@ fn run_scenario(shim: &Path, sc: &Value) -> Result<Value, String> {
 
 fn main() {
     let args: Vec<String> = std::env::args().collect();
-    let out_dir = PathBuf::from(args.get(1).cloned().unwrap_or_else(|| "E:/fbw-build/oans-oracle".into()));
+    let out_dir = PathBuf::from(args.get(1).cloned().unwrap_or_else(|| "E:/A380/fbw-build/oans-oracle".into()));
     let shim = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("shim");
     std::fs::create_dir_all(&out_dir).expect("output dir");
     let mut failed = false;

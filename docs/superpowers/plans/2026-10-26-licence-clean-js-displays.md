@@ -8,7 +8,7 @@
 
 | # | Source | Problem | Status |
 |---|---|---|---|
-| 1 | `@microsoft/msfs-sdk` (Avionics Framework) | MIT plus an addendum: the software "and any derivative works" are licensed only for use in MSFS. The SDK EULA also bans using any SDK component to develop a competing flight sim product. | Replaced at bundle time by `E:/fbw-int/clean-avionics` (3,516 lines, written from a spec, gate.py 2.34%). But the fork's `package.json` still installs `@microsoft/msfs-sdk` for the build. |
+| 1 | `@microsoft/msfs-sdk` (Avionics Framework) | MIT plus an addendum: the software "and any derivative works" are licensed only for use in MSFS. The SDK EULA also bans using any SDK component to develop a competing flight sim product. | Replaced at bundle time by `E:/A380/fbw-int/clean-avionics` (3,516 lines, written from a spec, gate.py 2.34%). But the fork's `package.json` still installs `@microsoft/msfs-sdk` for the build. |
 | 2 | `xp-kit` / `xp-avionics` | Shown on 21 Oct to copy SDK internals | Pulled. Must never come back. |
 | 3 | Our shims for MSFS's page globals (`plugin/app/js/msfs/*`, `plugin/src/js/msfs/*`): `SimVar`, `Coherent`, `Simplane`, `Avionics.Utils`, `BaseInstrument`, `RegisterViewListener`, stored data | Written while reading Asobo's `fs-base-ui` scripts; the comments cite `SimPlane.js` and `common.js` line numbers. That makes them derived from MSFS game files. | **Not clean.** Must be rewritten. |
 | 4 | Six FlyByWire files adapted from Microsoft code | Rewritten black-box on 13 Oct | Keep them under the gate. |

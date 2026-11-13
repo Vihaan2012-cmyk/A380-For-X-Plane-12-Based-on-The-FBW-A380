@@ -11,7 +11,7 @@ The user wants the systems to simulate the actual physics: air, fluid, heat and 
 - **No invented numbers:** parameters come from FBW's own code and data, public A380/engine references (cite them), or first-principles derivation from cited geometry. Document every parameter's source in a table in docs/physics/<area>.md. If no source exists, say so and choose the most defensible derived value, clearly marked.
 - **Stability and cost:** fixed sub-steps if needed, with no NaNs or explosions at any sim rate or pause. Keep the per-frame cost small and report it.
 - **Tests:** conservation checks (mass and energy balance), steady-state values against references, and failure behaviour (a leak, a closed valve, an open breaker).
-- **Build:** use `cargo +stable-x86_64-pc-windows-gnu test --release --features js` with CARGO_TARGET_DIR=E:\fbw-build\target-phys-<area>. Keep the whole tree building, and never delete another workstream's files. Back up with /d/A380/fbw-build/backup-plugin.sh before large edits.
+- **Build:** use `cargo +stable-x86_64-pc-windows-gnu test --release --features js` with CARGO_TARGET_DIR=E:\A380\fbw-build\target-phys-<area>. Keep the whole tree building, and never delete another workstream's files. Back up with /d/A380/fbw-build/backup-plugin.sh before large edits.
 - **Study panel:** the lead builds the diagrams. In your report, list the flow and state quantities to show (per duct, valve, bus and so on).
 
 ## Removing approximations

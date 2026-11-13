@@ -7,7 +7,7 @@
 - Smith GSE A380 catering truck: sill range 2.4 m to 8.5 m. https://www.smithgse.com/a380cateringtruck
 - Aircraft: A380 upper-deck door sill about 7.9-8.1 m (Aircraft Characteristics; not re-verified here).
 - No GH9000 datasheet found; unit dimensions below are estimated (p) from the class figures.
-- Photos: none downloaded; folder E:/fbw-gse/refs/udcat_highloader/ is empty.
+- Photos: none downloaded; folder E:/A380/fbw-gse/refs/udcat_highloader/ is empty.
 
 ## Frame
 

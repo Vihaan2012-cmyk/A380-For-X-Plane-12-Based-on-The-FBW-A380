@@ -12,7 +12,7 @@ const POSITION_TOLERANCE: f64 = 1e-6;
 const ANGLE_TOLERANCE: f64 = 0.01;
 
 fn oracle_dir() -> PathBuf {
-    PathBuf::from(std::env::var("FMS_ORACLE_DIR").unwrap_or_else(|_| r"E:\fbw-build\fms-oracle".into()))
+    PathBuf::from(std::env::var("FMS_ORACLE_DIR").unwrap_or_else(|_| r"E:\A380\fbw-build\fms-oracle".into()))
 }
 
 fn scenario_dir() -> PathBuf {

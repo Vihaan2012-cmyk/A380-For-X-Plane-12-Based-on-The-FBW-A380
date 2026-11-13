@@ -94,7 +94,7 @@ common layout, e.g. a two-pass ram matrix with a dividing wall).
 ## Tests
 
 New, in `air_cycle_machine.rs` (`cargo +stable-x86_64-pc-windows-gnu test -p a380_systems
---release`, `CARGO_TARGET_DIR=E:\fbw-build\target-phys-air`):
+--release`, `CARGO_TARGET_DIR=E:\A380\fbw-build\target-phys-air`):
 - `pack_off_has_no_outlet_flow` — mass conservation at zero flow.
 - `cruise_design_point_produces_cold_air_below_bleed_inlet_temperature` — design point (44 psi/
   200 °C bleed, -56.5 °C/238 hPa/Mach-0.85-equivalent ambient, coldest cabin selection): outlet
@@ -237,7 +237,7 @@ valve.rs` (diff: `patches/fbw-rust/air-orifice-flow.patch`, verified with
 - **Purely additive**: no existing method's behaviour changed, so all 43 shared-crate pneumatic
   tests and the full a380_systems suite are unaffected by this piece on its own. Verified:
   `cargo +stable-x86_64-pc-windows-gnu check -p a380_systems --release` clean (only pre-existing,
-  unrelated warnings), `CARGO_TARGET_DIR=E:\fbw-build\target-phys-air-second`.
+  unrelated warnings), `CARGO_TARGET_DIR=E:\A380\fbw-build\target-phys-air-second`.
 
 ### HP valve / PRV: now genuinely wired to compressible orifice flow
 

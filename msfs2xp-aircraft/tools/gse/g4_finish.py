@@ -12,7 +12,7 @@ sys.path.insert(0, HERE)
 import g4_obj
 import g4_test
 
-EXPORT = 'E:/fbw-gse/export'
+EXPORT = 'E:/A380/fbw-gse/export'
 DECIMATE = 'D:/A380/fbw-build/target/release/objdecimate.exe'
 LODS = ['0:80:0.001:keep', '80:250:0.015:prune', '250:3000:0.05:sloppy:0.08']
 OPS = ('dnata', 'swissport', 'menzies')

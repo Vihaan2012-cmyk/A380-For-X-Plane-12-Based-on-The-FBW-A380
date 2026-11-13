@@ -8,7 +8,7 @@ const ts = require('typescript');
 const path = require('path');
 const { slash, entries, compilerOptions, cleanHost } = require('./lib/project.cjs');
 
-const fork = slash(path.resolve(process.argv[2] || 'E:/fbw-int/fbw-own-api'));
+const fork = slash(path.resolve(process.argv[2] || 'E:/A380/fbw-int/fbw-own-api'));
 const old = process.argv.includes('--old');
 const root = path.resolve(__dirname, '..');
 const ui = path.join(root, 'lib/src/index.ts');

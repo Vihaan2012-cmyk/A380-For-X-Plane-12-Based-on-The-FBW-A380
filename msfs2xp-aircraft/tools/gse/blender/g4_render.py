@@ -12,7 +12,7 @@ from mathutils import Vector
 
 import g4_obj
 
-EXPORT = 'E:/fbw-gse/export'
+EXPORT = 'E:/A380/fbw-gse/export'
 RES = (900, 560)
 
 

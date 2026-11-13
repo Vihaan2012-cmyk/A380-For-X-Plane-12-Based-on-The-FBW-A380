@@ -43,7 +43,7 @@ def one(objects, tag, livery, engine, name, refs, extra=None):
     if extra:
         objs = extra(objs)
     key = f"{tag}_{(livery or 'base').split()[0]}_e{engine}_{name}"
-    outd = Path("E:/fbw-build/gp7200-model/work/pvout")
+    outd = Path("E:/A380/fbw-build/gp7200-model/work/pvout")
     outd.mkdir(parents=True, exist_ok=True)
     return rr.render_one(key, objs, views(engine)[name], refs, outd)
 
@@ -92,7 +92,7 @@ def core(install, stage, out, engine=2):
             view = name
             if name == "separated":
                 def extra(objs, objects=objects, tag=tag):
-                    work = Path("E:/fbw-build/gp7200-model/work/sep2") / tag
+                    work = Path("E:/A380/fbw-build/gp7200-model/work/sep2") / tag
                     work.mkdir(parents=True, exist_ok=True)
                     keep = [o for o in objs if "engcore" not in o and "engdress" not in o]
                     return keep + rr.separated_objects(Path(objects), engine, work)

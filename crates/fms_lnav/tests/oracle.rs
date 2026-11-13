@@ -1,7 +1,7 @@
 use fms_lnav::*;
 use serde_json::Value;
 
-const GOLDEN: &str = r"E:\fbw-build\fms-oracle\uplink-egll-kjfk.json";
+const GOLDEN: &str = r"E:\A380\fbw-build\fms-oracle\uplink-egll-kjfk.json";
 
 fn coord(v: &Value) -> Coord {
     Coord::new(v["lat"].as_f64().unwrap(), v["long"].as_f64().unwrap())

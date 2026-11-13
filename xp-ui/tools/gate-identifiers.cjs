@@ -11,8 +11,8 @@ const args = process.argv.slice(2);
 const opt = (n, d) => (args.includes('--' + n) ? args[args.indexOf('--' + n) + 1] : d);
 const root = args[0];
 const out = args[1];
-const map = JSON.parse(fs.readFileSync(opt('map', 'E:/fbw-int/xplane-js-private/api-map.json'), 'utf8'));
-const fbw = opt('fbw', 'E:/fbw-int/fbw-own-api');
+const map = JSON.parse(fs.readFileSync(opt('map', 'E:/A380/fbw-int/xplane-js-private/api-map.json'), 'utf8'));
+const fbw = opt('fbw', 'E:/A380/fbw-int/fbw-own-api');
 const extras = [];
 for (let i = 0; i < args.length; i++) if (args[i] === '--extra') extras.push(args[i + 1]);
 

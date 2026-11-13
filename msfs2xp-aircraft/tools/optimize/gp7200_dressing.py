@@ -19,7 +19,7 @@ HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE.parent / "engine_interior"))
 import place_interior_gp as placer  # noqa: E402
 
-DDSTOOL = "E:/fbw-build/target/release/ddstool.exe"
+DDSTOOL = "E:/A380/fbw-build/target/release/ddstool.exe"
 STEM = "a380_engdress_gp"
 
 

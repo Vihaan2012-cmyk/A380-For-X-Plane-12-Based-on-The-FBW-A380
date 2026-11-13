@@ -2,7 +2,7 @@ import json
 import os
 import sys
 
-EXPORT = 'E:/fbw-gse/export'
+EXPORT = 'E:/A380/fbw-gse/export'
 OPS = ['default', 'dnata', 'swissport', 'menzies']
 POSES = {
     'bag_tractor': [],

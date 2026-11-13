@@ -23,6 +23,6 @@ Log lines start `browser screens:`. Every 30 s there is one with each page's fra
 
 ## Testing without X-Plane
 
-`tools/browser-screens/run.sh` runs the ignored test `serve_the_real_pages_for_a_browser` as a stand-in for the plugin, opens every real page in a copy of X-Plane's Chromium 117 (`Resources/dlls/64/cef/win/cefclient.exe`, copied to `E:/fbw-build/cef117`) and reports load state, errors and screenshots. It has no systems data, so pages show failure flags.
+`tools/browser-screens/run.sh` runs the ignored test `serve_the_real_pages_for_a_browser` as a stand-in for the plugin, opens every real page in a copy of X-Plane's Chromium 117 (`Resources/dlls/64/cef/win/cefclient.exe`, copied to `E:/A380/fbw-build/cef117`) and reports load state, errors and screenshots. It has no systems data, so pages show failure flags.
 
 It cannot check what depends on X-Plane itself: whether devices no mesh uses keep running, how clicks reach a page, and frame rate.

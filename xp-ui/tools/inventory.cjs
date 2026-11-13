@@ -8,8 +8,8 @@ const { execSync } = require('child_process');
 const { slash, entries, compilerOptions, cleanHost } = require('./lib/project.cjs');
 
 const LIB = slash(path.resolve(__dirname, '../lib/src')).toLowerCase() + '/';
-const fork = slash(path.resolve(process.argv[2] || 'E:/fbw-int/fbw-own-api'));
-const out = process.argv[3] || 'E:/fbw-int/xplane-js-private/api-inventory.json';
+const fork = slash(path.resolve(process.argv[2] || 'E:/A380/fbw-int/fbw-own-api'));
+const out = process.argv[3] || 'E:/A380/fbw-int/xplane-js-private/api-inventory.json';
 const TYPINGS = (fork + '/fbw-common/src/typings/').toLowerCase();
 const modulesDir = path.join(fork, 'node_modules');
 const libEntry = path.resolve(__dirname, '../lib/src/index.ts');

@@ -1,6 +1,6 @@
 //! One-off dump of every `SourcePatch` the plugin would splice into
 //! FlyByWire's compiled JS, plus the deep-registered `EcamAlert`s' variable
-//! names, to JSON files under `E:/fbw-build/wasm-fs2020/ecam-msfs/` —
+//! names, to JSON files under `E:/A380/fbw-build/wasm-fs2020/ecam-msfs/` —
 //! input for the X-Plane -> MSFS ECAM-bridge port (report only, no product
 //! code).
 //!
@@ -151,7 +151,7 @@ fn tag(p: fbw_a380_systems::source_patch::SourcePatch) -> DumpedPatch {
 }
 
 fn main() {
-    let out_arg = std::env::args().nth(1).unwrap_or_else(|| "E:/fbw-build/wasm-fs2020/ecam-msfs".to_string());
+    let out_arg = std::env::args().nth(1).unwrap_or_else(|| "E:/A380/fbw-build/wasm-fs2020/ecam-msfs".to_string());
     let out_dir = Path::new(&out_arg);
     std::fs::create_dir_all(out_dir).expect("create out dir");
 

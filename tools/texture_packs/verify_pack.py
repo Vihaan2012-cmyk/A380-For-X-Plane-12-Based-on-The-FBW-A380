@@ -7,7 +7,7 @@ import numpy as np
 from PIL import Image
 
 INSTALLED = Path(r'D:\Steam Games\steamapps\common\X-Plane 12\Aircraft\A380 for X-Plane 12')
-ROOT = Path(r'E:\fbw-texpacks')
+ROOT = Path(r'E:\A380\fbw-texpacks')
 
 
 def load_at(p: Path, size):

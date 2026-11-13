@@ -6,7 +6,7 @@ use serde_json::Value;
 use std::path::Path;
 
 fn oracle_dir() -> String {
-    std::env::var("FMS_ORACLE_DIR").unwrap_or_else(|_| "E:/fbw-build/fms-oracle".into())
+    std::env::var("FMS_ORACLE_DIR").unwrap_or_else(|_| "E:/A380/fbw-build/fms-oracle".into())
 }
 
 fn golden_dir() -> String {

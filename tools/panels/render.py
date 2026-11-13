@@ -1,6 +1,6 @@
 """Straight-on panel art from the cockpit OBJs, lamps off and lamps on (Blender, Cycles, orthographic).
 
-blender -b --factory-startup -P render.py -- [--panels E:/fbw-build/panels] [--only glareshield,fcu]
+blender -b --factory-startup -P render.py -- [--panels E:/A380/fbw-build/panels] [--only glareshield,fcu]
     [--aircraft DIR] [--samples 48] [--gpu]
 """
 import argparse
@@ -26,7 +26,7 @@ CAM_DIST = 0.5
 def argv():
     a = sys.argv[sys.argv.index("--") + 1:] if "--" in sys.argv else []
     ap = argparse.ArgumentParser()
-    ap.add_argument("--panels", default="E:/fbw-build/panels")
+    ap.add_argument("--panels", default="E:/A380/fbw-build/panels")
     ap.add_argument("--only", default="")
     ap.add_argument("--aircraft", default=DEFAULT_AIRCRAFT)
     ap.add_argument("--samples", type=int, default=48)

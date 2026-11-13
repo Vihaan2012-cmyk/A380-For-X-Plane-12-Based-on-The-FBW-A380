@@ -1,6 +1,6 @@
 //! A dump of the aircraft's whole state, every variable, every
 //! `xphfbw.stateDumpFrames` frames (`app_settings.rs`, default
-//! [`DEFAULT_EVERY_TICKS`]), to `E:\fbw-build\state-dumps`, for reading
+//! [`DEFAULT_EVERY_TICKS`]), to `E:\A380\fbw-build\state-dumps`, for reading
 //! what the systems did after a flight.
 //!
 //! `xphfbw.stateDumps`/`stateDumpFrames`/`stateDumpKeep` (the Simulation

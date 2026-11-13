@@ -18,7 +18,7 @@ done
 REPO=Vihaan2012-cmyk/A380-For-X-Plane-12-Based-on-The-FBW-A380
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 DIST="$ROOT/dist/$VERSION"
-TARGET=/e/fbw-build/target
+TARGET=/e/A380/fbw-build/target
 
 echo "== installer engine"
 (cd "$ROOT/installer/engine" && CARGO_TARGET_DIR="$TARGET" RUSTFLAGS="-C target-feature=+crt-static --remap-path-prefix=$USERPROFILE=~" \

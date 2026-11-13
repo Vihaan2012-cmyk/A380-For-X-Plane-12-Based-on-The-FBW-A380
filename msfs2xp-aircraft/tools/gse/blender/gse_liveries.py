@@ -9,7 +9,7 @@ from livery_art import OPERATORS, PANELS, panel_path
 class Livery:
     def __init__(self, name, out_dir=None):
         self.name = name
-        self.out_dir = out_dir or os.environ.get('GSE_OUT', 'E:/fbw-gse/export/_work/default')
+        self.out_dir = out_dir or os.environ.get('GSE_OUT', 'E:/A380/fbw-gse/export/_work/default')
         self.colors = {}
 
     def path(self, tag, operator):

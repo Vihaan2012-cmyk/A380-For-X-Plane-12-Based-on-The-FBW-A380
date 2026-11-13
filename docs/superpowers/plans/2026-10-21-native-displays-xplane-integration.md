@@ -2,7 +2,7 @@
 
 Starts once every display holds 98% strict on its goldens and the performance pass is done. Revised 22 Oct: rendering is Ganesh GL from Chromium 152's own Skia (a380-displays NOTES/skia.md); all displays except the old mfd are >= 98 on v12/flight4; mfdx (98.19 on v15) paints the MFD from a live DOM snapshot (NOTES/mfd-live.md); one frame of every display costs about 8.5 ms on the GPU.
 
-**Goal:** the cockpit screens are drawn by the native C++/Skia displays in `E:/fbw-int/a380-displays`, not by Chromium. During the switch-over FlyByWire's JavaScript logic keeps running in XPHFBW without painting.
+**Goal:** the cockpit screens are drawn by the native C++/Skia displays in `E:/A380/fbw-int/a380-displays`, not by Chromium. During the switch-over FlyByWire's JavaScript logic keeps running in XPHFBW without painting.
 
 **Architecture:**
 - The display library is linked into the existing Rust plugin through a small C ABI. It is not a second X-Plane plugin.
@@ -20,7 +20,7 @@ Starts once every display holds 98% strict on its goldens and the performance pa
 - No Windows headers outside `core/src/platform_win.cpp`.
 - No explanatory comment paragraphs.
 - Never launch X-Plane without asking the user first.
-- `CARGO_TARGET_DIR=E:/fbw-build/target`.
+- `CARGO_TARGET_DIR=E:/A380/fbw-build/target`.
 
 ## Task 1: C ABI in a380-displays
 
@@ -47,7 +47,7 @@ Starts once every display holds 98% strict on its goldens and the performance pa
 ## Task 2: Rust side, build and link
 
 **Files:**
-- Modify: `build.rs` (cmake the static `a380_displays` library under `E:/fbw-build/a380-displays/plugin-<profile>`, then link `skia.lib`).
+- Modify: `build.rs` (cmake the static `a380_displays` library under `E:/A380/fbw-build/a380-displays/plugin-<profile>`, then link `skia.lib`).
 - Create: `src/native_displays/mod.rs` (FFI declarations and a safe wrapper).
 - Modify: `Cargo.toml` (feature `native-displays`, off by default).
 

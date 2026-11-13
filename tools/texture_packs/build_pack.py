@@ -6,8 +6,8 @@ import sys
 from pathlib import Path
 
 INSTALLED = Path(r'D:\Steam Games\steamapps\common\X-Plane 12\Aircraft\A380 for X-Plane 12')
-ROOT = Path(r'E:\fbw-texpacks')
-BAKES = Path(r'E:\fbw-gse\decalbake\work')
+ROOT = Path(r'E:\A380\fbw-texpacks')
+BAKES = Path(r'E:\A380\fbw-gse\decalbake\work')
 TEXPIPE = r'D:\A380\fbw-build\target\release\examples\texpipe.exe'
 
 

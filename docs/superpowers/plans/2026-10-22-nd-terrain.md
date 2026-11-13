@@ -113,8 +113,8 @@ FBW's pattern images are not reused in the native layer.
 ## 4. Status
 
 - crates/terrain_map: grid, scheduler, bands, alert, profile, publish; 25 tests pass
-  (`cargo test --release`, CARGO_TARGET_DIR=E:/fbw-build/target). `examples/payload.rs` writes demo
+  (`cargo test --release`, CARGO_TARGET_DIR=E:/A380/fbw-build/target). `examples/payload.rs` writes demo
   payloads for a synthetic ridge.
-- a380-displays: nd/terrain.cpp + hook build in E:/fbw-build/a380-displays/terr51 (nd only). Demo
-  render: E:/fbw-build/terr-native/arc40.png (v12 0097 ARC 40 state + synthetic payload).
+- a380-displays: nd/terrain.cpp + hook build in E:/A380/fbw-build/a380-displays/terr51 (nd only). Demo
+  render: E:/A380/fbw-build/terr-native/arc40.png (v12 0097 ARC 40 state + synthetic payload).
 - Not verified in X-Plane: probe cost, scenery-load misses, dither look against the real display.

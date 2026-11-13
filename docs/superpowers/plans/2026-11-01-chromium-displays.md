@@ -21,17 +21,17 @@
 - Keep the app route working (`browserDisplays` off) and keep the native display code, until the user says otherwise.
 - User-visible text says "A380 for X-Plane 12", never XPH or XPHFBW. No realism toggles. Settings are for preferences only.
 - No explanatory paragraph comments in code. Match the file around the edit.
-- Output goes on E:, build folder `E:/fbw-build/target` only. No whole-disk `find`.
-- Commit often, as `git -c user.name=vihaan2012-cmyk -c user.email=vihaan2012-cmyk@users.noreply.github.com commit`, with no co-author line. Never push unless asked. Branch `xp-own-api`, repo `E:/fbw-int/plugin`.
-- Never discard results: flights go in `E:/fbw-build/perf-runs/<time>-<label>`, and stay.
+- Output goes on E:, build folder `E:/A380/fbw-build/target` only. No whole-disk `find`.
+- Commit often, as `git -c user.name=vihaan2012-cmyk -c user.email=vihaan2012-cmyk@users.noreply.github.com commit`, with no co-author line. Never push unless asked. Branch `xp-own-api`, repo `E:/A380/fbw-int/plugin`.
+- Never discard results: flights go in `E:/A380/fbw-build/perf-runs/<time>-<label>`, and stay.
 - Edit source files by bytes or with the Edit tool. Bash heredocs mangle backslashes, and some files are CRLF.
 
 ### Named procedures
 
 **BUILD:**
 ```bash
-cd /e/fbw-int/plugin
-export CARGO_TARGET_DIR=/e/fbw-build/target TMP='E:\fbw-build\tmp' TEMP='E:\fbw-build\tmp'
+cd /e/A380/fbw-int/plugin
+export CARGO_TARGET_DIR=/e/A380/fbw-build/target TMP='E:\A380\fbw-build\tmp' TEMP='E:\A380\fbw-build\tmp'
 cargo +stable-x86_64-pc-windows-gnu build --release --features js --lib
 ```
 
@@ -43,14 +43,14 @@ cargo +stable-x86_64-pc-windows-gnu test --release --features js --lib <filter>
 **INSTALL** (only with X-Plane closed; check with `tasklist | grep -i x-plane.exe`):
 ```bash
 PL="/d/Steam Games/steamapps/common/X-Plane 12/Aircraft/A380 for X-Plane 12/plugins/fbw_a380_systems/64"
-mkdir -p /e/fbw-backup/<date>-<what> && cp "$PL/win.xpl" /e/fbw-backup/<date>-<what>/win.xpl
-cp /e/fbw-build/target/release/fbw_a380_systems.dll "$PL/win.xpl"
-cmp /e/fbw-build/target/release/fbw_a380_systems.dll "$PL/win.xpl" && echo installed
+mkdir -p /e/A380/fbw-backup/<date>-<what> && cp "$PL/win.xpl" /e/A380/fbw-backup/<date>-<what>/win.xpl
+cp /e/A380/fbw-build/target/release/fbw_a380_systems.dll "$PL/win.xpl"
+cmp /e/A380/fbw-build/target/release/fbw_a380_systems.dll "$PL/win.xpl" && echo installed
 ```
 
 **FLIGHT `<label>` `<settings>`** (exists after Task 1, only when the user says launch; run in the background so its report arrives when X-Plane closes):
 ```bash
-FBW_XPLANE_ROOT='D:\Steam Games\steamapps\common\X-Plane 12' powershell.exe -NoProfile -ExecutionPolicy Bypass -File 'E:\fbw-int\plugin\tools\browser-screens\flight.ps1' -Label <label> -Set '<NAME=value;NAME=value>'
+FBW_XPLANE_ROOT='D:\Steam Games\steamapps\common\X-Plane 12' powershell.exe -NoProfile -ExecutionPolicy Bypass -File 'E:\A380\fbw-int\plugin\tools\browser-screens\flight.ps1' -Label <label> -Set '<NAME=value;NAME=value>'
 ```
 
 **Reference flying**, so numbers compare. The user does the same two things each time:
@@ -209,12 +209,12 @@ The fps figures are estimates from the table above, not promises.
 - Create: `tools/browser-screens/vram_log.ps1`, `tools/browser-screens/flight.ps1`, `tools/browser-screens/perf_report.py`
 
 **Interfaces:**
-- Produces: the FLIGHT procedure; `E:/fbw-build/perf-runs/<time>-<label>/{Log.txt,vram.txt,report.txt,win.xpl}`.
+- Produces: the FLIGHT procedure; `E:/A380/fbw-build/perf-runs/<time>-<label>/{Log.txt,vram.txt,report.txt,win.xpl}`.
 
 - [ ] **Step 1: Write `vram_log.ps1`**
 
 ```powershell
-param([string]$Out = "E:\fbw-build\tmp\vram-flight.txt")
+param([string]$Out = "E:\A380\fbw-build\tmp\vram-flight.txt")
 "time`tprocess`tdedicated_MB`tshared_MB" | Out-File -Encoding utf8 $Out
 $idle = 0
 for ($n = 0; $n -lt 720; $n++) {
@@ -259,7 +259,7 @@ foreach ($pair in ($Set -split ";" | Where-Object { $_ })) {
   $name, $value = $pair -split "=", 2
   Set-Item -Path "env:$name" -Value $value
 }
-$dir = "E:\fbw-build\perf-runs\{0:yyyyMMdd-HHmm}-{1}" -f (Get-Date), $Label
+$dir = "E:\A380\fbw-build\perf-runs\{0:yyyyMMdd-HHmm}-{1}" -f (Get-Date), $Label
 New-Item -ItemType Directory -Force $dir | Out-Null
 Copy-Item "$XPlane\Aircraft\A380 for X-Plane 12\plugins\fbw_a380_systems\64\win.xpl" "$dir\win.xpl"
 $xp = Start-Process -FilePath "$XPlane\X-Plane.exe" -WorkingDirectory $XPlane -PassThru
@@ -362,7 +362,7 @@ if __name__ == "__main__":
 
 - [ ] **Step 4: Check it against the last flight**
 
-Run: `python3 tools/browser-screens/perf_report.py "/d/Steam Games/steamapps/common/X-Plane 12/Log.txt" /e/fbw-build/tmp/vram-flight.txt`
+Run: `python3 tools/browser-screens/perf_report.py "/d/Steam Games/steamapps/common/X-Plane 12/Log.txt" /e/A380/fbw-build/tmp/vram-flight.txt`
 Expected: a section list, and per-process peaks. If X-Plane has been launched since, any `Log.txt` with `perf:` lines will do.
 
 - [ ] **Step 5: Commit**
@@ -554,7 +554,7 @@ fn paint_cost_probe() {
     let (b, f, n, c) = (get(&p::BYTES), get(&p::FAULTS), get(&p::NS), get(&p::PAINTS));
     println!("PROBE paints/s {:.1}; MB per paint {:.2}; ms per paint {:.3}; GB/s {:.2}; faults per MB {:.0}", c / 18., b / c.max(1.) / 1e6, n / c.max(1.) / 1e6, b / n.max(1.), f / (b / 1e6).max(1.));
     let (w, h, px) = t::tga_like_dump(&blocks[0]);
-    std::fs::write(format!("E:/fbw-build/tmp/probe-{w}x{h}.bgra"), &px).unwrap();
+    std::fs::write(format!("E:/A380/fbw-build/tmp/probe-{w}x{h}.bgra"), &px).unwrap();
     browsers.close();
 }
 ```
@@ -619,17 +619,17 @@ On this PC adapter `03bd` is the RTX and `1863` the Intel.
 ```sh
 #!/bin/sh
 # paint_probe.sh <label> "<chromium switches>"
-cd /e/fbw-int/plugin
-export CARGO_TARGET_DIR=/e/fbw-build/target TMP='E:\fbw-build\tmp' TEMP='E:\fbw-build\tmp'
-export FBW_BROWSER_ROUTE=own FBW_BENCH_CEF="E:/fbw-build/cef117" FBW_BENCH_CACHE="E:\\fbw-build\\tmp\\probe-cache-$1"
-export FBW_BENCH_URL="file:///E:/fbw-int/plugin/tools/browser-screens/paint_page.html" FBW_CHROMIUM_SWITCHES="$2"
-rm -rf "/e/fbw-build/tmp/probe-cache-$1"; mkdir -p "/e/fbw-build/tmp/probe-cache-$1"
-(sleep 22; powershell.exe -NoProfile -ExecutionPolicy Bypass -File 'E:\fbw-int\plugin\tools\browser-screens\chromium_vram.ps1' > "/e/fbw-build/tmp/probe-vram-$1.txt" 2>&1) &
-timeout 120 cargo +stable-x86_64-pc-windows-gnu test --release --features js --lib paint_cost_probe -- --ignored --nocapture > "/e/fbw-build/tmp/probe-$1.txt" 2>&1
+cd /e/A380/fbw-int/plugin
+export CARGO_TARGET_DIR=/e/A380/fbw-build/target TMP='E:\A380\fbw-build\tmp' TEMP='E:\A380\fbw-build\tmp'
+export FBW_BROWSER_ROUTE=own FBW_BENCH_CEF="E:/A380/fbw-build/cef117" FBW_BENCH_CACHE="E:\\A380\\fbw-build\\tmp\\probe-cache-$1"
+export FBW_BENCH_URL="file:///E:/A380/fbw-int/plugin/tools/browser-screens/paint_page.html" FBW_CHROMIUM_SWITCHES="$2"
+rm -rf "/e/A380/fbw-build/tmp/probe-cache-$1"; mkdir -p "/e/A380/fbw-build/tmp/probe-cache-$1"
+(sleep 22; powershell.exe -NoProfile -ExecutionPolicy Bypass -File 'E:\A380\fbw-int\plugin\tools\browser-screens\chromium_vram.ps1' > "/e/A380/fbw-build/tmp/probe-vram-$1.txt" 2>&1) &
+timeout 120 cargo +stable-x86_64-pc-windows-gnu test --release --features js --lib paint_cost_probe -- --ignored --nocapture > "/e/A380/fbw-build/tmp/probe-$1.txt" 2>&1
 wait
 echo "== $1 [$2]"
-grep -aE "^PROBE|^error|panicked" "/e/fbw-build/tmp/probe-$1.txt" | cut -c1-170
-cut -c1-140 "/e/fbw-build/tmp/probe-vram-$1.txt"
+grep -aE "^PROBE|^error|panicked" "/e/A380/fbw-build/tmp/probe-$1.txt" | cut -c1-170
+cut -c1-140 "/e/A380/fbw-build/tmp/probe-vram-$1.txt"
 ```
 
 - [ ] **Step 5: Run it**
@@ -1103,7 +1103,7 @@ git commit -m "feat(browser-screens): default Chromium mode from the 1 Nov fligh
 
 - [ ] **Step 6: Try to make real pages run offline**
 
-Real pages hang on a V8 stall in `own_browsers_in_x_planes_chromium`, and never hang in X-Plane. The two start Chromium differently, and Step 2's lines now show how. Put X-Plane's values into `test_support::start_chromium`'s `Settings`, and its extra switches into `FBW_CHROMIUM_SWITCHES`, then run `sh /e/fbw-build/tmp/oc_run.sh`.
+Real pages hang on a V8 stall in `own_browsers_in_x_planes_chromium`, and never hang in X-Plane. The two start Chromium differently, and Step 2's lines now show how. Put X-Plane's values into `test_support::start_chromium`'s `Settings`, and its extra switches into `FBW_CHROMIUM_SWITCHES`, then run `sh /e/A380/fbw-build/tmp/oc_run.sh`.
 
 - Expected if it works: `SCREEN_DU_PFDL` shows paints above 0 in the last 12 s, and later tasks can be measured offline on real pages.
 - If it still hangs: stop after two attempts and carry on measuring in the sim. This is a convenience, not a requirement.
@@ -1642,7 +1642,7 @@ The probe test's counters from Task 2 stay around the `perf::time` block, with t
 Run: `sh tools/browser-screens/paint_probe.sh soft "disable-gpu-compositing"`
 Expected: ms per paint under 0.05, paints/s near 180.
 
-Compare a frame: open `E:/fbw-build/tmp/probe-1152x1536.bgra` with `bgra2png.py` from Task 13, or check it now by eye once that exists. The static text at the top must be sharp and whole.
+Compare a frame: open `E:/A380/fbw-build/tmp/probe-1152x1536.bgra` with `bgra2png.py` from Task 13, or check it now by eye once that exists. The static text at the top must be sharp and whole.
 
 - [ ] **Step 7: Commit**
 
@@ -2083,7 +2083,7 @@ Run: `BROWSER='/c/Program Files/Google/Chrome/Application/chrome.exe' sh tools/b
 
 It serves the pages and opens them with DevTools on 9333. Wait for the pages to load, then:
 
-Run: `node tools/browser-screens/paint_audit.mjs 9333 5 > E:/fbw-build/tmp/paint-audit-offline.txt`
+Run: `node tools/browser-screens/paint_audit.mjs 9333 5 > E:/A380/fbw-build/tmp/paint-audit-offline.txt`
 
 Expected: a table per page. Values in the bench are static, so anything painting steadily here is a needless repaint or a deliberate animation. This Chrome is newer than X-Plane's 117, so treat its numbers as a guide to what repaints, not how fast.
 
@@ -2091,7 +2091,7 @@ Expected: a table per page. Values in the bench are static, so anything painting
 
 FLIGHT `audit` with `FBW_CHROMIUM_SWITCHES=disable-gpu-compositing remote-debugging-port=9444 remote-allow-origins=*` (use the chosen mode's switches). While the user sits parked:
 
-Run: `node tools/browser-screens/paint_audit.mjs 9444 5 > E:/fbw-build/perf-runs/<run>/paint-audit-parked.txt`
+Run: `node tools/browser-screens/paint_audit.mjs 9444 5 > E:/A380/fbw-build/perf-runs/<run>/paint-audit-parked.txt`
 
 Then again in flight, `paint-audit-flying.txt`.
 
@@ -2295,7 +2295,7 @@ Expected: all four PFD and ND paint figures within 10% of sim fps. Upload figure
 
 From the latest profile flight:
 
-Run: `python3 tools/browser-screens/symbolize.py E:/fbw-build/perf-runs/<run>/Log.txt E:/fbw-build/perf-runs/<run>/win.xpl`
+Run: `python3 tools/browser-screens/symbolize.py E:/A380/fbw-build/perf-runs/<run>/Log.txt E:/A380/fbw-build/perf-runs/<run>/win.xpl`
 
 Expected: functions with the module they were running in. This also explains the 10.7% of `ntdll` with our plugin on the stack.
 
@@ -2407,7 +2407,7 @@ During one flight, parked with the PFD in view:
 
 1. Raw page frame. Run with `FBW_DUMP_TAG` from the `XPHFBW bridge attached (<tag>)` line in `Log.txt`, and `FBW_DUMP_DIR`:
    ```bash
-   FBW_DUMP_TAG=<tag> FBW_DUMP_DIR='E:\fbw-build\perf-runs\<run>\frames' cargo +stable-x86_64-pc-windows-gnu test --release --features js --lib dump_screens_of_a_running_session -- --ignored --nocapture
+   FBW_DUMP_TAG=<tag> FBW_DUMP_DIR='E:\A380\fbw-build\perf-runs\<run>\frames' cargo +stable-x86_64-pc-windows-gnu test --release --features js --lib dump_screens_of_a_running_session -- --ignored --nocapture
    python3 tools/browser-screens/bgra2png.py <run>/frames/SCREEN_DU_PFDL_1152x1536.bgra 1152 1536 <run>/frames/pfd.png
    ```
 2. Device texture: `display::grab_device` writes `DEVICE_<id>_<w>x<h>.png` when `DEVICE_GRABS` is armed; read how it is armed at `src/display/mod.rs:2102` and arm it the same way.
@@ -2475,18 +2475,18 @@ No code. Each row needs the user's launch; do only the ones they want. Same R1 a
 ```bash
 #!/bin/bash
 # Mac compile check on Windows, then the library's tests on Linux under WSL.
-cd /e/fbw-int/plugin || exit 1
-FAKE='E:\fbw-build\tmp\fakecc\fake.exe'
-CARGO_TARGET_DIR=/e/fbw-build/target-mac TMP='E:\fbw-build\tmp' TEMP='E:\fbw-build\tmp' \
+cd /e/A380/fbw-int/plugin || exit 1
+FAKE='E:\A380\fbw-build\tmp\fakecc\fake.exe'
+CARGO_TARGET_DIR=/e/A380/fbw-build/target-mac TMP='E:\A380\fbw-build\tmp' TEMP='E:\A380\fbw-build\tmp' \
   CC_aarch64_apple_darwin="$FAKE" CXX_aarch64_apple_darwin="$FAKE" AR_aarch64_apple_darwin="$FAKE" \
-  cargo +stable-x86_64-pc-windows-gnu check --target aarch64-apple-darwin --lib --features js > /e/fbw-build/tmp/mac.log 2>&1
+  cargo +stable-x86_64-pc-windows-gnu check --target aarch64-apple-darwin --lib --features js > /e/A380/fbw-build/tmp/mac.log 2>&1
 echo "mac check exit $?"
-grep -aE "^error" -A6 /e/fbw-build/tmp/mac.log | cut -c1-140 | head -30
-cat > /e/fbw-build/tmp/wsl_check.sh <<'EOF'
+grep -aE "^error" -A6 /e/A380/fbw-build/tmp/mac.log | cut -c1-140 | head -30
+cat > /e/A380/fbw-build/tmp/wsl_check.sh <<'EOF'
 mkdir -p ~/fbw-src/plugin ~/fbw-src/fbw-aircraft/fbw-a380x/src ~/fbw-src/fbw-aircraft/fbw-common/src ~/fbw-build/logs
-rsync -a --delete --exclude target --exclude .git --exclude dist --exclude glass --exclude node_modules --exclude app/ui --exclude '*.dll' --exclude '*.xpl' /mnt/e/fbw-int/plugin/ ~/fbw-src/plugin/ || exit 10
-rsync -a --delete --exclude target /mnt/e/fbw-int/fbw-aircraft/fbw-a380x/src/wasm/ ~/fbw-src/fbw-aircraft/fbw-a380x/src/wasm/ || exit 11
-rsync -a --delete --exclude target /mnt/e/fbw-int/fbw-aircraft/fbw-common/src/wasm/ ~/fbw-src/fbw-aircraft/fbw-common/src/wasm/ || exit 12
+rsync -a --delete --exclude target --exclude .git --exclude dist --exclude glass --exclude node_modules --exclude app/ui --exclude '*.dll' --exclude '*.xpl' /mnt/e/A380/fbw-int/plugin/ ~/fbw-src/plugin/ || exit 10
+rsync -a --delete --exclude target /mnt/e/A380/fbw-int/fbw-aircraft/fbw-a380x/src/wasm/ ~/fbw-src/fbw-aircraft/fbw-a380x/src/wasm/ || exit 11
+rsync -a --delete --exclude target /mnt/e/A380/fbw-int/fbw-aircraft/fbw-common/src/wasm/ ~/fbw-src/fbw-aircraft/fbw-common/src/wasm/ || exit 12
 cd ~/fbw-src/plugin || exit 13
 export CARGO_TARGET_DIR=~/fbw-build/target
 cargo build --release --features js --lib > ~/fbw-build/logs/lin_build.log 2>&1
@@ -2496,7 +2496,7 @@ echo "linux test exit $?"
 grep -aE "^test result|^error" ~/fbw-build/logs/lin_full.log | cut -c1-140
 grep -aE "^test .*FAILED" ~/fbw-build/logs/lin_full.log | cut -c1-110 | head -30
 EOF
-wsl.exe -d Ubuntu-24.04 -- bash -lc 'tr -d "\r" < /mnt/e/fbw-build/tmp/wsl_check.sh > /tmp/wsl_check.sh; bash /tmp/wsl_check.sh' 2>&1 | tr -d '\000' | cut -c1-160
+wsl.exe -d Ubuntu-24.04 -- bash -lc 'tr -d "\r" < /mnt/e/A380/fbw-build/tmp/wsl_check.sh > /tmp/wsl_check.sh; bash /tmp/wsl_check.sh' 2>&1 | tr -d '\000' | cut -c1-160
 ```
 
 - [ ] **Step 2: Run it**

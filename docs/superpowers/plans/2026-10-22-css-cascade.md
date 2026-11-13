@@ -27,7 +27,7 @@ Per property and per capture match %, over the 125 mfd and 143 oit captures. Mis
 Pseudo-elements (::before/::after), animations/transitions, `@import`, container queries, `calc()` with mixed percentage (px-only calc is evaluated), `color-mix`, `env()`, JS-set CSSOM changes that are not in the style attribute.
 
 ## Results (v15, 125 mfd + 143 oit captures, data-cs ignored, 75 props computed, 64 compared)
-Run: `CARGO_TARGET_DIR=E:/fbw-build/target cargo run --release --example prove -- <captures> <html_ui> <report.txt> [filter]`; full report E:/fbw-build/css-cascade/report.txt.
+Run: `CARGO_TARGET_DIR=E:/A380/fbw-build/target cargo run --release --example prove -- <captures> <html_ui> <report.txt> [filter]`; full report E:/A380/fbw-build/css-cascade/report.txt.
 - 99.934% of 10,560,820 compared values match (mfd 99.915%, oit 99.970%); 864 layout-resolved values skipped; width/height/top/left/right/bottom excluded.
 - 100% on 46 of 64 compared properties. Below 100%: white-space 98.69, display 98.70 (both one svg `text.AnsuFailedText` rule whose source is not in the shipped CSS), margin-bottom 99.72, margin-left 99.88, transform 99.61 (svg `transform` attributes on some `g`), grid-template-rows 99.74 (auto rows are used values), padding-* 99.98-99.99, color 99.98, overflow 99.98, line-height/gap/min-width/align-items 99.99.
 - Capture facts learned: MFD captures were recorded at device scale 1.5 (border widths floor to device pixels: 3px -> 2.66667px, 1px -> 0.666667px), OIT at 1.0; `Cascade::dpr` selects it. OIT viewport is 1333x1000. `min-width:auto` resolves to `0px` when the element or an ancestor is display:none.

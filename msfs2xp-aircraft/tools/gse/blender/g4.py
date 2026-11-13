@@ -1,6 +1,6 @@
 import math
 
-EXPORT = 'E:/fbw-gse/export'
+EXPORT = 'E:/A380/fbw-gse/export'
 WORK = EXPORT + '/_work4'
 OPERATORS = ('dnata', 'swissport', 'menzies')
 KEYS = [i / 10.0 for i in range(11)]

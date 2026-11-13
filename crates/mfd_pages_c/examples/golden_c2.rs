@@ -8,7 +8,7 @@ use std::fs;
 const WPTS: &str = "KADOM,PKS,MACLA,APOMA,POLEV,KALUG,AS,ONOXA,NYOMA,SRITI,BLI,JUNHA,IRTAD,AVPIV,SJ,VJB,AROSO,KALIL,BILIK,GOBAS,PUGER,ANSAX,IGEBO,NOPEK,DUBTA,ELSAR,GIRNA,MMV,OPAMO,GULAM,BBM,MADOG,UDULO,OKILA,ERVIS,GUNDI,DARMI,BISET,ADPOP,BOLIS,TOTOX,LOSIM,KAXEM,MUSRU,PAROK,ITURA,ALMOG,VELOD,GEXAN,TAPRA,VAXAS,RUDAT,MIVEK,IMPED";
 
 fn main() {
-    let out = std::env::args().nth(1).unwrap_or_else(|| "E:/fbw-build/mfd-pages-c/c2".to_string());
+    let out = std::env::args().nth(1).unwrap_or_else(|| "E:/A380/fbw-build/mfd-pages-c/c2".to_string());
     let w = |name: &str, n: mfd_tree::Node| {
         fs::write(format!("{}/{}.json", out, name), n.to_json()).unwrap();
     };

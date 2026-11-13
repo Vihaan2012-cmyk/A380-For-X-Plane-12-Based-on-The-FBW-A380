@@ -5,7 +5,7 @@ import gselib as g
 import liverylib as L
 
 NAME = 'lav_truck'
-LIVERY_DIR = 'E:/fbw-gse/out/lav_truck/liveries'
+LIVERY_DIR = 'E:/A380/fbw-gse/out/lav_truck/liveries'
 X0 = 2800.0
 WIDTH = 2150.0
 HY = WIDTH / 2

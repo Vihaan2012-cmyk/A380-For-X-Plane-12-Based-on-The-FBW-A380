@@ -7,7 +7,7 @@ use fms_vnav::waypoints::{compute_predictions_at_waypoints, WaypointLeg};
 use fms_vnav::wind::{WindEntry, WindFixes, WindLeg, WindPlan, WindProfile, WindVector};
 use serde_json::Value;
 
-const ORACLE: &str = "E:/fbw-build/fms-oracle";
+const ORACLE: &str = "E:/A380/fbw-build/fms-oracle";
 const LB_PER_KG: f64 = 2.20462;
 
 fn load() -> Option<Value> {

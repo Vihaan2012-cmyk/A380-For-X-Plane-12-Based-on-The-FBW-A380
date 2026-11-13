@@ -5,7 +5,7 @@ import liverylib as L
 
 NAME = 'deice_truck'
 X0 = 4700.0
-LIVERY_DIR = 'E:/fbw-gse/out/deice_truck/liveries'
+LIVERY_DIR = 'E:/A380/fbw-gse/out/deice_truck/liveries'
 
 TRACK = 2040.0
 HALF_WIDTH = 1250.0

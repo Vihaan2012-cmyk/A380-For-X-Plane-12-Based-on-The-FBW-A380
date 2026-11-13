@@ -4,7 +4,7 @@
 
 - TLD TMX-150 product page (https://www.tld-group.com/products/conventional-aircraft-tractors/tmx-150/) and Aeroservicios-hosted TLD manuals (https://aeroservicios.com/uploads/manuals/PBT TMX-150 TLD.pdf): drawbar pull about 12000 daN, 8.25R15 tyres, 70 mm tow pin, 24 V electrics, 83 l fuel.
 - No dimensioned drawing was found within the time limit. Dimensions below are estimates (p) for a compact open-cab baggage tractor of this class; check against a dimensioned drawing before shipping.
-- No photos downloaded (E:/fbw-gse/refs/bag_tractor/ is empty).
+- No photos downloaded (E:/A380/fbw-gse/refs/bag_tractor/ is empty).
 
 ## Frame
 

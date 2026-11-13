@@ -11,12 +11,12 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-LIBRARY = Path(os.environ.get("XPJS_LIBRARY", "E:/fbw-int/clean-avionics"))
-FORK = Path(os.environ.get("XPJS_FORK", "E:/fbw-int/fbw-own-api"))
-MIRROR = Path(os.environ.get("SIMCHECK_MIRROR", "E:/fbw-build/simcheck/msfs-avionics-mirror/src/sdk"))
-SIMCHECK = Path(os.environ.get("SIMCHECK_TOOL", "E:/fbw-tools/session-tools/simcheck_tool"))
+LIBRARY = Path(os.environ.get("XPJS_LIBRARY", "E:/A380/fbw-int/clean-avionics"))
+FORK = Path(os.environ.get("XPJS_FORK", "E:/A380/fbw-int/fbw-own-api"))
+MIRROR = Path(os.environ.get("SIMCHECK_MIRROR", "E:/A380/fbw-build/simcheck/msfs-avionics-mirror/src/sdk"))
+SIMCHECK = Path(os.environ.get("SIMCHECK_TOOL", "E:/A380/fbw-tools/session-tools/simcheck_tool"))
 FS_BASE_UI = {name: Path(os.environ[var]) for name, var in (("fs2020", "FS_BASE_UI"), ("fs2024", "FS_BASE_UI_2024")) if os.environ.get(var)}
-API_MAP = Path(os.environ.get("XPJS_API_MAP", "E:/fbw-int/xplane-js-private/api-map.json"))
+API_MAP = Path(os.environ.get("XPJS_API_MAP", "E:/A380/fbw-int/xplane-js-private/api-map.json"))
 JS_DISPLAYS = ("html_ui/", "plugins/fbw_a380_systems/XPHFBW/js/", "plugins/fbw_a380_systems/XPHFBW/ui/")
 MS_NOTICE = re.compile(rb"copyright\s*(?:\(c\)|\xc2\xa9|\xa9)?\s*(?:\d{4}(?:-\d{4})?\s*)?microsoft", re.I)
 MS_NOTICE_WIDE = re.compile(b"(?:c\x00o\x00p\x00y\x00r\x00i\x00g\x00h\x00t\x00|\xa9\x00).{0,40}?m\x00i\x00c\x00r\x00o\x00s\x00o\x00f\x00t\x00", re.I | re.S)

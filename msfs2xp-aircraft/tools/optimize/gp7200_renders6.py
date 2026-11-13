@@ -58,7 +58,7 @@ def cy_views(e):
 
 def cycles_sheet(install, stage, out, engine, livery, names, samples=40):
     out.mkdir(parents=True, exist_ok=True)
-    work = Path("E:/fbw-build/gp7200-model/work/cy6")
+    work = Path("E:/A380/fbw-build/gp7200-model/work/cy6")
     work.mkdir(parents=True, exist_ok=True)
     views = cy_views(engine)
     ld = AC + f"liveries/{livery}/objects"

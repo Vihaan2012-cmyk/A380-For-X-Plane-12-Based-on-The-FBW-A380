@@ -129,19 +129,19 @@ fn compare(ecl: &Ecl, g: &Golden) -> Vec<String> {
 
 #[test]
 fn ecl_matches_fbw_fws_oracle() {
-    run("ecl_normal_walk", "ECL_ORACLE_GOLDEN", "E:/fbw-build/ecl39/oracle/ecl_normal_walk.json", 80);
+    run("ecl_normal_walk", "ECL_ORACLE_GOLDEN", "E:/A380/fbw-build/ecl39/oracle/ecl_normal_walk.json", 80);
 }
 
 #[test]
 fn ecl_complete_and_reset_paths_match_fbw() {
-    run("ecl_complete_reset", "ECL_ORACLE_GOLDEN_RESET", "E:/fbw-build/ecl49/oracle/ecl_complete_reset.json", 80);
+    run("ecl_complete_reset", "ECL_ORACLE_GOLDEN_RESET", "E:/A380/fbw-build/ecl49/oracle/ecl_complete_reset.json", 80);
 }
 
 fn run(name: &str, golden_var: &str, golden_default: &str, min_compared: usize) {
     let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
     let scenario_path = root.join(format!("tools/fws_oracle/scenarios/{name}.json"));
     let golden_path = env_path(golden_var, golden_default);
-    let states = env_path("FWS_ORACLE_STATES", "E:/fbw-build/emu-snapshots");
+    let states = env_path("FWS_ORACLE_STATES", "E:/A380/fbw-build/emu-snapshots");
     let (Some(scenario), Some(golden)) = (load(&scenario_path), load(&golden_path)) else {
         eprintln!("skipped: no scenario or golden");
         return;

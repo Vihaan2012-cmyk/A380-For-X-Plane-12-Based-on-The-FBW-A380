@@ -19,10 +19,10 @@ Outputs: the two alert L-vars, four discrete words, aural enqueue/dequeue events
 ## Proof
 
 1. Unit tests per mode taken from the TS thresholds.
-2. Offline oracle `E:/fbw-build/gpws-oracle`: `oracle.mjs` bundles FBW's real `LegacyGpws.ts`, `LegacySoundManager.ts`, `arinc429.ts`, `flightphase.ts`, `AutoCallOuts.ts` with esbuild against independent stubs for the SDK / MSFS globals, runs scripted scenarios (approach, sink-rate, too-low gear/flaps, glideslope, take-off altitude loss, windshear, autocallouts down to RETARD, go-around) at a 50 ms frame, records inputs and every output per frame as JSON goldens. The Rust test `tests/oracle.rs` replays the inputs and compares every output and event.
+2. Offline oracle `E:/A380/fbw-build/gpws-oracle`: `oracle.mjs` bundles FBW's real `LegacyGpws.ts`, `LegacySoundManager.ts`, `arinc429.ts`, `flightphase.ts`, `AutoCallOuts.ts` with esbuild against independent stubs for the SDK / MSFS globals, runs scripted scenarios (approach, sink-rate, too-low gear/flaps, glideslope, take-off altitude loss, windshear, autocallouts down to RETARD, go-around) at a 50 ms frame, records inputs and every output per frame as JSON goldens. The Rust test `tests/oracle.rs` replays the inputs and compares every output and event.
 3. `EfisTawsBridge` has no offline harness (it pulls the whole bus); covered by unit tests derived line by line.
 
-Run: `cargo test --manifest-path crates/gpws/Cargo.toml` (CARGO_TARGET_DIR=E:/fbw-build/target); regenerate goldens with `node E:/fbw-build/gpws-oracle/oracle.mjs`.
+Run: `cargo test --manifest-path crates/gpws/Cargo.toml` (CARGO_TARGET_DIR=E:/A380/fbw-build/target); regenerate goldens with `node E:/A380/fbw-build/gpws-oracle/oracle.mjs`.
 
 ## TAWS terrain look-ahead (`taws.rs`, added 22 Oct)
 

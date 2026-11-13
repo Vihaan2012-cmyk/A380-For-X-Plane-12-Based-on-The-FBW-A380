@@ -3,7 +3,7 @@ import sys
 
 from PIL import Image, ImageDraw, ImageFont
 
-WORK = 'E:/fbw-gse/export/_work4/liveries'
+WORK = 'E:/A380/fbw-gse/export/_work4/liveries'
 FONT = 'C:/Windows/Fonts/arialbd.ttf'
 
 STYLES = {

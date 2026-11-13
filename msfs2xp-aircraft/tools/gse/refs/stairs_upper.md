@@ -4,7 +4,7 @@
 
 - Upper-deck door height about 7.86 m above the tarmac, from a secondary source (Simple Flying article on the A380 upper deck). Airbus A380 Aircraft Characteristics (AC) was not read in this wave, so the exact sill is unverified.
 - No manufacturer datasheet (Mallaghan, TLD, Fast Global) was found by web search. The model is a generic design from the general layout of such trucks: two flights, an intermediate landing, a raising upper flight, a sliding top platform with rubber bumper, a canopy and a cab.
-- No photos were downloaded; `E:/fbw-gse/refs/stairs_upper/` is empty.
+- No photos were downloaded; `E:/A380/fbw-gse/refs/stairs_upper/` is empty.
 
 ## Frame
 

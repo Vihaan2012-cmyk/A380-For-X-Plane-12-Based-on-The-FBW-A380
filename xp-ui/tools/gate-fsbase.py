@@ -6,7 +6,7 @@ import json
 import sys
 from pathlib import Path
 
-SIMCHECK = Path("E:/fbw-tools/session-tools/simcheck_tool")
+SIMCHECK = Path("E:/A380/fbw-tools/session-tools/simcheck_tool")
 sys.path.insert(0, str(SIMCHECK))
 from sim import norm, tokens  # noqa: E402
 from gate import EXACT_MAX_RUN, K, declaration_lines  # noqa: E402

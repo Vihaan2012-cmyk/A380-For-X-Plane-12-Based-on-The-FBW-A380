@@ -6,7 +6,7 @@
 - Aerospecialties and Fortbrand listings for the ASU-600 150/180 ppm: https://www.aerospecialties.com/product/tld-asu-600-100-150-ppm-jet-engine-air-start-unit/ and https://fortbrand.com/?p=1100 : 156 x 60 x 76 in, 3660 kg. This is the size modelled.
 - TLD product page: https://www.tld-group.com/products/air-starters/asu-600-100-150-180/
 - Aircraft side: Airbus A380 Aircraft Characteristics for Airport Planning, section 5-4 (ground connections). The HP air ground connector (ISO 1034, 3 in) sits in the belly; its exact station was not read from the manual and is estimated here.
-- No photos downloaded; none stored in E:/fbw-gse/refs/asu_unit/.
+- No photos downloaded; none stored in E:/A380/fbw-gse/refs/asu_unit/.
 
 ## Frame
 

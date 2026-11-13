@@ -10,14 +10,14 @@ FBW's own `SystemsHost.js` (the whole hidden VCockpit22 view: FwsCore, PseudoPRI
 
 | File | Role |
 |---|---|
-| `tools/fws_oracle/make_pkg.py` | builds `E:/fbw-build/fws-oracle-pkg` (html_ui of the FBW build + `systems-host.html`, panel.cfg with VCockpit22 only, panel.xml) |
+| `tools/fws_oracle/make_pkg.py` | builds `E:/A380/fbw-build/fws-oracle-pkg` (html_ui of the FBW build + `systems-host.html`, panel.cfg with VCockpit22 only, panel.xml) |
 | `tools/fws_oracle/scenarios/*.json` | scenario scripts |
 | `tools/fws_oracle/same.py` | byte comparison of two golden directories |
 | `src/js/msfs/fws_oracle.rs` | host (`FwsHost`), scenario runner, `record_fws_oracle` ignored test (cfg(test), registered in `src/js/msfs/mod.rs`) |
-| `E:/fbw-build/fws-oracle/<name>.json` | goldens |
-| `E:/fbw-build/fws-oracle/<name>.reads.json` | input vars FBW read that the scenario never set (coverage gaps; not part of the golden) |
+| `E:/A380/fbw-build/fws-oracle/<name>.json` | goldens |
+| `E:/A380/fbw-build/fws-oracle/<name>.reads.json` | input vars FBW read that the scenario never set (coverage gaps; not part of the golden) |
 
-Inputs come from the complete simulator state dumps in `E:/fbw-build/emu-snapshots/emu-NN-*.json` (about 5000 vars each: `[isLocalVar, name, value]`). Vars the FWS itself writes (`A32NX_FWC_*`, `FWS`, `MASTER_*`, `ECAM_*`, `STATUS_*`, `TO_CONFIG_*`, `NO_SMOKING`, `CABIN_READY`) are skipped when a state is applied so the FWS starts from its own empty state.
+Inputs come from the complete simulator state dumps in `E:/A380/fbw-build/emu-snapshots/emu-NN-*.json` (about 5000 vars each: `[isLocalVar, name, value]`). Vars the FWS itself writes (`A32NX_FWC_*`, `FWS`, `MASTER_*`, `ECAM_*`, `STATUS_*`, `TO_CONFIG_*`, `NO_SMOKING`, `CABIN_READY`) are skipped when a state is applied so the FWS starts from its own empty state.
 
 ### Scenario steps
 
@@ -49,7 +49,7 @@ Inputs come from the complete simulator state dumps in `E:/fbw-build/emu-snapsho
 
 Only changes are recorded (a repeat of the previous value is dropped). Deterministic: fixed date, seeded `Math.random`/crypto, fixed 50 ms step, simulation time derived from the step count. Determinism check: record twice, `tools/fws_oracle/same.py`.
 
-Run: `FWS_ORACLE_PKG=... cargo test --release --features js --lib record_fws_oracle -- --ignored --nocapture`, outputs to `FWS_ORACLE_OUT` (default `E:\fbw-build\fws-oracle`).
+Run: `FWS_ORACLE_PKG=... cargo test --release --features js --lib record_fws_oracle -- --ignored --nocapture`, outputs to `FWS_ORACLE_OUT` (default `E:\A380\fbw-build\fws-oracle`).
 
 ## Phase B: the translation
 
@@ -59,7 +59,7 @@ Order: logic nodes, flight phases, memos, alert evaluation loop (`FwsCore.update
 
 ## Status (22 Oct)
 
-Phase A done. Eight scenarios recorded to `E:/fbw-build/fws-oracle/` (275 KB to 937 KB each, 3.9 MB total, 800 to 3550 events, 0 JS errors); two full runs are byte-identical (`same.py`: 16/16). A run of all eight takes about 13 s. Recorded outputs: 56 to 81 L: var writes per scenario (master warning/caution, FWC phase, TO/LDG memo, `EWD_LOWER_*`/`PFD_MEMO`/`PFD_LIMITATIONS` strings, discrete words, FWS health), the `fws_*` bus topics (decoded from `xp-ui.bus` and `EB_EVENTS`), aural requests (`PLAY_INSTRUMENT_SOUND` calls and `A32NX_AUDIO_*` vars), K: events.
+Phase A done. Eight scenarios recorded to `E:/A380/fbw-build/fws-oracle/` (275 KB to 937 KB each, 3.9 MB total, 800 to 3550 events, 0 JS errors); two full runs are byte-identical (`same.py`: 16/16). A run of all eight takes about 13 s. Recorded outputs: 56 to 81 L: var writes per scenario (master warning/caution, FWC phase, TO/LDG memo, `EWD_LOWER_*`/`PFD_MEMO`/`PFD_LIMITATIONS` strings, discrete words, FWS health), the `fws_*` bus topics (decoded from `xp-ui.bus` and `EB_EVENTS`), aural requests (`PLAY_INSTRUMENT_SOUND` calls and `A32NX_AUDIO_*` vars), K: events.
 
 Known gaps: the `emu-NN` snapshots do not carry every discrete other computers produce, so the TO and LDG memo lines stay empty in the snapshots; memo coverage needs hand-set inputs (`.reads.json` lists the 150 vars FwsCore read that no snapshot set). `GET_AIR_TRAFFIC` answers `[]`, `fetch` answers 404.
 
@@ -73,7 +73,7 @@ Translated from FBW: `fbw-common/src/systems/instruments/src/NXLogic.ts` 13-262 
 
 Comparator (`compare.rs`) replays a scenario's state/set/run steps into `Fws::tick` at 50 ms and diffs `(t, name, value)` against the golden for the covered outputs: `FWC_FLIGHT_PHASE`, `FWC_TOMEMO`, `FWC_LDGMEMO`, `NO_SMOKING_MEMO`, `CABIN_READY`, `FWS_AUDIO_VOLUME`, `EWD_LOWER_LEFT_LINE_*`. Result: approach_gear_not_down 15/15, elec_emer_decompression 15/15, engine_fire 15/15, engine_start 15/15, hydraulic_failure 15/15, takeoff_config_warning 15/15, landing_memos 32/32, to_ldg_memos 52/52, cold_dark_powerup 5 matching, 10 golden-only, 10 ours-only (the FWS power/startup gate `handlePowerChange` and the 60 s self-test are not ported, the left lines appear at 3150 instead of 1100).
 
-New scenario `tools/fws_oracle/scenarios/to_ldg_memos.json` (hand-set ARINC RA, LGCIU, FCDC words, flaps, seat belts, autobrake): 8 min of simulated time covering phases 2, 3, 4, 6, 8, 9, 10, 11, the T.O memo after the 120 s timer, spoilers armed/disarmed lines, the LDG memo in approach, gear/flaps/spoiler lines. Recorded to `E:/fbw-build/fws-oracle/to_ldg_memos.json` (existing goldens untouched).
+New scenario `tools/fws_oracle/scenarios/to_ldg_memos.json` (hand-set ARINC RA, LGCIU, FCDC words, flaps, seat belts, autobrake): 8 min of simulated time covering phases 2, 3, 4, 6, 8, 9, 10, 11, the T.O memo after the 120 s timer, spoilers armed/disarmed lines, the LDG memo in approach, gear/flaps/spoiler lines. Recorded to `E:/A380/fbw-build/fws-oracle/to_ldg_memos.json` (existing goldens untouched).
 
 Not translated yet: the alert loop (`FwsCore.ts` 5500-5990), all `ewdAbnormal` conditions (about 45 alerts fire in these scenarios, from unset snapshot inputs), master warning/caution, CRC/SC aural, ECAM page requests, right-hand memos, the `fws_*` bus topics, `FwsSoundManager`, INOP SYS, limitations, information. Master warning/caution, `ECAM_SFAIL`, `STATUS_NORMAL`, `ECAM_SD_PAGE_TO_SHOW` after the first alert are therefore only emitted as the initial values. T.O CONFIG normal evaluation (5424-5448) is stubbed to false.
 

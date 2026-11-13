@@ -11,8 +11,8 @@ sys.path.insert(0, HERE)
 from gse_manifest_data import ANIM_RANGES, VEHICLES
 
 BLENDER = 'C:/Program Files/Blender Foundation/Blender 5.2/blender.exe'
-DECIMATE = os.environ.get('GSE_OBJDECIMATE', 'E:/fbw-gse/export/_tools/objdecimate.exe')
-EXPORT = 'E:/fbw-gse/export'
+DECIMATE = os.environ.get('GSE_OBJDECIMATE', 'E:/A380/fbw-gse/export/_tools/objdecimate.exe')
+EXPORT = 'E:/A380/fbw-gse/export'
 WORK = os.path.join(EXPORT, '_work')
 OPERATORS = ('dnata', 'swissport', 'menzies')
 LODS = ['0:80:0.0003:keep', '80:250:0.015:prune', '250:3000:0.05:sloppy:0.08']

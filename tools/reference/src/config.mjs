@@ -33,11 +33,11 @@ export const PANEL_CFG_CANDIDATES = [
 export const FLT_DIR = env('FBW_FLT_DIR', path.dirname(path.dirname(PANEL_CFG_CANDIDATES.find((p) => fs.existsSync(p)) ?? PANEL_CFG_CANDIDATES[0])));
 
 export const STATES_DIR = env('REFERENCE_STATES_DIR', path.join(TOOL_ROOT, 'states'));
-export const REFERENCE_PNG_DIR = env('REFERENCE_PNG_DIR', 'E:/fbw-build/reference-png');
-export const SNAPSHOT_DIR = env('DISPLAY_SNAPSHOT_DIR', 'E:/fbw-build/display-snapshots');
-export const REPORT_DIR = env('REFERENCE_REPORT_DIR', 'E:/fbw-build/reference-report');
-export const DOM_USAGE_DIR = env('DOM_USAGE_DIR', 'E:/fbw-build/reference-dom-usage');
+export const REFERENCE_PNG_DIR = env('REFERENCE_PNG_DIR', 'E:/A380/fbw-build/reference-png');
+export const SNAPSHOT_DIR = env('DISPLAY_SNAPSHOT_DIR', 'E:/A380/fbw-build/display-snapshots');
+export const REPORT_DIR = env('REFERENCE_REPORT_DIR', 'E:/A380/fbw-build/reference-report');
+export const DOM_USAGE_DIR = env('DOM_USAGE_DIR', 'E:/A380/fbw-build/reference-dom-usage');
 export const DOCS_DIR = env('FBW_XP_DOCS_DIR', path.resolve(TOOL_ROOT, '../../docs'));
 
 // Chromium lives on D:, C: is nearly full.
-process.env.PLAYWRIGHT_BROWSERS_PATH ??= 'E:/fbw-build/browsers';
+process.env.PLAYWRIGHT_BROWSERS_PATH ??= 'E:/A380/fbw-build/browsers';

@@ -3,7 +3,7 @@ import sys
 
 from PIL import Image, ImageDraw, ImageFont
 
-EXPORT = 'E:/fbw-gse/export'
+EXPORT = 'E:/A380/fbw-gse/export'
 VEHICLES = ['bag_tractor', 'bulk_cart', 'belt_loader', 'ldcl_loader', 'uld_set']
 COLUMNS = ['default', 'dnata', 'swissport', 'menzies']
 CELL = (560, 373)

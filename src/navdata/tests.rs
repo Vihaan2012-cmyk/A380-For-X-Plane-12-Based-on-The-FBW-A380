@@ -13,7 +13,7 @@ use serde_json::Value as Json;
 use super::NavData;
 
 const XPLANE: &str = r"D:\Steam Games\steamapps\common\X-Plane 12";
-const SDK_TYPES: &str = r"E:\fbw-build\sdk\package\msfssdk.d.ts";
+const SDK_TYPES: &str = r"E:\A380\fbw-build\sdk\package\msfssdk.d.ts";
 
 #[cfg(windows)]
 #[link(name = "psapi")]

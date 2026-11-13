@@ -48,7 +48,7 @@ REPO = "Vihaan2012-cmyk/A380-For-X-Plane-12-Based-on-The-FBW-A380"
 # module into plugins/sasl/data/modules).
 INSTALLER_IN_ARCHIVE = "FlyByWire-A380X-XP-Installer.exe"
 TAKEOVER = {"kind": "run", "program": INSTALLER_IN_ARCHIVE, "args": ["--takeover", "{xplane}"]}
-DEFAULT_INSTALLER = Path(r"E:\fbw-build\target\x86_64-pc-windows-msvc\release\a380x-xp-engine.exe")
+DEFAULT_INSTALLER = Path(r"E:\A380\fbw-build\target\x86_64-pc-windows-msvc\release\a380x-xp-engine.exe")
 LAMINAR_A330 = "Aircraft/Laminar Research/Airbus A330-300"
 AIRFOILS = ["Airbus Root (high subsonic).afl", "Airbus Mid (high subsonic).afl", "Airbus Tip (high subsonic).afl"]
 SHIPPED_ACFS = ["A380.acf"]

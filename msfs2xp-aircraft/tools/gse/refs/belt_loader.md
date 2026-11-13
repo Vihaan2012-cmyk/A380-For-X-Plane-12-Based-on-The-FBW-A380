@@ -2,7 +2,7 @@
 
 ## Sources
 
-- TLD NBL conveyor belt datasheet (aeroservicios.com/uploads/manuals/NBL_datasheet.pdf), saved to `E:/fbw-gse/refs/belt_loader/nbl.pdf`, tolerance 5 %:
+- TLD NBL conveyor belt datasheet (aeroservicios.com/uploads/manuals/NBL_datasheet.pdf), saved to `E:/A380/fbw-gse/refs/belt_loader/nbl.pdf`, tolerance 5 %:
   - boom 7800 long, 700 wide, belt 600 wide, belt speed 18 m/min;
   - tyres 225/70 R15 front and rear, rear drive axle, front steer axle;
   - 4-cylinder diesel, two lift cylinders, rotating beacon, optional cab, rub rails.
@@ -45,4 +45,4 @@
 
 ## Liveries
 
-Three own text-and-colour schemes (dnata, Swissport, Menzies) are drawn by `draw_liveries()` into `E:/fbw-gse/out/belt_loader/liveries/`.
+Three own text-and-colour schemes (dnata, Swissport, Menzies) are drawn by `draw_liveries()` into `E:/A380/fbw-gse/out/belt_loader/liveries/`.

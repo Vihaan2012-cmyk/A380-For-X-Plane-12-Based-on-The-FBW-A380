@@ -1,6 +1,6 @@
 """usage: gp7200_renders.py <stage objects dir> <out dir> [engines]
 
-Preview renders (E:/fbw-gse/preview) of the staged GP7200 engines 2 and 1: side, front and rear three-quarter, intake and exhaust looking
+Preview renders (E:/A380/fbw-gse/preview) of the staged GP7200 engines 2 and 1: side, front and rear three-quarter, intake and exhaust looking
 in, cowl doors open and the separated engine, each placed next to the closest reference photo in refs/gp7200/commons."""
 
 import json
@@ -16,7 +16,7 @@ from PIL import Image, ImageDraw
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from gp7200_geom import frames  # noqa: E402
 
-PV = "E:/fbw-gse/preview"
+PV = "E:/A380/fbw-gse/preview"
 REFS = Path("refs/gp7200/commons")
 LIVERY = "D:/Steam Games/steamapps/common/X-Plane 12/Aircraft/A380 for X-Plane 12/liveries/Emirates A6-EDY/objects"
 FN = frames()
@@ -90,7 +90,7 @@ def separated_objects(stage, e, work):
 
 
 def render_one(name, objs, view, refs, out_dir, size=(1000, 640)):
-    work = Path("E:/fbw-build/gp7200-model/work/pv") / name
+    work = Path("E:/A380/fbw-build/gp7200-model/work/pv") / name
     work.mkdir(parents=True, exist_ok=True)
     spec = dict(objects=objs, datarefs={"fbw/engine/gp7200": 1, "fbw/anim/eye_in_flight_deck": 0, **refs}, views=[view], size=list(size))
     (work / "spec.json").write_text(json.dumps(spec))
@@ -133,7 +133,7 @@ def main(stage, out_dir, engines="2,1"):
                 r.update({f"fbw/anim/cowl_open_{e}": 1, f"fbw/anim/engine_bay_{e}": 1})
             if key == "separated":
                 r.update({f"sim/operation/failures/rel_engsep{e - 1}": 6})
-                work = Path("E:/fbw-build/gp7200-model/work/sep") / f"e{e}"
+                work = Path("E:/A380/fbw-build/gp7200-model/work/sep") / f"e{e}"
                 work.mkdir(parents=True, exist_ok=True)
                 use = [str(stage / n) for n in base if "engcore" not in n] + separated_objects(stage, e, work)
             if key == "intake" or key == "exhaust":

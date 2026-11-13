@@ -7,7 +7,7 @@ import gselib as g
 
 NAME = 'belt_loader'
 X0 = 0.0
-OUT_DIR = os.environ.get('GSE_BELT_OUT', 'E:/fbw-gse/out/belt_loader')
+OUT_DIR = os.environ.get('GSE_BELT_OUT', 'E:/A380/fbw-gse/out/belt_loader')
 RAISED_PREVIEW = float(os.environ.get('GSE_BELT_RAISE', '0'))
 
 CHASSIS_L = 4600.0
@@ -27,7 +27,7 @@ BOOM_Y = -250.0
 BOOM_HALF = 350.0
 BELT_HALF = 300.0
 BOOM_RAISE_DEG = 20.0
-ART = os.environ.get('G3_ART', 'E:/fbw-gse/export/_g3/art')
+ART = os.environ.get('G3_ART', 'E:/A380/fbw-gse/export/_g3/art')
 BOOM_TOP_Z = 150.0
 
 BOOM_ANIM = [{'kind': 'rotate', 'pivot': (BOOM_Y / 1000.0, HINGE_X / 1000.0, HINGE_Z / 1000.0), 'axis': (1.0, 0.0, 0.0), 'deg0': 0.0, 'deg1': BOOM_RAISE_DEG,

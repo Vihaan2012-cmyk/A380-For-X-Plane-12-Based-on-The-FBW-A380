@@ -12,7 +12,7 @@ fi
 mkdir -p "$OUT"
 rm -f "$OUT/stop"
 cd "$HERE/../.."
-CARGO_TARGET_DIR=E:/fbw-build/target \
+CARGO_TARGET_DIR=E:/A380/fbw-build/target \
 XPHFBW_EXE="${TOUR_XPHFBW_EXE:-$AC/plugins/fbw_a380_systems/XPHFBW/XPHFBW.exe}" XPHFBW_AIRCRAFT="$AC" XPHFBW_XP_ROOT="${TOUR_XP_ROOT:-$XP}" \
 XPHFBW_OUT="$OUT/harness" XPHFBW_SECONDS=14400 XPHFBW_STOP="$OUT/stop" XPHFBW_ND_LAYERS="$OUT/nd-layers" \
 XPHFBW_STORMS="${TOUR_STORMS:-storm-day}" XPHFBW_PIN_FILE="$OUT/pins.json" \

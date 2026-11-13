@@ -2,11 +2,11 @@ import shutil
 import sys
 from pathlib import Path
 
-FORK = Path("E:/fbw-int/fbw-aircraft-ts")
+FORK = Path("E:/A380/fbw-int/fbw-aircraft-ts")
 OUT = FORK / "fbw-a380x/out/flybywire-aircraft-a380-842/html_ui"
-SRC = Path("E:/fbw-int/fbw-aircraft/fbw-a380x/src/base/flybywire-aircraft-a380-842")
+SRC = Path("E:/A380/fbw-int/fbw-aircraft/fbw-a380x/src/base/flybywire-aircraft-a380-842")
 PANEL = FORK / "fbw-a380x/src/base/flybywire-aircraft-a380-842/SimObjects/AirPlanes/FlyByWire_A380X/attachments/flybywire/Part_Interior_Cockpit/panel"
-DEFAULT_DEST = Path("E:/fbw-build/rmp-oracle-pkg")
+DEFAULT_DEST = Path("E:/A380/fbw-build/rmp-oracle-pkg")
 KEEP = {"[VCockpit16]", "[VCockpit17]", "[VCockpit18]", "[VCockpit22]", "[VCockpit23]"}
 
 
