@@ -53,7 +53,16 @@ pub fn agrees(ours: &Prop, theirs: &Prop, total_n: f64) -> bool {
 #[derive(Default)]
 pub struct Verifier {
     agreed_s: f64,
+    force_s: f64,
     pub verified: bool,
+}
+
+/// Thrust alone matching this long is enough: the moment arms are checked, but a bad arm reading must not keep
+/// X-Plane's generic engines flying the aircraft.
+const FORCE_ONLY_S: f64 = 20.0;
+
+pub fn force_agrees(ours: &Prop, theirs: &Prop) -> bool {
+    (ours[2] - theirs[2]).abs() <= FORCE_TOLERANCE * ours[2].abs().max(1.0) + 500.0
 }
 
 impl Verifier {
@@ -61,12 +70,10 @@ impl Verifier {
         if self.verified {
             return true;
         }
-        if total_n >= VERIFY_MIN_SHARE * rated_total_n && agrees(ours, theirs, total_n) {
-            self.agreed_s += dt;
-        } else {
-            self.agreed_s = 0.0;
-        }
-        self.verified = self.agreed_s >= VERIFY_S;
+        let thrust = total_n >= VERIFY_MIN_SHARE * rated_total_n;
+        self.agreed_s = if thrust && agrees(ours, theirs, total_n) { self.agreed_s + dt } else { 0.0 };
+        self.force_s = if thrust && force_agrees(ours, theirs) { self.force_s + dt } else { 0.0 };
+        self.verified = self.agreed_s >= VERIFY_S || self.force_s >= FORCE_ONLY_S;
         self.verified
     }
 }
@@ -75,6 +82,7 @@ struct Refs {
     override_forces: Option<DataRef>,
     thrust: Option<DataRef>,
     xyz: Option<DataRef>,
+    location: [Option<DataRef>; 3],
     vert: Option<DataRef>,
     side: Option<DataRef>,
     prop: [Option<DataRef>; 6],
@@ -85,6 +93,8 @@ pub struct EngineForces {
     verifier: Verifier,
     applying: bool,
     log_s: f64,
+    location_logged: bool,
+    applied_thrust_n: Option<f64>,
 }
 
 fn finite_and_bounded(p: &Prop, rated_total_n: f64) -> bool {
@@ -99,6 +109,7 @@ impl EngineForces {
                 override_forces: f("sim/operation/override/override_engine_forces"),
                 thrust: f("sim/flightmodel/engine/POINT_thrust"),
                 xyz: f("sim/flightmodel/engine/POINT_XYZ"),
+                location: ["x", "y", "z"].map(|a| f(&format!("sim/flightmodel2/engines/location_{a}_mtr"))),
                 vert: f("sim/aircraft/prop/acf_vertcant"),
                 side: f("sim/aircraft/prop/acf_sidecant"),
                 prop: [
@@ -113,6 +124,8 @@ impl EngineForces {
             verifier: Verifier::default(),
             applying: false,
             log_s: 0.0,
+            location_logged: false,
+            applied_thrust_n: None,
         }
     }
 
@@ -131,7 +144,16 @@ impl EngineForces {
         if let Some(d) = self.refs.xyz {
             xplm.get_vf(d, &mut xyz);
         }
-        let pos = [0, 1, 2, 3].map(|i| [xyz[i * 3], xyz[i * 3 + 1], xyz[i * 3 + 2]].map(f64::from));
+        let mut pos = [0, 1, 2, 3].map(|i| [xyz[i * 3], xyz[i * 3 + 1], xyz[i * 3 + 2]].map(f64::from));
+        // X-Plane 12 leaves POINT_XYZ at zero, so the mount points come from the engine locations.
+        if pos.iter().flatten().all(|v| v.abs() < 1e-3) {
+            let axes = self.refs.location.map(|d| Self::array(xplm, d));
+            pos = [0, 1, 2, 3].map(|i| [axes[0][i], axes[1][i], axes[2][i]]);
+            if !self.location_logged {
+                self.location_logged = true;
+                crate::log(&format!("engine forces: POINT_XYZ is empty, mount points from the engine locations {pos:.1?} m"));
+            }
+        }
         let (vert, side) = (Self::array(xplm, self.refs.vert), Self::array(xplm, self.refs.side));
         let rated_total = rated_n * ENGINES as f64;
         let complete = self.refs.override_forces.is_some() && self.refs.prop.iter().all(Option::is_some) && self.refs.xyz.is_some();
@@ -171,11 +193,17 @@ impl EngineForces {
         if let Some(d) = self.refs.override_forces {
             xplm.set_i(d, 1);
         }
+        self.applied_thrust_n = Some(-ours[2]);
         for (d, v) in self.refs.prop.iter().zip(ours) {
             if let Some(d) = d {
                 xplm.set_f(*d, v as f32);
             }
         }
+    }
+
+    /// The thrust along the body axis this plugin applied last, while it flies the engines.
+    pub fn applied_thrust_n(&self) -> Option<f64> {
+        self.applying.then_some(self.applied_thrust_n).flatten()
     }
 
     pub fn release(&mut self, xplm: &Xplm) {
@@ -224,6 +252,15 @@ mod tests {
         assert!((0..20).any(|_| v.step(&ours, &ours, 240e3, 1.4e6, 0.1)));
         let mut idle = Verifier::default();
         assert!(!(0..100).any(|_| idle.step(&ours, &ours, 10e3, 1.4e6, 0.1)), "too little thrust to compare");
+    }
+
+    #[test]
+    fn matching_thrust_takes_over_even_when_the_moment_arms_read_wrong() {
+        let theirs = prop_forces(&[230e3; 4], &POS, &[0.0; 4], &[0.0; 4]);
+        let ours = prop_forces(&[230e3; 4], &[[0.0; 3]; 4], &[0.0; 4], &[0.0; 4]);
+        let mut v = Verifier::default();
+        assert!(!(0..150).any(|_| v.step(&ours, &theirs, 920e3, 1.4e6, 0.1)), "not on the moments' word alone");
+        assert!((0..60).any(|_| v.step(&ours, &theirs, 920e3, 1.4e6, 0.1)), "the thrust matched for 20 s");
     }
 
     #[test]

@@ -172,7 +172,7 @@ pub struct AppSettings {
 impl Default for AppSettings {
     fn default() -> Self {
         Self {
-            fbw_inertia: false,
+            fbw_inertia: true,
             ils_from_scenery: false,
             registration: String::new(),
             msn: String::new(),

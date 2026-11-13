@@ -953,7 +953,8 @@ const OUTSIDE_RATE: c_int = 5;
 /// The big screens need no full rate from outside or out of view. Everything else keeps it: the
 /// pages that do the aircraft's work run on the same clock.
 fn rate_for(key: &str, base: c_int, outside: bool) -> c_int {
-    if (outside || super::screen_out_of_view(key)) && matches!(key, "SCREEN_DU_PFDL" | "SCREEN_DU_PFDR" | "SCREEN_DU_NDL" | "SCREEN_DU_NDR" | "SCREEN_DU_EWD" | "SCREEN_DU_SD") {
+    // Only from outside: the in-view test misjudged screens at the bottom of a normal cockpit view.
+    if outside && matches!(key, "SCREEN_DU_PFDL" | "SCREEN_DU_PFDR" | "SCREEN_DU_NDL" | "SCREEN_DU_NDR" | "SCREEN_DU_EWD" | "SCREEN_DU_SD") {
         return OUTSIDE_RATE.min(base);
     }
     base

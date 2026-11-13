@@ -119,7 +119,7 @@ impl PaintSlot {
         let (width, height) = self.size();
         let dst = &mut self.block.pixels()[first_row as usize * stride..];
         let mut published = Vec::with_capacity(8);
-        h.writing.store(1, Ordering::Relaxed);
+        h.begin_write();
         for [x, y, w, rect_h] in rects.iter().copied() {
             let left = MAX_DIRTY_RECTS.saturating_sub(published.len());
             copy_changed(rows, dst, stride, [x, y - first_row, w, rect_h], left, &mut published);
@@ -135,7 +135,7 @@ impl PaintSlot {
         if !published.is_empty() {
             h.publish(&published);
         }
-        h.writing.store(0, Ordering::Relaxed);
+        h.end_write();
         COPIES.fetch_add(1, Ordering::Relaxed);
         COPY_NS.fetch_add(started.elapsed().as_nanos() as u64, Ordering::Relaxed);
     }

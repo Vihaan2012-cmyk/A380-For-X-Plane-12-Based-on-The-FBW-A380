@@ -1649,7 +1649,7 @@ pub fn main_lua(title: &str, rigs: &[&Rig], sim: Option<&SimState>) -> String {
          \x20 local FLAP, SLAT, SB = val(x_flap), val(x_slat), val(x_sb)\n\
          \x20 local ROLL, PITCH, YAW, TRIM = val(x_roll), val(x_pitch), val(x_yaw), val(x_trim)\n\
          \x20 local PBRK, dt = val(x_pbrk), val(x_dt)\n\
-         \x20 for i = 1, 4 do FAN[i] = (FAN[i] + math.min(g(N1, i - 1) * 4 * dt, 6)) % 360 end\n\
+         \x20 for i = 1, 4 do local n = math.max(g(N1, i - 1), 0); FAN[i] = (FAN[i] + math.min(n * 174 * dt, 2.6 + 0.042 * n, 6.8)) % 360 end\n\
          \x20 RAT_SPIN = (RAT_SPIN + rd(\"fbw/A32NX_RAT_RPM\") * 6 * dt) % 360\n",
     );
     for rig in rigs {

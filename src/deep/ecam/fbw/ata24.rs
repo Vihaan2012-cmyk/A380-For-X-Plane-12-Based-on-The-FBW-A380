@@ -507,6 +507,7 @@ pub fn wire(v: &mut Vec<FbwProc>) {
         );
     }
 
+    const DRIVE_OIL_MONITOR_N3_FRACTION: f64 = 0.6;
     // ---- `240800048`-`051 ELEC DRIVE n OIL PRESS LO` -- FCOM p.4948 gives
     // its own real number: "lower than 35 PSI," a different physical system
     // from the APU's own 15 PSI oil trip, so the raw pressure is compared
@@ -526,7 +527,15 @@ pub fn wire(v: &mut Vec<FbwProc>) {
                 title,
                 Level::Caution,
                 sd_page::ELEC_AC,
-                all(vec![super::ata70::core_running(n as u32), var(&format!("ELEC_DRIVE_{n}_OIL_PRESSURE_PSI")).lt(35.0)]),
+                all(vec![
+                    super::ata70::core_running(n as u32),
+                    // Not while the engine is still starting: below idle the drive's pump has not built pressure yet.
+                    any(vec![
+                        var(&format!("DEEP_ENG_{n}_N3_PICKUP_A_FRAC")).gt(DRIVE_OIL_MONITOR_N3_FRACTION),
+                        var(&format!("DEEP_ENG_{n}_N3_PICKUP_B_FRAC")).gt(DRIVE_OIL_MONITOR_N3_FRACTION),
+                    ]),
+                    var(&format!("ELEC_DRIVE_{n}_OIL_PRESSURE_PSI")).lt(35.0),
+                ]),
                 "FCOM p.4948: the oil pressure is abnormally low (lower than 35 PSI) while the engine turns the drive",
             )
                 .confirm(1.0)

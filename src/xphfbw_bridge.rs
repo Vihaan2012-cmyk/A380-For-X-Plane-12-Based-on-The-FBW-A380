@@ -614,6 +614,31 @@ pub struct DirtyFrame {
 }
 
 impl ScreenHeader {
+    /// The writer's side of the pixel lock: waits out an upload in progress (at most a few ms).
+    pub fn begin_write(&self) {
+        let until = std::time::Instant::now() + std::time::Duration::from_millis(20);
+        while self.writing.compare_exchange(0, 1, Ordering::Acquire, Ordering::Relaxed).is_err() {
+            if std::time::Instant::now() > until {
+                self.writing.store(1, Ordering::Release);
+                return;
+            }
+            std::thread::yield_now();
+        }
+    }
+
+    pub fn end_write(&self) {
+        self.writing.store(0, Ordering::Release);
+    }
+
+    /// The uploader's side: false while pixels are being written, so that frame is skipped instead of torn.
+    pub fn try_begin_read(&self) -> bool {
+        self.writing.compare_exchange(0, 2, Ordering::Acquire, Ordering::Relaxed).is_ok()
+    }
+
+    pub fn end_read(&self) {
+        let _ = self.writing.compare_exchange(2, 0, Ordering::Release, Ordering::Relaxed);
+    }
+
     /// Publishes a paint whose pixels are already written: its changed
     /// rectangles (at most [`MAX_DIRTY_RECTS`]), then the new frame number.
     pub fn publish(&self, rects: &[[u32; 4]]) {

@@ -96,6 +96,18 @@ pub struct SimReadings {
     pub kohlsman_setting_std_4: bool,
 }
 
+/// A resting stick's noise must not read as the pilot taking over: the autopilot disconnects on deflection.
+const STICK_DEAD_BAND: f64 = 0.05;
+
+pub fn stick_dead_band(ratio: f64) -> f64 {
+    let r = ratio.clamp(-1., 1.);
+    if r.abs() <= STICK_DEAD_BAND {
+        0.
+    } else {
+        r.signum() * (r.abs() - STICK_DEAD_BAND) / (1. - STICK_DEAD_BAND)
+    }
+}
+
 impl SimReadings {
     /// MSFS's axes from X-Plane's joystick ratios. FlyByWire's sidestick
     /// position is the negated axis (cpp:2892-2896) and is documented as
@@ -103,7 +115,7 @@ impl SimReadings {
     /// (fbw-a32nx/docs/a320-simvars.md:3850-3873); X-Plane's
     /// yoke_roll/pitch/heading ratios are +1 right / pull / right.
     pub fn from_xplane_axes(pitch_ratio: f64, roll_ratio: f64, heading_ratio: f64) -> [f64; 3] {
-        [-pitch_ratio, -roll_ratio, -heading_ratio]
+        [-stick_dead_band(pitch_ratio), -stick_dead_band(roll_ratio), -heading_ratio]
     }
 
     /// The handler's state from X-Plane's speedbrake handle, where -0.5 is

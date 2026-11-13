@@ -1240,7 +1240,7 @@ impl Displays {
                     }
                 }
             }
-        } else if due && header.writing.load(Ordering::Relaxed) == 0 {
+        } else if due && header.try_begin_read() {
             let frame = header.frame.load(Ordering::Acquire);
             let rects = xphfbw::plan_upload(header.changed_since(bs.last_uploaded, frame), width, height);
             // What this upload actually costs, which is what the frame's
@@ -1275,6 +1275,7 @@ impl Displays {
                 // history, so this one counts as caught up to `frame`.
                 bs.last_uploaded = frame;
             }
+            header.end_read();
         }
         Some((width, height))
     }

@@ -2846,7 +2846,7 @@ impl Plugin {
         }
         self.gear_collapse.report(xplm, delta);
         if !crate::xp_writes_skip("forces") {
-            self.drag_match.update(xplm, delta, true);
+            self.drag_match.update(xplm, delta, true, self.engine_forces.applied_thrust_n());
         }
         self.flight_watch.update(&mut self.vars);
         self.cabin_mood.update(&mut self.vars, xplm, delta);

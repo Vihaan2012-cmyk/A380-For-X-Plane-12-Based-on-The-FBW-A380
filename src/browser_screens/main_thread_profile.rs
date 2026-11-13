@@ -180,7 +180,14 @@ struct Stacks {
     leaf: HashMap<usize, u32>,
     chromium_leaf: HashMap<usize, u32>,
     plugin_functions: HashMap<(usize, usize), u32>,
+    system_callers: HashMap<usize, u32>,
+    system_call_sites: HashMap<(usize, usize), u32>,
+    driver_callers: HashMap<(usize, usize), u32>,
 }
+
+const DRIVER: [&str; 3] = ["nvoglv64.dll", "nvgpucomp64.dll", "nvoglv32.dll"];
+
+const SYSTEM: [&str; 6] = ["ntdll.dll", "kernelbase.dll", "kernel32.dll", "win32u.dll", "ucrtbase.dll", "user32.dll"];
 
 impl Stacks {
     /// `frames` from `capture`. A leaf outside every module counts under `list.len()`.
@@ -193,6 +200,19 @@ impl Stacks {
         if frames.iter().any(|(pc, _)| in_module(chromium, *pc)) {
             self.under_chromium += 1;
             *self.chromium_leaf.entry(leaf).or_default() += 1;
+        }
+        let system = |m: usize| list.get(m).is_some_and(|m| SYSTEM.iter().any(|s| m.label.eq_ignore_ascii_case(s)));
+        if system(leaf) {
+            if let Some((m, start)) = frames.iter().find_map(|(pc, start)| find(list, *pc).filter(|m| !system(*m)).map(|m| (m, *start))) {
+                *self.system_callers.entry(m).or_default() += 1;
+                *self.system_call_sites.entry((m, start - list[m].base)).or_default() += 1;
+            }
+        }
+        let driver = |m: usize| list.get(m).is_some_and(|m| DRIVER.iter().any(|s| m.label.eq_ignore_ascii_case(s)));
+        if frames.iter().any(|(pc, _)| find(list, *pc).is_some_and(driver)) {
+            if let Some((m, start)) = frames.iter().find_map(|(pc, start)| find(list, *pc).filter(|m| !system(*m) && !driver(*m)).map(|m| (m, *start))) {
+                *self.driver_callers.entry((m, start - list[m].base)).or_default() += 1;
+            }
         }
         if let Some(&(_, start)) = frames.iter().find(|(pc, _)| in_module(ours, *pc)) {
             self.under_plugin += 1;
@@ -219,6 +239,17 @@ impl Stacks {
             format!("main thread: {} samples, our plugin in the stack {:.1}%, Chromium {:.1}%; leaf: {}", self.total, pct(self.under_plugin), pct(self.under_chromium), by_module(&self.leaf)),
             format!("main thread under Chromium, by leaf: {}", by_module(&self.chromium_leaf)),
             format!("main thread in our plugin: {}", functions.join(", ")),
+            format!("main thread in system code (ntdll and friends), by the module that called it: {}", by_module(&self.system_callers)),
+            format!("main thread in system code, by call site: {}", {
+                let mut sites: Vec<_> = self.system_call_sites.iter().collect();
+                sites.sort_by_key(|(_, n)| std::cmp::Reverse(**n));
+                sites.iter().take(12).map(|((m, rva), n)| format!("{}+{rva:x} {:.1}", name(*m), pct(**n))).collect::<Vec<_>>().join(", ")
+            }),
+            format!("main thread in the graphics driver, by who called it: {}", {
+                let mut sites: Vec<_> = self.driver_callers.iter().collect();
+                sites.sort_by_key(|(_, n)| std::cmp::Reverse(**n));
+                sites.iter().take(16).map(|((m, rva), n)| format!("{}+{rva:x} {:.1}", name(*m), pct(**n))).collect::<Vec<_>>().join(", ")
+            }),
         ]
     }
 }

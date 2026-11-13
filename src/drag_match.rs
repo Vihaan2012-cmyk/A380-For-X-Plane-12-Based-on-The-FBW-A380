@@ -139,7 +139,8 @@ impl DragMatch {
         }
     }
 
-    pub fn update(&mut self, xplm: &Xplm, dt: f64, enabled: bool) {
+    /// `our_thrust_n`: the thrust `engine_forces` applied, since X-Plane's `faxil_prop` reads back 0 once overridden.
+    pub fn update(&mut self, xplm: &Xplm, dt: f64, enabled: bool, our_thrust_n: Option<f64>) {
         let r = |d: Option<DataRef>| d.map_or(0.0, |d| xplm.get_f(d) as f64);
         let mut gear = [0f32; 5];
         if let Some(d) = self.refs.gear {
@@ -149,7 +150,7 @@ impl DragMatch {
         let s = Sample {
             airborne: enabled && !self.refs.on_ground.is_some_and(|d| xplm.get_i(d) != 0),
             mass_kg: r(self.refs.mass),
-            thrust_n: -r(self.refs.prop),
+            thrust_n: our_thrust_n.unwrap_or_else(|| -r(self.refs.prop)),
             nx: r(self.refs.nx),
             nz: r(self.refs.nz),
             q_pa: 0.5 * r(self.refs.rho) * tas * tas,

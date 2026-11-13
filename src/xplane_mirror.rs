@@ -38,11 +38,6 @@
 //! | `sim/cockpit2/engine/indicators/N2_percent:n` | `ENGINE_N3:n` | A380's HP spool (N3) feeds X-Plane's generic "N2" slot, the same convention `engine_commands.rs` already uses for `ENGN_N2_` |
 //! | `sim/cockpit2/engine/indicators/EGT_deg_cel:n` | `ENGINE_EGT:n` | direct, deg C |
 //! | `sim/cockpit2/engine/indicators/fuel_flow_kg_sec:n` | `ENGINE_FUEL_DEMAND_KG_S:n` | already kg/s (unlike `ENGINE_FF:n`, which is kg/h) |
-//! | `sim/cockpit2/electrical/battery_on:n` | `ELEC_BAT_n_POTENTIAL` (n=1..4) | `on_from_potential`: >1 V |
-//! | `sim/cockpit2/electrical/battery_voltage_actual_volts:n` | `ELEC_BAT_n_POTENTIAL` | direct, the physics workstream's Kirchhoff-solved terminal voltage (`docs/physics/electrical.md`) |
-//! | `sim/cockpit2/electrical/generator_on:n` | `ELEC_ENG_GEN_n_POTENTIAL` (n=1..4) | `on_from_potential` |
-//! | `sim/cockpit2/electrical/APU_generator_on` | `ELEC_APU_GEN_1_POTENTIAL` or `_2_POTENTIAL` | either APU generator on |
-//! | `sim/cockpit2/electrical/bus_volts:0..5` | `ELEC_<bus>_BUS_POTENTIAL` | curated 6-of-16 buses, see [`BUS_SLOTS`] |
 //! | `sim/cockpit2/autopilot/heading_dial_deg_mag_pilot` | `A32NX_AUTOPILOT_HEADING_SELECTED` | skipped while dashed (-1 sentinel) |
 //! | `sim/cockpit2/autopilot/altitude_dial_ft` | `A32NX_FCU_AFS_DISPLAY_ALT_VALUE` | direct, feet |
 //! | `sim/cockpit2/autopilot/airspeed_dial_kts_mach` | `A32NX_AUTOPILOT_SPEED_SELECTED` | skipped while dashed (-1 sentinel) |
@@ -122,13 +117,6 @@ use systems::simulation::{SimulatorReaderWriter, VariableRegistry};
 use crate::xp::{DataRef, Xplm};
 use crate::Vars;
 
-/// The curated 6-of-16 systems.cfg buses shown on X-Plane's generic
-/// `bus_volts[6]` array (`circuits.rs`'s `MSFS_BUSES` has all 16; X-Plane's
-/// array has no slots of its own to spare for the rest). Index into
-/// `bus_volts`, and the `circuits.rs`/`ELEC_<name>_BUS_POTENTIAL` name.
-const BUS_SLOTS: [(usize, &str); 6] =
-    [(0, "AC_ESS"), (1, "DC_ESS"), (2, "AC_1"), (3, "AC_2"), (4, "DC_1"), (5, "DC_2")];
-
 /// X-Plane's dataref handles, looked up once. Kept as `usize` (not
 /// [`DataRef`]/`*mut c_void`) purely so `OnceLock<Refs>` is `Sync`, the same
 /// trick `xp.rs`'s `probe_terrain_y` uses for its probe handle.
@@ -137,11 +125,6 @@ struct Refs {
     n2_percent: Option<usize>,
     egt_deg_cel: Option<usize>,
     fuel_flow_kg_sec: Option<usize>,
-    battery_on: Option<usize>,
-    battery_voltage_actual_volts: Option<usize>,
-    generator_on: Option<usize>,
-    apu_generator_on: Option<usize>,
-    bus_volts: Option<usize>,
     heading_dial: Option<usize>,
     altitude_dial: Option<usize>,
     airspeed_dial_mach: Option<usize>,
@@ -163,11 +146,6 @@ impl Refs {
             n2_percent: f("sim/cockpit2/engine/indicators/N2_percent"),
             egt_deg_cel: f("sim/cockpit2/engine/indicators/EGT_deg_cel"),
             fuel_flow_kg_sec: f("sim/cockpit2/engine/indicators/fuel_flow_kg_sec"),
-            battery_on: f("sim/cockpit2/electrical/battery_on"),
-            battery_voltage_actual_volts: f("sim/cockpit2/electrical/battery_voltage_actual_volts"),
-            generator_on: f("sim/cockpit2/electrical/generator_on"),
-            apu_generator_on: f("sim/cockpit2/electrical/APU_generator_on"),
-            bus_volts: f("sim/cockpit2/electrical/bus_volts"),
             heading_dial: f("sim/cockpit2/autopilot/heading_dial_deg_mag_pilot"),
             altitude_dial: f("sim/cockpit2/autopilot/altitude_dial_ft"),
             airspeed_dial_mach: f("sim/cockpit2/autopilot/airspeed_dial_kts_mach"),
@@ -220,14 +198,6 @@ fn set_at_i(xplm: &Xplm, d: Option<DataRef>, i: usize, value: i32) {
     }
 }
 
-/// Whether a battery/generator terminal voltage means "on": the physics
-/// workstream's Kirchhoff-solved potential (`docs/physics/electrical.md`)
-/// sags under load but never legitimately reads within a volt of zero while
-/// live, so 1 V is a safe, unfussy threshold (matching the kind of
-/// on/off-from-a-measurement thresholds `sensors.rs` already uses elsewhere).
-fn on_from_potential(volts: f64) -> bool {
-    volts > 1.0
-}
 
 /// FlyByWire's own "-1 means dashed" sentinel (`prim.rs`'s
 /// `A32NX_AUTOPILOT_HEADING_SELECTED`/`_SPEED_SELECTED`) turned into an
@@ -290,23 +260,7 @@ pub fn update(vars: &mut Vars, xplm: &Xplm) {
         set_at(xplm, dr(r.fuel_flow_kg_sec), i, ff);
     }
 
-    // -- Electrical: batteries, generators, curated bus voltages --------
-    for (i, n) in (1..=4usize).enumerate() {
-        let potential = v(vars, format!("ELEC_BAT_{n}_POTENTIAL"));
-        set_at_i(xplm, dr(r.battery_on), i, on_from_potential(potential) as i32);
-        set_at(xplm, dr(r.battery_voltage_actual_volts), i, potential);
-    }
-    for (i, n) in (1..=4usize).enumerate() {
-        let potential = v(vars, format!("ELEC_ENG_GEN_{n}_POTENTIAL"));
-        set_at_i(xplm, dr(r.generator_on), i, on_from_potential(potential) as i32);
-    }
-    let apu1 = v(vars, "ELEC_APU_GEN_1_POTENTIAL");
-    let apu2 = v(vars, "ELEC_APU_GEN_2_POTENTIAL");
-    set_scalar_i(xplm, dr(r.apu_generator_on), (on_from_potential(apu1) || on_from_potential(apu2)) as i32);
-    for &(i, bus) in &BUS_SLOTS {
-        let potential = v(vars, format!("ELEC_{bus}_BUS_POTENTIAL"));
-        set_at(xplm, dr(r.bus_volts), i, potential);
-    }
+    // X-Plane's electrical state is left to lights.rs: writing FlyByWire's buses here starved X-Plane's own lights.
 
     // -- Autopilot / FCU -------------------------------------------------
     let ap1 = v(vars, "A32NX_AUTOPILOT_1_ACTIVE") != 0.;
@@ -348,13 +302,6 @@ pub fn update(vars: &mut Vars, xplm: &Xplm) {
 mod tests {
     use super::*;
 
-    #[test]
-    fn on_from_potential_thresholds_at_one_volt() {
-        assert!(!on_from_potential(0.));
-        assert!(!on_from_potential(0.9));
-        assert!(on_from_potential(1.1));
-        assert!(on_from_potential(115.));
-    }
 
     #[test]
     fn dash_sentinel_hides_negative_values_only() {
@@ -386,14 +333,6 @@ mod tests {
         assert_eq!(bool_to_i(-1.), 1, "FlyByWire's own bool simvars are only ever 0/1, but a stray nonzero should still read as on");
     }
 
-    #[test]
-    fn bus_slots_cover_six_distinct_indices_into_the_curated_buses() {
-        let mut indices: Vec<usize> = BUS_SLOTS.iter().map(|&(i, _)| i).collect();
-        indices.sort_unstable();
-        assert_eq!(indices, vec![0, 1, 2, 3, 4, 5]);
-        let names: std::collections::HashSet<&str> = BUS_SLOTS.iter().map(|&(_, n)| n).collect();
-        assert_eq!(names.len(), BUS_SLOTS.len(), "no bus repeated across slots");
-    }
 
     #[test]
     fn dr_round_trips_a_pointer_sized_handle() {

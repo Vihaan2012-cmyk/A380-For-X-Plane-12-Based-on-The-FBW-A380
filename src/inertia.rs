@@ -1,6 +1,6 @@
 //! X-Plane's moments of inertia built the way MSFS builds FlyByWire's: the empty aircraft's MOI from
 //! flight_model.cfg plus every payload station and fuel tank as a point mass, about the loaded CG.
-//! Off unless `xphfbw.fbwInertia` is on: the .acf's control power was matched to X-Plane's own figures.
+//! On unless `xphfbw.fbwInertia` is false, so the control laws fly the inertia FlyByWire tuned them for.
 
 use crate::mass_balance::Mass;
 use crate::xp::{DataRef, Xplm};

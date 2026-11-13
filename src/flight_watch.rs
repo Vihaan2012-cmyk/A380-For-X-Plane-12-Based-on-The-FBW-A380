@@ -13,6 +13,8 @@ struct Ids {
     ias: VariableIdentifier,
     level: [VariableIdentifier; 2],
     low: [VariableIdentifier; 2],
+    modes: [VariableIdentifier; 5],
+    vs: VariableIdentifier,
 }
 
 #[derive(Default)]
@@ -20,6 +22,7 @@ pub struct FlightWatch {
     ids: Option<Ids>,
     phase: Option<f64>,
     low: [bool; 2],
+    modes: Option<[f64; 5]>,
 }
 
 fn phase_name(v: f64) -> String {
@@ -36,6 +39,8 @@ impl FlightWatch {
             ias: vars.get("AIRSPEED INDICATED".to_owned()),
             level: LOOPS.map(|l| vars.get(format!("HYD_{l}_RESERVOIR_LEVEL"))),
             low: LOOPS.map(|l| vars.get(format!("HYD_{l}_RESERVOIR_LEVEL_IS_LOW"))),
+            modes: ["A32NX_FMA_LATERAL_MODE", "A32NX_FMA_VERTICAL_MODE", "A32NX_FMA_VERTICAL_ARMED", "A32NX_FG_ALTITUDE_CONSTRAINT", "A32NX_AUTOPILOT_1_ACTIVE"].map(|n| vars.get(n.to_owned())),
+            vs: vars.get("VERTICAL SPEED".to_owned()),
         });
         let phase = vars.read(&ids.phase);
         if self.phase.is_some_and(|p| p != phase) {
@@ -52,6 +57,14 @@ impl FlightWatch {
             ));
         }
         self.phase = Some(phase);
+        let modes = ids.modes.map(|id| vars.read(&id));
+        if self.modes.is_some_and(|m| m != modes) {
+            crate::log(&format!(
+                "fma: lateral {} vertical {} armed {} | constraint {:.0} ft, AP1 {} | {:.0} ft, VS {:.0} fpm, IAS {:.0} kt, phase {}",
+                modes[0], modes[1], modes[2], modes[3], modes[4], vars.read(&ids.altitude), vars.read(&ids.vs), vars.read(&ids.ias), phase_name(phase)
+            ));
+        }
+        self.modes = Some(modes);
         for i in 0..2 {
             let low = vars.read(&ids.low[i]) != 0.;
             let level = vars.read(&ids.level[i]);
