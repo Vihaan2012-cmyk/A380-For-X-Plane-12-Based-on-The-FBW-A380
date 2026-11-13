@@ -580,12 +580,13 @@ fn control_of(l: &Leaf) -> Option<Control> {
         // an XMLVAR_ local (Home::Local) so the clip shows the real detent
         // (OFF vs AUTO vs ON) even though the system dataref itself only
         // has two values.
+        // Position 0 is OFF and 2 is ON (ANIMTIP_0 offers ON), as a tester found in the sim.
         "ASOBO_LIGHTING_Switch_Light_Strobe_Template" if get(l, "NODE_ID") == Some("SWITCH_OVHD_EXTLT_STROBE") => {
             let pos = "L:XMLVAR_SWITCH_OVHD_EXTLT_STROBE_Position";
             let codes = vec![
-                format!("0 (>{pos}) 1 (>A:LIGHT STROBE)"),
+                format!("0 (>{pos}) 0 (>A:LIGHT STROBE)"),
                 format!("1 (>{pos}) 1 (>A:LIGHT STROBE)"),
-                format!("2 (>{pos}) 0 (>A:LIGHT STROBE)"),
+                format!("2 (>{pos}) 1 (>A:LIGHT STROBE)"),
             ];
             Some(mk(
                 Ok(Action::States { codes, current: format!("({pos})"), knob: false, horizontal: false, momentary: None }),
