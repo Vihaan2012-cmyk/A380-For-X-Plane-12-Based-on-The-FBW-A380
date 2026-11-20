@@ -166,6 +166,8 @@ mod terrain_probe;
 // [slot modules: radios] NAV, ADF and COM receivers, their key events, the manual LS tuning.
 mod published;
 mod radios;
+mod surv_panel;
+mod ground_service_panel;
 // [slot modules: surveillance] The SURV panel: transponder/TCAS system
 // select, TCAS TA ONLY/range, WXR/TAWS lane select, G/S mode inhibit.
 pub(crate) mod surveillance;
@@ -1535,6 +1537,8 @@ struct Plugin {
     /// sends (afs_events::EfisKnobs).
     efis_knobs: afs_events::EfisKnobs,
     efis_buttons: afs_events::EfisButtons,
+    surv_panel: surv_panel::SurvPanel,
+    ground_service_panel: ground_service_panel::GroundServicePanel,
     /// The script engine, when the plugin has scripts.
     #[cfg(feature = "js")]
     js: Option<js_bridge::JsHost>,
@@ -2053,6 +2057,8 @@ impl Plugin {
         let key_events = key_events::KeyEvents::new(xplm);
         let efis_knobs = afs_events::EfisKnobs::new();
         let efis_buttons = afs_events::EfisButtons::new();
+        let surv_panel = surv_panel::SurvPanel::new(&mut vars);
+        let ground_service_panel = ground_service_panel::GroundServicePanel::new(&mut vars);
         // [slot new: js] FlyByWire's instruments (js_bridge.rs), and their
         // fbw/hevent/ commands.
         #[cfg(feature = "js")]
@@ -2231,6 +2237,8 @@ impl Plugin {
             key_events,
             efis_knobs,
             efis_buttons,
+            surv_panel,
+            ground_service_panel,
             #[cfg(feature = "js")]
             js,
             gaps_logged: false,
@@ -2531,6 +2539,8 @@ impl Plugin {
         afs_events::set_backups(backed_up("A380X_FCU_BKUP_AFS_ACTIVE"), [backed_up("A380X_FCU_BKUP_EFIS_L_ACTIVE"), backed_up("A380X_FCU_BKUP_EFIS_R_ACTIVE")]);
         self.efis_knobs.update(xplm);
         self.efis_buttons.update(xplm);
+        self.surv_panel.update(&mut self.vars, xplm);
+        self.ground_service_panel.update(&mut self.vars);
         let events = afs_events::take();
         // Sidestick priority takeover pushbuttons: a held state (see
         // afs_events::PriorityTakeoverCommands), written straight into the
@@ -3566,7 +3576,8 @@ fn start_systems(start_state: StartState, vars: &mut Vars) -> remote::Systems {
     seed_overhead_defaults();
     const SERVER_EXE: &str = "fbw_a380_systems_server.exe";
     let env_in_process = std::env::var("FBW_SYSTEMS_IN_PROCESS").is_ok_and(|v| v == "1");
-    let out_of_process = app_settings::systems_out_of_process() && !env_in_process;
+    // XPHFBW.exe and the systems server are Windows programs.
+    let out_of_process = cfg!(windows) && app_settings::systems_out_of_process() && !env_in_process;
     #[cfg(feature = "js")]
     let browser = browser_screens::enabled();
     #[cfg(feature = "js")]

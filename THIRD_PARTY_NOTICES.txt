@@ -36,7 +36,9 @@ supported by FlyByWire Simulations, Microsoft, Laminar Research or Airbus.
    The npm packages bundled into the instrument pages and the Rust crates
    built into the systems plugin, the display host and the installer are under MIT,
    Apache-2.0, BSD, ISC, Zlib, Unicode and similar licenses. Each one's
-   license text is in THIRD_PARTY_LICENSES.txt.
+   license text is in THIRD_PARTY_LICENSES.txt. The C++ displays
+   (a380-displays) use nlohmann/json (MIT, license text at the top of
+   a380-displays/third_party/nlohmann/json.hpp) and Google's Skia (BSD).
 
 5. Chromium Embedded Framework (plugins/fbw_a380_systems/XPHFBW)
    BSD license, see XPHFBW/CEF-LICENSE.txt. Chromium and its third-party

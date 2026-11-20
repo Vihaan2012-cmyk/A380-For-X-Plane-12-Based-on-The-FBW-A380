@@ -33,6 +33,7 @@ function parseArgs(argv) {
     else if (a === '--verbose' || a === '-v') args.verbose = true;
     else if (a === '--systems-host') args.systemsHost = true;
     else if (a === '--eval') args.evaluate = next();
+    else if (a === '--paint-probe') args.paintProbe = Number(next());
     else if (a === '--jobs') args.jobs = Math.max(1, Number(next()));
     else if (a === '--cpu') args.gpu = false;
     else if (a === '--runtime') args.runtime = next();
@@ -43,6 +44,58 @@ function parseArgs(argv) {
     } else throw new Error(`unknown argument ${a}`);
   }
   return args;
+}
+
+// Traces N more frames and writes what Chromium repainted each frame: area, layers and the nodes behind each paint.
+async function paintProbe(page, screen, state, args, frameMs) {
+  const cdp = await page.context().newCDPSession(page);
+  const events = [];
+  cdp.on('Tracing.dataCollected', (e) => events.push(...e.value));
+  const done = new Promise((resolve) => cdp.once('Tracing.tracingComplete', resolve));
+  await cdp.send('Tracing.start', { traceConfig: { includedCategories: ['devtools.timeline', 'disabled-by-default-devtools.timeline', 'disabled-by-default-devtools.timeline.frame'] }, transferMode: 'ReportEvents' });
+  for (let f = 0; f < args.paintProbe; f++) {
+    await page.evaluate((ms) => window.__refStep(ms), frameMs);
+    if (process.env.PAINT_PROBE_SANITY) await page.evaluate((f) => { document.body.style.outline = `${f % 2}px solid red`; }, f);
+    await page.waitForTimeout(60);
+  }
+  await cdp.send('Tracing.end');
+  await done;
+  const paints = events.filter((e) => e.name === 'Paint' && e.args?.data);
+  const area = (q) => (q && q.length >= 8 ? Math.abs((q[2] - q[0]) * (q[5] - q[1])) : 0);
+  const byNode = new Map();
+  let total = 0;
+  for (const p of paints) {
+    const a = area(p.args.data.clip);
+    total += a;
+    const k = p.args.data.nodeId ?? 'none';
+    const s = byNode.get(k) ?? { area: 0, count: 0, layer: p.args.data.layerId };
+    s.area += a;
+    s.count += 1;
+    byNode.set(k, s);
+  }
+  await cdp.send('DOM.getDocument', { depth: 0 });
+  const top = [...byNode.entries()].sort((a, b) => b[1].area - a[1].area).slice(0, 15);
+  const described = [];
+  for (const [id, s] of top) {
+    let node = '?';
+    if (typeof id === 'number') {
+      try {
+        const { node: n } = await cdp.send('DOM.describeNode', { backendNodeId: id, depth: 0 });
+        node = `${n.localName}${n.attributes ? ' ' + JSON.stringify(Object.fromEntries(n.attributes.reduce((o, v, i, arr) => (i % 2 ? o : [...o, [v, arr[i + 1]]]), []).filter(([k]) => ['id', 'class'].includes(k)))) : ''}`;
+      } catch {
+        node = 'gone';
+      }
+    }
+    described.push({ node, area: Math.round(s.area), count: s.count, layer: s.layer });
+  }
+  const screenArea = screen.width * screen.height;
+  const names = {};
+  for (const e of events) names[e.name] = (names[e.name] ?? 0) + 1;
+  const out = { screen: screen.name, frames: args.paintProbe, paints: paints.length, eventNames: Object.fromEntries(Object.entries(names).sort((a, b) => b[1] - a[1]).slice(0, 40)), screensPerFrame: +(total / screenArea / args.paintProbe).toFixed(3), top: described };
+  const dir = path.join(args.out, state.name);
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(path.join(dir, `${screen.name}.paint.json`), JSON.stringify(out, null, 1));
+  console.log(`    paint: ${out.paints} paints in ${out.frames} frames, ${out.screensPerFrame} screens of pixels per frame`);
 }
 
 async function renderScreen({ browser, server, screen, state, args, hostScripts }) {
@@ -94,6 +147,7 @@ async function renderScreen({ browser, server, screen, state, args, hostScripts 
     if (args.domEvery && (f + 1) % args.domEvery === 0 && f + 1 < frames) await snapDom(`frame ${f + 1}`);
   }
   await page.evaluate(() => document.fonts.ready.then(() => true));
+  if (args.paintProbe) await paintProbe(page, screen, state, args, frameMs);
   const frozen = await page.evaluate(() => window.__refFreezeAnimations());
   if (args.evaluate) {
     const result = await page.evaluate((expr) => {

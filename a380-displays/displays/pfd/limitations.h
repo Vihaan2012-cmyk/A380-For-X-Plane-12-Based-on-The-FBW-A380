@@ -1,0 +1,43 @@
+#pragma once
+
+namespace a380::pfd {
+
+struct LimitationText { long long id; const char* text; };
+inline const LimitationText kLimitations[] = {
+    {1LL, "\x1b<2mLAND ASAP"},
+    {2LL, "\x1b<4mLAND ANSA"},
+    {210400001LL, "\x1b<5mMAX FL : 100/MEA-MORA"},
+    {210400003LL, "\x1b<5mMAN PRESS : DO NOT USE"},
+    {210400004LL, "\x1b<5mAVOID HI DESCENT V/S"},
+    {220400001LL, "\x1b<5mNO AUTOLAND"},
+    {230400001LL, "\x1b<5mNO COM AVAIL"},
+    {240400001LL, "\x1b<5mGA THR : TOGA ONLY"},
+    {240400002LL, "\x1b<5mMAX SPEED: 310/.86"},
+    {240400003LL, "\x1b<5mSPD BRK: DO NOT USE"},
+    {240400004LL, "\x1b<5mMANEUVER WITH CARE"},
+    {260400001LL, "\x1b<5mAPU BLEED DO NOT USE"},
+    {260400002LL, "\x1b<5mMAX SPEED : 250/.55"},
+    {270400001LL, "\x1b<5mFOR LDG : FLAP LVR 3"},
+    {270400002LL, "\x1b<5mMAX SPEED: 310 KT"},
+    {270400003LL, "\x1b<5mUSE RUDDER WITH CARE"},
+    {270400004LL, "\x1b<5mFOR LDG : FLAP LVR 1"},
+    {290400001LL, "\x1b<5mSLATS SLOW"},
+    {290400002LL, "\x1b<5mFLAPS SLOW"},
+    {300400001LL, "\x1b<5mAVOID ICING CONDs"},
+    {320400001LL, "\x1b<5mMAX SPEED : 220 KT"},
+    {320400002LL, "\x1b<5mL/G GRVTY EXTN ONLY"},
+    {320400003LL, "\x1b<5mSTEER ENDUR LIMITED"},
+    {320400004LL, "\x1b<5mAUTO BRK:DO NOT USE"},
+    {340400001LL, "\x1b<5mALL SPEED : MAX 330 / M .82"},
+    {700400001LL, "\x1b<5mREV : SYM USE ONLY"},
+    {800400001LL, "\x1b<5mFUEL CONSUMPT INCRSD"},
+    {800400002LL, "\x1b<5mLDG DIST AFFECTED"},
+    {800400003LL, "\x1b<5mLDG PERF AFFECTED"},
+    {800400004LL, "\x1b<5mFOR GA : KEEP S/F CONF"},
+    {800400005LL, "\x1b<5mMAX DIFF PR : 1 PSI"},
+    {800400006LL, "\x1b<5mMAX SPEED : 300/.85"},
+    {800400007LL, "\x1b<5mMIN SPEED : GREEN DOT"},
+    {800400008LL, "\x1b<5mTURB SPEED:"},
+};
+
+}  // namespace a380::pfd

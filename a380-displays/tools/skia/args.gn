@@ -1,0 +1,27 @@
+is_official_build = true
+is_debug = false
+target_cpu = "x64"
+win_vc = "E:/VS/2022/Community/VC"
+extra_cflags = [ "/MD", "/DGR_AA_TESSELLATOR_MAX_VERB_COUNT=100" ]
+skia_enable_ganesh = true
+skia_use_gl = true
+skia_enable_graphite = false
+skia_enable_pdf = false
+skia_enable_skottie = false
+skia_enable_svg = false
+skia_use_icu = false
+skia_use_harfbuzz = false
+skia_use_freetype = false
+skia_use_expat = true
+skia_use_system_expat = false
+skia_use_system_libpng = false
+skia_use_system_zlib = false
+skia_use_libjpeg_turbo_decode = false
+skia_use_libjpeg_turbo_encode = false
+skia_use_libwebp_decode = false
+skia_use_libwebp_encode = false
+skia_use_dng_sdk = false
+skia_use_xps = false
+skia_use_libavif = false
+skia_use_libjxl_decode = false
+skia_use_wuffs = true

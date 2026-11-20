@@ -101,6 +101,7 @@ pub struct ElectricalControls {
     pub commercial_pb_on: bool,
     pub drive_disc_pressed: [bool; 4],
     pub ext_pwr_pb_on: [bool; 4],
+    pub gnd_svc_select: bool,
     pub apu_start_pb_on: bool,
 }
 
@@ -123,6 +124,7 @@ impl Default for ElectricalControls {
             commercial_pb_on: true,
             drive_disc_pressed: [false; 4],
             ext_pwr_pb_on: [true; 4],
+            gnd_svc_select: false,
             apu_start_pb_on: false,
         }
     }

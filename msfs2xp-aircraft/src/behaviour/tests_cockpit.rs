@@ -913,3 +913,51 @@ fn an_inverted_switch_animation_runs_backwards_as_asobos_anim_code_runs_it() {
     assert_eq!(at("switch_glareshield_cs_oit_side", "L:A380X_SWITCH_OIT_SIDE_LEFT", 0.0), 100.0);
     assert_eq!(at("switch_laptop_cs_power", "L:A380X_SWITCH_LAPTOP_POWER_LEFT", 1.0), 100.0, "a switch without INVERT_ANIM keeps its direction");
 }
+
+#[test]
+fn an_inverted_three_position_switch_runs_backwards_and_its_up_click_moves_it_up() {
+    // A380_Cockpit_Behavior.xml's SEAT BELTS switch (INVERT_ANIM True): position 0 (ON) is the lever's last frame.
+    let lib = library(
+        &[],
+        r###"
+        <Component ID="Switches">
+            <UseTemplate Name="ASOBO_GT_Switch_3States">
+                <NODE_ID>SWITCH_OVHD_INTLT_SEATBELT</NODE_ID>
+                <ANIM_NAME>SWITCH_OVHD_INTLT_SEATBELT</ANIM_NAME>
+                <SWITCH_POSITION_TYPE>L</SWITCH_POSITION_TYPE>
+                <SWITCH_POSITION_VAR>XMLVAR_SWITCH_OVHD_INTLT_SEATBELT_Position</SWITCH_POSITION_VAR>
+                <CODE_POS_0>1 (&gt;L:A32NX_TEST_SIGNS)</CODE_POS_0>
+                <CODE_POS_1>0 (&gt;L:A32NX_TEST_SIGNS)</CODE_POS_1>
+                <CODE_POS_2>0 (&gt;L:A32NX_TEST_SIGNS)</CODE_POS_2>
+                <INVERT_ANIM>True</INVERT_ANIM>
+            </UseTemplate>
+            <UseTemplate Name="ASOBO_GT_Switch_3States">
+                <NODE_ID>SWITCH_TEST_PLAIN</NODE_ID>
+                <ANIM_NAME>SWITCH_TEST_PLAIN</ANIM_NAME>
+                <SWITCH_POSITION_TYPE>L</SWITCH_POSITION_TYPE>
+                <SWITCH_POSITION_VAR>XMLVAR_SWITCH_TEST_PLAIN_Position</SWITCH_POSITION_VAR>
+                <CODE_POS_0>1 (&gt;L:A32NX_TEST_PLAIN)</CODE_POS_0>
+                <CODE_POS_1>0 (&gt;L:A32NX_TEST_PLAIN)</CODE_POS_1>
+                <CODE_POS_2>2 (&gt;L:A32NX_TEST_PLAIN)</CODE_POS_2>
+            </UseTemplate>
+        </Component>"###,
+    );
+    let leaves = expand::expand(&lib).leaves;
+    let (controls, _) = bind::controls(&leaves);
+    let look = |anim: &str, var: &str, v: f64| match &controls.iter().find(|c| c.anim == anim).unwrap().look {
+        bind::Look::Code { code, .. } => value(code, &[(var, v)]),
+        other => panic!("{other:?}"),
+    };
+    assert_eq!(look("SWITCH_OVHD_INTLT_SEATBELT", "L:XMLVAR_SWITCH_OVHD_INTLT_SEATBELT_Position", 0.0), 200.0);
+    assert_eq!(look("SWITCH_OVHD_INTLT_SEATBELT", "L:XMLVAR_SWITCH_OVHD_INTLT_SEATBELT_Position", 2.0), 0.0);
+    assert_eq!(look("SWITCH_TEST_PLAIN", "L:XMLVAR_SWITCH_TEST_PLAIN_Position", 2.0), 200.0, "a switch without INVERT_ANIM keeps its direction");
+    let r = bind::resolve_all(&leaves);
+    let script = |anim: &str| match &r.binding(anim).unwrap_or_else(|| panic!("{anim}: {:?}", r.unresolved)).click {
+        Click::Script(sc) => (sc.up.clone().unwrap(), sc.down.clone().unwrap()),
+        other => panic!("{other:?}"),
+    };
+    let (up, down) = script("SWITCH_OVHD_INTLT_SEATBELT");
+    assert!(up.contains("now + (-1)") && down.contains("now + (1)"), "the up click steps toward ON (position 0): {up}");
+    let (up, _) = script("SWITCH_TEST_PLAIN");
+    assert!(up.contains("now + (1)"), "{up}");
+}

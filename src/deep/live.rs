@@ -623,6 +623,8 @@ pub struct Controls {
     /// `[1..4]`: the EXT PWR pushbuttons, each its own external power
     /// contactor's command.
     pub ext_pwr_pb_on: [bool; 4],
+    /// The ground-service panel's GND SELECT CTL pushbutton: ground servicing from EXT 1.
+    pub gnd_svc_select: bool,
     /// `true` when the ground-spoiler/speedbrake lever is in the ARMED
     /// detent (X-Plane's own handle convention: pulled past the aft stop).
     /// No real manual galley-shed pushbutton exists in this port either;
@@ -710,6 +712,7 @@ impl Default for Controls {
             commercial_pb_on: true,
             drive_disc_pressed: [false; 4],
             ext_pwr_pb_on: [true; 4],
+            gnd_svc_select: false,
             ground_spoiler_lever_armed: false,
             apu_master_sw_on: false,
             apu_start_pb_on: false,

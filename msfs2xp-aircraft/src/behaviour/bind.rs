@@ -410,7 +410,7 @@ fn control_of(l: &Leaf) -> Option<Control> {
                 Some(mk(Ok(Action::Click { press, release: None }), Look::Code { code: format!("({v}) 100 *"), length: 100.0 }))
             } else {
                 let codes = (0..states).map(|i| format!("{i} (>{v})")).collect();
-                Some(mk(Ok(Action::States { codes, current: format!("({v})"), knob: false, horizontal, momentary: None }), Look::Code { code: format!("({v}) 100 *"), length: ((states - 1) * 100) as f64 }))
+                Some(mk(Ok(Action::States { codes, current: format!("({v})"), knob: false, horizontal, momentary: None }), states_look(l, &format!("({v})"), states)))
             }
         }
         _ if t.starts_with("ASOBO_GT_Switch_") && t.ends_with("States") => {
@@ -431,7 +431,7 @@ fn control_of(l: &Leaf) -> Option<Control> {
                 format!("({v})")
             };
             let momentary = truthy(l, "MOMENTARY_SWITCH").then_some((if states == 3 { 1 } else { 0 }, num(l, "MOMENTARY_REPEAT_FREQUENCY").filter(|hz| *hz > 0.0)));
-            let look = Look::Code { code: format!("{current} 100 *"), length: ((states.max(2) - 1) * 100) as f64 };
+            let look = states_look(l, &current, states);
             let knob = anim.to_ascii_uppercase().contains("KNOB");
             Some(mk(Ok(Action::States { codes, current, knob, horizontal, momentary }), look))
         }
@@ -673,6 +673,24 @@ fn control_of(l: &Leaf) -> Option<Control> {
 fn inverted(l: &Leaf) -> bool {
     get(l, "INVERT_ANIM").is_some_and(|v| v.trim() == "1" || v.trim().eq_ignore_ascii_case("true"))
 }
+
+/// A multi-position switch's look, run backwards under INVERT_ANIM as Asobo's anim code runs it.
+fn states_look(l: &Leaf, current: &str, states: usize) -> Look {
+    let length = (states.max(2) - 1) * 100;
+    let code = if inverted(l) { format!("{length} {current} 100 * -") } else { format!("{current} 100 *") };
+    Look::Code { code, length: length as f64 }
+}
+
+/// Switches whose clip moves toward position 0 as it moves up on screen from the pilot's eye (survey of a380_cockpit_click.obj).
+const UP_STEPS_DOWN: &[&str] = &[
+    "SWITCH_OVHD_INTLT_SEATBELT",
+    "SWITCH_OVHD_INTLT_NOSMOKING",
+    "SWITCH_OVHD_EXTLT_LOGO",
+    "SWITCH_OVHD_EXTLT_NOSE",
+    "SWITCH_DOOR_LOCK",
+    "SEAT_CPT_MOVE_UP_DOWN_CLICK",
+    "SEAT_FO_MOVE_UP_DOWN_CLICK",
+];
 
 fn anim_code_fed_back(l: &Leaf, code: &str) -> String {
     if !code.contains("O:AnimCode") {
@@ -1562,7 +1580,8 @@ fn resolve(c: &Control, extra_look: Option<&Look>) -> Result<Binding, String> {
             }
             let looks = look_lua(&look, &id).ok().flatten();
             let n = codes.len();
-            if momentary.is_none() {
+            let up_step = if UP_STEPS_DOWN.contains(&c.anim.as_str()) { -1 } else { 1 };
+            if momentary.is_none() && up_step == 1 {
                 // Strip the switch's own position write when judging positions:
                 // positions that set one systems variable linearly.
                 let sys_only: Vec<String> = codes.clone();
@@ -1599,8 +1618,8 @@ fn resolve(c: &Control, extra_look: Option<&Look>) -> Result<Binding, String> {
                 to_lua(&format!("{rest} (>{var})"), &id).ok()
             });
             let script = Script {
-                up: Some(go(1)),
-                down: Some(go(-1)),
+                up: Some(go(up_step)),
+                down: Some(go(-up_step)),
                 up_release: back.clone(),
                 down_release: back,
                 repeat: again.as_ref().map(|a| a.0.clone()),

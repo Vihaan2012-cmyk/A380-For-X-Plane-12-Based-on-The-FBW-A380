@@ -792,6 +792,11 @@ impl Host for ViewHost<'_> {
                 p => full.push(p),
             }
         }
+        if !full.exists() {
+            if let Some(found) = crate::browser_screens::server::on_disk(&self.shared.root, &full) {
+                full = found;
+            }
+        }
         let text = std::fs::read_to_string(&full).map_err(|e| format!("{path} ({}): {e}", full.display()))?;
         let patches = &self.shared.patches;
         let outer = &mut self.outer;

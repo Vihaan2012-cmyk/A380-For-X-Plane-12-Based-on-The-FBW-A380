@@ -31,6 +31,16 @@ fn full_rate(screen: &str) -> bool {
     matches!(screen, "SCREEN_DU_PFDL" | "SCREEN_DU_PFDR" | "SCREEN_DU_NDL" | "SCREEN_DU_NDR")
 }
 
+/// Screens only seen from inside the aircraft: drawing them while the view is outside is wasted, unless they
+/// are in a window of their own. The MFD, OIT, EFB, FCU, RMP, clock and HUD keep drawing.
+pub fn unseen_outside(screen: &str) -> bool {
+    const INSIDE_ONLY: &[&str] = &[
+        "SCREEN_DU_PFDL", "SCREEN_DU_PFDR", "SCREEN_DU_NDL", "SCREEN_DU_NDR", "SCREEN_DU_EWD", "SCREEN_DU_SD",
+        "SCREEN_ISIS_1", "SCREEN_ISIS_2", "RTPI", "BAT", "SCREEN_IFE", "SCREEN_FAP",
+    ];
+    INSIDE_ONLY.iter().any(|k| k.eq_ignore_ascii_case(screen))
+}
+
 /// The sim frame counter the main thread bumps once a frame and the render
 /// thread waits on: one render pass per sim frame.
 #[derive(Default)]
@@ -325,11 +335,17 @@ struct Slot {
 struct Pace {
     due: Vec<AtomicBool>,
     published: Vec<Condvar>,
+    /// Set by the main thread: nobody can see this screen, so its render thread leaves it alone.
+    unseen: Vec<AtomicBool>,
 }
 
 impl Pace {
     fn new(n: usize) -> Self {
-        Self { due: (0..n).map(|_| AtomicBool::new(false)).collect(), published: (0..n).map(|_| Condvar::new()).collect() }
+        Self {
+            due: (0..n).map(|_| AtomicBool::new(false)).collect(),
+            published: (0..n).map(|_| Condvar::new()).collect(),
+            unseen: (0..n).map(|_| AtomicBool::new(false)).collect(),
+        }
     }
 
     fn done(&self, slots: &[Mutex<Slot>], i: usize) {
@@ -467,6 +483,18 @@ impl Native {
     /// One sim frame has passed: the render thread draws what changed.
     pub fn frame(&self) {
         self.tick.bump();
+    }
+
+    /// The screen in each slot.
+    pub fn screens(&self) -> &[&'static str] {
+        &self.screens
+    }
+
+    /// Marks a slot's screen as one nobody can see now; its render thread stops drawing it until it is seen.
+    pub fn set_unseen(&self, slot: usize, unseen: bool) {
+        if let Some(u) = self.pace.unseen.get(slot) {
+            u.store(unseen, Ordering::Relaxed);
+        }
     }
 
     pub fn slot_of(&self, screen_id: &str) -> Option<usize> {
@@ -859,7 +887,7 @@ fn render_thread(specs: Vec<(usize, Spec)>, mut feed: Box<dyn Feed>, slots: Arc<
         let started = Instant::now();
         let count = live.len();
         for (i, s) in live.iter().enumerate() {
-            if s.as_ref().is_some_and(|s| full_rate(s.spec.target.screen)) {
+            if s.as_ref().is_some_and(|s| full_rate(s.spec.target.screen)) && !pace.unseen[globals[i]].load(Ordering::Relaxed) {
                 pace.due[globals[i]].store(true, Ordering::Relaxed);
             }
         }
@@ -869,6 +897,10 @@ fn render_thread(specs: Vec<(usize, Spec)>, mut feed: Box<dyn Feed>, slots: Arc<
             .collect();
         let (mut slow_drew, mut forced) = (false, false);
         for index in order {
+            if pace.unseen[globals[index]].load(Ordering::Relaxed) {
+                pace.done(&slots, globals[index]);
+                continue;
+            }
             let slow = live[index].as_ref().is_some_and(|s| !full_rate(s.spec.target.screen));
             let mut force = false;
             if slow && slow_drew && started.elapsed() >= PASS_BUDGET {
@@ -999,6 +1031,16 @@ mod tests {
 
     fn screens_of(spec: &str) -> Vec<&'static str> {
         parse(spec).targets.iter().map(|t| t.screen).collect()
+    }
+
+    #[test]
+    fn from_outside_only_the_screens_that_do_work_keep_drawing() {
+        for s in ["SCREEN_DU_PFDL", "SCREEN_DU_NDR", "SCREEN_DU_EWD", "SCREEN_DU_SD", "SCREEN_ISIS_1", "BAT", "RTPI", "SCREEN_IFE"] {
+            assert!(unseen_outside(s), "{s}");
+        }
+        for s in ["SCREEN_DU_MFD", "SCREEN_EFB", "SCREEN_OIT_LEFT", "FCU", "Clock", "SCREEN_DU_RMP_1", "SCREEN_HUD_L"] {
+            assert!(!unseen_outside(s), "{s}");
+        }
     }
 
     #[test]

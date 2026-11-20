@@ -158,6 +158,8 @@ fn reverser_indicated(commanded_in_reverse: bool, magnitude: f64, locked: &mut O
 }
 
 struct EngineIds {
+    /// `deep::engine_accessories`' FADEC start sequencer phase (`start_sequencer::Phase::code`).
+    start_phase: VariableIdentifier,
     tla: VariableIdentifier,
     tla_n1: VariableIdentifier,
     reverse: VariableIdentifier,
@@ -342,6 +344,7 @@ pub struct EngineCommands {
     start_trace_at: [Option<std::time::Instant>; 4],
     /// `FBW_ENG_STATS` only.
     stats_at: Option<std::time::Instant>,
+    summary_at: Option<std::time::Instant>,
     /// `AIRCRAFT_PRESET_QUICK_MODE`: set while a preset is being applied in
     /// expedited mode, which is the default (`aircraft_presets.rs`).
     preset_quick_mode: VariableIdentifier,
@@ -457,6 +460,7 @@ impl EngineCommands {
 
     pub fn new(vars: &mut Vars, xplm: &Xplm) -> Self {
         let engine = |vars: &mut Vars, n: usize| EngineIds {
+            start_phase: vars.get(format!("ENG_{n}_START_PHASE")),
             tla: vars.get(format!("AUTOTHRUST_TLA:{n}")),
             tla_n1: vars.get(format!("AUTOTHRUST_TLA_N1:{n}")),
             reverse: vars.get(format!("AUTOTHRUST_REVERSE:{n}")),
@@ -550,6 +554,7 @@ impl EngineCommands {
             speed_trim: [0.0; 4],
             start_trace_at: [None; 4],
             stats_at: None,
+            summary_at: None,
             preset_quick_mode: vars.get("AIRCRAFT_PRESET_QUICK_MODE".to_owned()),
             apu_bleed_open: vars.get("APU_BLEED_AIR_VALVE_OPEN".to_owned()),
             apu_n: vars.get("APU_N_RAW".to_owned()),
@@ -682,6 +687,7 @@ impl EngineCommands {
         // scheduled limit say whether the core is being starved of the air
         // that would otherwise carry that heat away.
         let mut stats_line = String::new();
+        let mut summary = String::new();
         let engine_running: [bool; 4] = std::array::from_fn(|i| vars.read(&self.engines[i].state) == 1.);
         let apu_word = crate::prim::from_simvar(vars.read(&self.apu_bleed_pressure));
         let starter_air = StarterAir {
@@ -769,6 +775,12 @@ impl EngineCommands {
                 && matches!(state, fadec::EngineState::Starting | fadec::EngineState::Restarting)
                 && timer >= 1.7;
             // 80_000+i "starter valve stuck": the valve holds where it stuck.
+            let sequence = if quick { StartGate::Free } else { start_gate(vars.read(&e.start_phase)) };
+            let starter_commanded = match sequence {
+                StartGate::Crank => true,
+                StartGate::Stopped => false,
+                _ => starter_commanded,
+            };
             let starter_engaged = starter_valve(starter_commanded, crate::failures::magnitude(80_000 + i as u64), &mut self.starter_valve_held[i]);
             vars.write(&e.eng_failed, eng_failed(master, state) as i32 as f64);
             vars.write(&e.eng_combustion, eng_combustion(state) as i32 as f64);
@@ -788,7 +800,7 @@ impl EngineCommands {
                     oat,
                     mach,
                 ),
-                fuel_valve_open: fuel_commanded(master, state, on_ground),
+                fuel_valve_open: fuel_commanded(master, state, on_ground) && !matches!(sequence, StartGate::Crank | StartGate::Stopped),
                 starter_engaged,
                 // 74_000+i "ignition fault".
                 ignition_available: ignition_available(crate::failures::magnitude(74_000 + i as u64)),
@@ -957,6 +969,15 @@ impl EngineCommands {
                         port,
                     ));
                 }
+                summary.push_str(&format!(
+                    " {}: N1 {:.1} of {:.1} (lever {:.1}), {:.0} kN, TGT {:.0} C;",
+                    i + 1,
+                    phys.n1_pct,
+                    vars.read(&n1_commanded),
+                    o.N1_TLA_percent,
+                    phys.net_thrust_n / 1000.,
+                    phys.egt_c
+                ));
             }
             // 73_004+i "fuel metering valve stuck": the valve sits upstream
             // of the fuel flow transmitter and physically decouples the
@@ -1042,6 +1063,13 @@ impl EngineCommands {
                 xplm.set_vf_at(d, i, ratio as f32);
             }
         }
+        if !summary.is_empty() && engine_running.iter().all(|&r| r) {
+            let now = std::time::Instant::now();
+            if !self.summary_at.is_some_and(|t| now - t < std::time::Duration::from_secs(60)) {
+                self.summary_at = Some(now);
+                crate::log(&format!("engines:{summary}"));
+            }
+        }
         if stats_on() && !stats_line.is_empty() {
             let now = std::time::Instant::now();
             if !self.stats_at.is_some_and(|t| now - t < std::time::Duration::from_secs(2)) {
@@ -1073,6 +1101,66 @@ impl EngineCommands {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// An auto start through the FADEC sequencer and the engine model together: the 20 s rotor-bow crank,
+    /// fuel, light-off and idle, with no fault and no abort; then a start with no ignition is aborted.
+    fn auto_start(ignition: bool) -> (crate::deep::engine_accessories::start_sequencer::StartOutputs, crate::physics::engine::EngineOutputs, f64) {
+        use crate::deep::engine_accessories::start_sequencer::{Phase, StartInputs, StartSelector, StartSequencer};
+        let d = crate::physics::engine::engine_data::TRENT_900;
+        let mut seq = StartSequencer::new();
+        let mut engine = Engine::new();
+        let mut inputs = crate::physics::engine::tests::isa_sea_level();
+        inputs.target_n1_corrected_pct = crate::physics::engine::params::IDLE_N1_PCT;
+        inputs.ignition_available = ignition;
+        let dt = inputs.dt_s;
+        let mut out = crate::physics::engine::EngineOutputs::default();
+        let mut s = seq.step(&d, &StartInputs { selector: StartSelector::IgnStart, master_on: false, man_start_on: false, on_ground: true, cas_kt: 0., hp_pct: 0., lp_pct: 0., egt_c: 15., valve_position: 0., starter_failed: false, stall: false, lit: false }, dt);
+        let mut t = 0.;
+        let mut fuel_at = None;
+        while t < 240. {
+            s = seq.step(&d, &StartInputs { selector: StartSelector::IgnStart, master_on: true, man_start_on: false, on_ground: true, cas_kt: 0., hp_pct: out.n3_pct, lp_pct: out.n1_pct, egt_c: out.egt_c, valve_position: if s.valve_open { 1. } else { 0. }, starter_failed: false, stall: false, lit: out.n3_pct > 50. && out.egt_c > 300. }, dt);
+            let gate = start_gate(s.phase.code());
+            inputs.starter_engaged = s.valve_open;
+            inputs.fuel_valve_open = !matches!(gate, StartGate::Crank | StartGate::Stopped);
+            if inputs.fuel_valve_open && fuel_at.is_none() {
+                fuel_at = Some(t);
+            }
+            out = engine.step(&inputs);
+            t += dt;
+            if s.phase == Phase::Running || s.phase == Phase::Aborted {
+                break;
+            }
+        }
+        (s, out, fuel_at.unwrap_or(f64::NAN))
+    }
+
+    #[test]
+    fn an_auto_start_cranks_for_the_rotor_bow_then_lights_and_runs() {
+        use crate::deep::engine_accessories::start_sequencer::Phase;
+        let (s, out, fuel_at) = auto_start(true);
+        println!("auto start: phase {:?} fault {:?} fuel at {fuel_at:.1} s, N3 {:.1} EGT {:.0}", s.phase, s.fault, out.n3_pct, out.egt_c);
+        assert_eq!(s.phase, Phase::Running, "fault {:?}", s.fault);
+        assert!(s.fault.is_none());
+        assert!(fuel_at > 20., "fuel came {fuel_at:.1} s into the start, before the rotor-bow crank");
+    }
+
+    #[test]
+    fn a_start_with_no_ignition_is_retried_then_aborted() {
+        use crate::deep::engine_accessories::start_sequencer::Phase;
+        let (s, _, _) = auto_start(false);
+        assert_eq!(s.phase, Phase::Aborted);
+    }
+
+    #[test]
+    fn the_start_sequencer_cranks_dry_holds_fuel_and_stops_an_aborted_start() {
+        for phase in [1., 4., 6., 8.] {
+            assert_eq!(start_gate(phase), StartGate::Crank, "phase {phase}");
+        }
+        assert_eq!(start_gate(5.), StartGate::Stopped);
+        for phase in [0., 2., 3., 7., 9., 10., 11.] {
+            assert_eq!(start_gate(phase), StartGate::Free, "phase {phase}");
+        }
+    }
 
     #[test]
     fn the_starter_turns_only_with_air_on_the_ground() {
@@ -1617,6 +1705,23 @@ pub(crate) fn speed_limiter(trim: &mut f64, last: &crate::physics::engine::Engin
 
 /// Whether the EEC opens the engine's fuel: on the ground only while the engine runs or a start
 /// sequence is under way, so a master switched back on over a core still spinning down does not relight it.
+/// What the FADEC start sequencer allows this tick: cranking without fuel (the 20 s rotor-bow crank,
+/// a dry crank between attempts, a manual or maintenance crank), an aborted start, or no restriction.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum StartGate {
+    Free,
+    Crank,
+    Stopped,
+}
+
+pub(crate) fn start_gate(phase: f64) -> StartGate {
+    match phase.round() as i32 {
+        1 | 4 | 6 | 8 => StartGate::Crank,
+        5 => StartGate::Stopped,
+        _ => StartGate::Free,
+    }
+}
+
 pub(crate) fn fuel_commanded(master: bool, state: fadec::EngineState, on_ground: bool) -> bool {
     master && !(on_ground && matches!(state, fadec::EngineState::Off | fadec::EngineState::Shutting))
 }

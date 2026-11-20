@@ -230,11 +230,9 @@ fn main() {
     // Chromium locks its cache folder to one process: the copy X-Plane starts
     // and one opened by hand (the settings window alone) each keep their own,
     // so either can run while the other is up.
-    let cache = std::env::var("LOCALAPPDATA")
-        .map(PathBuf::from)
-        .unwrap_or_else(|_| exe_dir.clone())
-        .join("XPHFBW")
-        .join(if tag.is_some() { "cache-session" } else { "cache" });
+    let base = std::env::var("LOCALAPPDATA").map(PathBuf::from).unwrap_or_else(|_| exe_dir.clone()).join("XPHFBW");
+    let cache = free_cache_folder(&base, if tag.is_some() { "cache-session" } else { "cache" });
+    logging::log(&format!("app: Chromium cache {}", cache.display()));
     let settings = Settings {
         no_sandbox: 1,
         windowless_rendering_enabled: 1,
@@ -246,10 +244,32 @@ fn main() {
     };
     let _ = window::SHARED.set(shared.clone());
     if initialize(Some(args.as_main_args()), Some(&settings), Some(&mut app), std::ptr::null_mut()) != 1 {
+        logging::log(&format!("app: FATAL: Chromium did not start (its exit code {}, cache {})", get_exit_code(), cache.display()));
         std::process::exit(1);
     }
     run_message_loop();
     shutdown();
+}
+
+/// The first of `name`, `name-2` .. `name-8` whose Chromium lockfile no running copy holds.
+fn free_cache_folder(base: &Path, name: &str) -> PathBuf {
+    let slots: Vec<PathBuf> = (1..=8).map(|n| base.join(if n == 1 { name.to_string() } else { format!("{name}-{n}") })).collect();
+    slots.iter().find(|dir| !lock_held(&dir.join("lockfile"))).cloned().unwrap_or_else(|| slots[0].clone())
+}
+
+#[cfg(windows)]
+fn lock_held(lockfile: &Path) -> bool {
+    use std::os::windows::fs::OpenOptionsExt;
+    const ERROR_SHARING_VIOLATION: i32 = 32;
+    match std::fs::OpenOptions::new().read(true).write(true).share_mode(0).open(lockfile) {
+        Ok(_) => false,
+        Err(e) => e.raw_os_error() == Some(ERROR_SHARING_VIOLATION),
+    }
+}
+
+#[cfg(not(windows))]
+fn lock_held(_lockfile: &Path) -> bool {
+    false
 }
 
 /// The cockpit's gauge HTML this app needs at start: any one file proves
@@ -273,6 +293,21 @@ fn missing_gauge_payload(aircraft_dir: &Path) -> Option<PathBuf> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[cfg(windows)]
+    #[test]
+    fn a_cache_folder_another_copy_holds_is_skipped() {
+        use std::os::windows::fs::OpenOptionsExt;
+        let base = std::env::temp_dir().join("xphfbw-test-cache-slots");
+        let _ = std::fs::remove_dir_all(&base);
+        std::fs::create_dir_all(base.join("cache-session")).unwrap();
+        assert_eq!(free_cache_folder(&base, "cache-session"), base.join("cache-session"));
+        let held = std::fs::OpenOptions::new().read(true).write(true).create(true).share_mode(0).open(base.join("cache-session").join("lockfile")).unwrap();
+        assert_eq!(free_cache_folder(&base, "cache-session"), base.join("cache-session-2"));
+        drop(held);
+        assert_eq!(free_cache_folder(&base, "cache-session"), base.join("cache-session"));
+        let _ = std::fs::remove_dir_all(&base);
+    }
 
     #[test]
     fn missing_gauge_payload_is_none_with_no_aircraft_dir() {

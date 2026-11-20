@@ -59,6 +59,7 @@ fn truth_from(i: &deep_electrical::ElectricalInputs, published: PublishedFrame) 
     t.controls.commercial_pb_on = c.commercial_pb_on;
     t.controls.drive_disc_pressed = c.drive_disc_pressed;
     t.controls.apu_start_pb_on = c.apu_start_pb_on;
+    t.controls.gnd_svc_select = c.gnd_svc_select;
     t.published = published;
     t
 }

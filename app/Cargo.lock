@@ -637,6 +637,7 @@ dependencies = [
  "flate2",
  "fms",
  "fms_host",
+ "fms_lnav",
  "fws",
  "gpws",
  "hosts_misc",
@@ -657,6 +658,7 @@ dependencies = [
  "tcas",
  "terrain_map",
  "uom",
+ "windows",
 ]
 
 [[package]]

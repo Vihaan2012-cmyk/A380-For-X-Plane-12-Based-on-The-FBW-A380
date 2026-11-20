@@ -24,6 +24,8 @@ use super::loads;
 use super::network::{BusId, Network};
 use super::sources;
 
+const GROUND_SERVICE_CONTACTORS: [&str; 2] = ["ext-1-gnd-svc", "gslc"];
+
 /// Sequential-per-ATA-chapter failure numbering (the brief's own "number n
 /// sequentially per ATA chapter" rule).
 struct AtaCounters(HashMap<u16, u16>);
@@ -113,7 +115,8 @@ pub fn register(r: &mut Registry) {
     }
 
     // ---- Every contactor: one component + 2 failures each.
-    for c in &net.contactors {
+    // ATA 24 has no failure numbers left; the ground-servicing contactors take none, and skipping them keeps every other id where it was.
+    for c in net.contactors.iter().filter(|c| !GROUND_SERVICE_CONTACTORS.contains(&c.id)) {
         let comp_id = format!("24_elec.contactor.{}", c.id);
         register_component(r, &mut counters, 24, comp_id, format!("Contactor {}", c.id), "network::Contactor", &CONTACTOR_CHANNELS);
     }

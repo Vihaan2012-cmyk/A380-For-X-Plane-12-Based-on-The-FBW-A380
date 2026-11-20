@@ -490,6 +490,7 @@ fn all_commands_exercised() -> Truth {
             commercial_pb_on: true,
             drive_disc_pressed: [false; 4],
             ext_pwr_pb_on: [true; 4],
+            gnd_svc_select: false,
             ground_spoiler_lever_armed: true,
             apu_master_sw_on: true,
             apu_start_pb_on: true,

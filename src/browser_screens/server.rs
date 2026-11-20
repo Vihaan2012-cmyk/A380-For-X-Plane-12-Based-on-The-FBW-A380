@@ -393,7 +393,7 @@ fn file(gate: &Gate, clean: &str) -> Reply {
                     super::log(&format!("patch ERROR: {msg}"));
                 }
             });
-            if kind == "text/html" { inject_first(&text, RUNTIME_TAGS).into_bytes() } else { text.into_bytes() }
+            if kind == "text/html" { inject_page_scripts(&inject_first(&text, RUNTIME_TAGS), clean).into_bytes() } else { text.into_bytes() }
         }
         Err(e) => e.into_bytes(),
     };
@@ -405,6 +405,20 @@ fn file(gate: &Gate, clean: &str) -> Reply {
 }
 
 const RUNTIME_TAGS: &str = r#"<script src="/__b/shim.js"></script><script src="/__b/runtime/xplane-js-data.js"></script>"#;
+
+/// The MFD page's document snapshot for the native MFD (app/js/mfd-snapshot.js), dormant until L:A380X_NATIVE_MFD_DOM.
+const MFD_SNAPSHOT_TAG: &str = r#"<script src="/__b/runtime/mfd-snapshot.js"></script>"#;
+
+/// `MFD_SNAPSHOT_TAG` at the end of the MFD page's body, after the page's own scripts, as app/src/scheme.rs does.
+fn inject_page_scripts(html: &str, clean: &str) -> String {
+    if !clean.to_ascii_lowercase().ends_with("/instruments/a380x/mfd/mfd.html") {
+        return html.to_string();
+    }
+    match html.to_ascii_lowercase().rfind("</body>") {
+        Some(at) => format!("{}{MFD_SNAPSHOT_TAG}{}", &html[..at], &html[at..]),
+        None => format!("{html}{MFD_SNAPSHOT_TAG}"),
+    }
+}
 
 /// `script` as the first thing in `<head>`, as app/src/scheme.rs places it.
 fn inject_first(html: &str, script: &str) -> String {
@@ -449,7 +463,7 @@ fn resolve(aircraft: &Path, clean: &str) -> Option<PathBuf> {
 
 /// The file as the disk spells it. FlyByWire's panel asks for `FCU/FCU.html` and the file is
 /// `fcu.html`, which only a disk that ignores case forgives.
-fn on_disk(base: &Path, path: &Path) -> Option<PathBuf> {
+pub(crate) fn on_disk(base: &Path, path: &Path) -> Option<PathBuf> {
     let mut found = base.to_path_buf();
     for part in path.strip_prefix(base).ok()?.components() {
         let want = part.as_os_str().to_string_lossy();
@@ -1068,6 +1082,13 @@ mod tests {
     fn page_scripts_go_first_in_the_head() {
         assert_eq!(inject_first("<!doctype html><html><head><meta></head></html>", "<s>"), "<!doctype html><html><head><s><meta></head></html>");
         assert_eq!(inject_first("<div></div>", "<s>"), "<s><div></div>");
+    }
+
+    #[test]
+    fn the_mfd_page_alone_gets_the_native_mfd_snapshot_script() {
+        let mfd = "/Pages/VCockpit/Instruments/A380X/MFD/mfd.html";
+        assert_eq!(inject_page_scripts("<html><body><script src=\"mfd.js\"></script></body></html>", mfd), format!("<html><body><script src=\"mfd.js\"></script>{MFD_SNAPSHOT_TAG}</body></html>"));
+        assert_eq!(inject_page_scripts("<body></body>", "/Pages/VCockpit/Instruments/A380X/PFD/pfd.html"), "<body></body>");
     }
 }
 

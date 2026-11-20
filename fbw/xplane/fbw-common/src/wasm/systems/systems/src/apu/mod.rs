@@ -1599,6 +1599,22 @@ mod tests {
         }
 
         #[test]
+        fn a_pw980_start_takes_about_forty_seconds_to_avail() {
+            let mut test_bed = test_bed_pw980().starting_apu();
+            let mut t = 0.;
+            let mut n_at = Vec::new();
+            while !test_bed.apu_is_available() && t < 120. {
+                test_bed = test_bed.run(Duration::from_millis(100));
+                t += 0.1;
+                if (t * 10.0_f64).round() as i64 % 50 == 0 {
+                    n_at.push((t.round(), test_bed.n().normal_value().unwrap().get::<percent>()));
+                }
+            }
+            println!("pw980 AVAIL after {t:.1} s; N by time {n_at:?}");
+            assert!((35.0..=50.0).contains(&t), "AVAIL after {t:.1} s");
+        }
+
+        #[test]
         fn one_and_a_half_seconds_after_starting_sequence_commences_ignition_starts() {
             // This test does not apply to the PW980
             let mut test_bed = test_bed_with()

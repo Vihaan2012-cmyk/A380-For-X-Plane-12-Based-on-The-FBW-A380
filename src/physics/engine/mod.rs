@@ -1229,6 +1229,18 @@ pub(crate) mod tests {
     }
 
     #[test]
+    #[ignore]
+    fn cruise_tgt_probe() {
+        let clb = crate::fadec::thrust_limits::limit_n1(2, 35_000.0, 218.8 - 273.15, 238.42, 0.0, 1.0, 0.0, 0.0);
+        let mct = crate::fadec::thrust_limits::limit_n1(3, 35_000.0, 218.8 - 273.15, 238.42, 0.0, 1.0, 0.0, 0.0);
+        println!("FL350 ISA: CLB N1 {clb:.2}, MCT N1 {mct:.2}");
+        for n1 in [80.0, 85.0, 90.0, 95.0, clb, 100.0, mct, 104.0] {
+            let out = cruise_at(n1);
+            println!("target CN1 {n1:6.2}: N1 {:6.2} thrust {:6.1} kN TGT {:5.0} C fuel {:.3} kg/s", out.n1_pct, out.net_thrust_n / 1000.0, out.egt_c, out.fuel_flow_kg_s);
+        }
+    }
+
+    #[test]
     fn cruise_fuel_flow_matches_the_published_cruise_sfc() {
         // Trent 900 cruise SFC, M0.85 at 35,000 ft: 16 g/(kN s), 0.56 lb/(lbf h)
         // (Roux, *Turbofan and Turbojet Engines: Database Handbook*). About

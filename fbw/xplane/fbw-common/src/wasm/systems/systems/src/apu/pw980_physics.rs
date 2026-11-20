@@ -232,6 +232,27 @@ const N2_LOAD_BAND_PERCENT: f64 = 2.0;
 /// quasi-statically with `n2()`.
 const OUTPUT_LOCK_N2_PERCENT: f64 = 83.0;
 
+/// Start acceleration schedule, N-points per second against N, fitted to FlyByWire's
+/// video-timed PW980 start (PW980.md: 16 % at 10 s, 32 % at 20 s, 61 % at 30 s, AVAIL near 40 s).
+const START_NDOT_SCHEDULE: [(f64, f64); 4] = [(0.0, 1.6), (24.0, 1.8), (44.0, 3.0), (100.0, 3.4)];
+
+/// The turbine's share of the fuel energy it turns into shaft work, against its design-speed share:
+/// far below design speed the turbine runs off-design and passes more of the heat to the exhaust.
+fn off_design_extraction(n2_percent: f64) -> f64 {
+    (n2_percent / N2_IDLE_PERCENT).clamp(0.0, 1.0).powf(0.8).max(0.45)
+}
+
+fn start_ndot_schedule_pct_s(n_percent: f64) -> f64 {
+    let n = n_percent.max(0.0);
+    for w in START_NDOT_SCHEDULE.windows(2) {
+        let ((n0, r0), (n1, r1)) = (w[0], w[1]);
+        if n <= n1 {
+            return r0 + (r1 - r0) * ((n - n0) / (n1 - n0)).clamp(0.0, 1.0);
+        }
+    }
+    START_NDOT_SCHEDULE[START_NDOT_SCHEDULE.len() - 1].1
+}
+
 /// Gas-generator light-off speed: below this the core is only being
 /// motored by the starter, with no combustion torque yet. Typical small
 /// gas turbine light-off speeds are 8-15% N; matches the point FBW's own
@@ -277,6 +298,8 @@ pub(super) struct Pw980Core {
     oil_pressure: Pressure,
     governor: PidController,
     starter_current: ElectricCurrent,
+    /// A start in progress: from a standstill until the core first reaches its governed speed.
+    starting: bool,
     low_oil_pressure_for: Duration,
     trip: Option<ApuProtectiveTrip>,
     /// Continuous core-compressor + turbine wear (0 = new, 1 = fully
@@ -345,6 +368,7 @@ impl Pw980Core {
                 1.0,
             ),
             starter_current: ElectricCurrent::default(),
+            starting: n2.get::<percent>() < OUTPUT_LOCK_N2_PERCENT,
             low_oil_pressure_for: Duration::ZERO,
             trip: None,
             compressor_efficiency_loss: Ratio::default(),
@@ -572,6 +596,10 @@ impl Pw980Core {
         // Shutdown clears it).
         let running = running && self.trip.is_none();
         let n2_percent = self.n2.get::<percent>();
+        if !running || n2_percent >= OUTPUT_LOCK_N2_PERCENT {
+            self.starting = !running;
+        }
+        let starting = self.starting;
         let omega_rated = n2_rated_angular_velocity();
         let omega2 = omega_rated * (n2_percent / 100.);
 
@@ -594,7 +622,7 @@ impl Pw980Core {
             "eta_turbine_extraction",
             ETA_TURBINE_EXTRACTION * (1.0 - self.turbine_efficiency_loss.get::<ratio>()),
             0.3 * ETA_TURBINE_EXTRACTION,
-        );
+        ) * if starting { off_design_extraction(n2_percent) } else { 1. };
         let load_compressor_efficiency = clamp_degraded_floor(
             "load_compressor_efficiency",
             LOAD_COMPRESSOR_EFFICIENCY * (1.0 - self.load_compressor_efficiency_loss.get::<ratio>()),
@@ -677,8 +705,23 @@ impl Pw980Core {
             * mdot_air
             * CP_GAS_J_PER_KG_K
             / (LHV_JET_A_J_PER_KG * ETA_COMBUSTION);
+        let shaft_load_torque_nm = if omega2.get::<radian_per_second>() > 1. {
+            (elec_shaft_power.get::<watt>() + bleed_power.get::<watt>()) / omega2.get::<radian_per_second>()
+        } else {
+            0.
+        };
+        let fuel_for_start_schedule = if starting {
+            let ndot_rad_s2 = start_ndot_schedule_pct_s(n2_percent) / 100. * omega_rated.get::<radian_per_second>();
+            let torque_nm = CORE_ROTOR_INERTIA_KG_M2 * ndot_rad_s2 + absorption_torque.get::<newton_meter>() + friction_torque.get::<newton_meter>()
+                + shaft_load_torque_nm
+                - starter_torque.get::<newton_meter>();
+            let light_off_ramp = (0.5 + 0.5 * (n2_percent - LIGHT_OFF_N2_PERCENT) / (20. - LIGHT_OFF_N2_PERCENT)).clamp(0.5, 1.);
+            (torque_nm.max(0.) * omega_rated.get::<radian_per_second>() / (LHV_JET_A_J_PER_KG * ETA_COMBUSTION * eta_turbine_extraction)).max(0.) * light_off_ramp
+        } else {
+            MAX_FUEL_FLOW_KG_S
+        };
         self.governor
-            .set_max(fuel_for_egt_limit.min(MAX_FUEL_FLOW_KG_S));
+            .set_max(fuel_for_egt_limit.min(fuel_for_start_schedule).min(MAX_FUEL_FLOW_KG_S));
 
         // The fuel/ignition sequence only introduces fuel once the starter
         // has motored the core up to light-off speed (a real APU start

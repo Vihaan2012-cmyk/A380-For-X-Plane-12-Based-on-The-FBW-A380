@@ -761,6 +761,8 @@ struct Refs {
     com_volume: [Option<DataRef>; 2],
     com_audio: [Option<DataRef>; 2],
     com_selection: Option<DataRef>,
+    com_power: [Option<DataRef>; 2],
+    avionics_power: Option<DataRef>,
     marker_audio: Option<DataRef>,
     markers: [Option<DataRef>; 3],
     psi: Option<DataRef>,
@@ -809,6 +811,8 @@ impl Refs {
             com_volume: [1, 2].map(|n| a(&format!("audio_volume_com{n}"))),
             com_audio: [1, 2].map(|n| a(&format!("audio_selection_com{n}"))),
             com_selection: a("audio_com_selection"),
+            com_power: [1, 2].map(|n| a(&format!("com{n}_power"))),
+            avionics_power: f("sim/cockpit2/switches/avionics_power_on"),
             marker_audio: a("audio_marker_enabled"),
             markers: ["over_outer_marker", "over_middle_marker", "over_inner_marker"].map(i),
             psi: f("sim/flightmodel/position/psi"),
@@ -1215,6 +1219,12 @@ impl Radios {
         let amu = self.amu.read(vars);
         self.receivers.apply_amu(&amu);
         self.write_to_xplane(xplm);
+        // xPilot and other network clients show the radios off while X-Plane's avionics switch is.
+        for d in self.refs.com_power.into_iter().chain([self.refs.avionics_power]).flatten() {
+            if xplm.get_i(d) != amu.healthy as i32 {
+                xplm.set_i(d, amu.healthy as i32);
+            }
+        }
         self.feed_variables(vars, xplm);
     }
 

@@ -168,6 +168,80 @@ struct Pending {
     table: Vec<(&'static str, Kind, bool)>,
 }
 
+/// Keyboard rudder and tiller: X-Plane's rudder_lft/ctr/rgt and our fbw/controls/tiller_* commands.
+#[derive(Clone, Copy, Default)]
+struct KeyAxis {
+    value: f64,
+    pending: f64,
+    held: f64,
+    held_s: f64,
+    centre: bool,
+}
+
+const KEY_RUDDER_STEP: f64 = 0.1;
+const KEY_RUDDER_RATE: f64 = 1.0;
+const KEY_HOLD_DELAY_S: f64 = 0.3;
+const KEY_TILLER_RATE: f64 = 1.0;
+const KEY_TILLER_RETURN: f64 = 2.0;
+
+static KEY_RUDDER: Mutex<KeyAxis> = Mutex::new(KeyAxis { value: 0., pending: 0., held: 0., held_s: 0., centre: false });
+static KEY_TILLER: Mutex<KeyAxis> = Mutex::new(KeyAxis { value: 0., pending: 0., held: 0., held_s: 0., centre: false });
+
+const KEY_COMMANDS: [(&str, &str, usize); 6] = [
+    ("sim/flight_controls/rudder_lft", "", 0),
+    ("sim/flight_controls/rudder_ctr", "", 1),
+    ("sim/flight_controls/rudder_rgt", "", 2),
+    ("fbw/controls/tiller_left", "Steer the nose wheel left with the tiller while held", 3),
+    ("fbw/controls/tiller_center", "Centre the tiller", 4),
+    ("fbw/controls/tiller_right", "Steer the nose wheel right with the tiller while held", 5),
+];
+
+unsafe extern "C" fn key_axis_command(_: CommandRef, phase: c_int, refcon: *mut c_void) -> c_int {
+    let code = refcon as usize;
+    let axis = if code < 3 { &KEY_RUDDER } else { &KEY_TILLER };
+    let Ok(mut a) = axis.lock() else { return 0 };
+    match (code % 3, phase) {
+        (1, 0) => a.centre = true,
+        (0 | 2, 0) => {
+            let dir = if code % 3 == 0 { -1. } else { 1. };
+            if code < 3 {
+                a.pending += dir * KEY_RUDDER_STEP;
+            }
+            a.held = dir;
+            a.held_s = 0.;
+        }
+        (0 | 2, 2) => a.held = 0.,
+        _ => {}
+    }
+    0
+}
+
+/// One tick of a keyboard rudder: a step per press, a steady sweep while held, centred on rudder_ctr.
+fn key_rudder_step(a: &mut KeyAxis, dt: f64) -> f64 {
+    if a.centre {
+        *a = KeyAxis::default();
+    }
+    a.value += a.pending;
+    a.pending = 0.;
+    if a.held != 0. {
+        a.held_s += dt;
+        if a.held_s > KEY_HOLD_DELAY_S {
+            a.value += a.held * KEY_RUDDER_RATE * dt;
+        }
+    }
+    a.value = a.value.clamp(-1., 1.);
+    a.value
+}
+
+/// One tick of a keyboard tiller: it turns while held and springs back to centre when let go.
+fn key_tiller_step(a: &mut KeyAxis, dt: f64) -> f64 {
+    if a.centre {
+        *a = KeyAxis::default();
+    }
+    a.value = if a.held != 0. { (a.value + a.held * KEY_TILLER_RATE * dt).clamp(-1., 1.) } else { step_toward(a.value, 0., KEY_TILLER_RETURN * dt) };
+    a.value
+}
+
 static PENDING: Mutex<Option<Pending>> = Mutex::new(None);
 
 static QUEUED: Mutex<Vec<&'static str>> = Mutex::new(Vec::new());
@@ -410,6 +484,8 @@ pub struct Handling {
     last_inputs_at: Option<f64>,
     systems_dt: f64,
     nose_steer_deg: f64,
+    key_commands: Vec<(CommandRef, usize)>,
+    key_tiller_sent: f64,
 }
 
 const ROLL_STEERING_FADE_S: f64 = 2.;
@@ -495,8 +571,11 @@ impl Handling {
             last_inputs_at: None,
             systems_dt: 0.,
             nose_steer_deg: 0.,
+            key_commands: Vec::new(),
+            key_tiller_sent: 0.,
         };
         handling.register(xplm);
+        handling.register_key_axes(xplm);
         handling
     }
 
@@ -574,9 +653,15 @@ impl Handling {
         let target = if crate::app_settings::current().roll_steering && on_ground { 1. } else { 0. };
         self.roll_share = step_toward(self.roll_share, target, dt / ROLL_STEERING_FADE_S);
         let roll = self.refs.yoke_roll.map_or(0., |d| xplm.get_f(d) as f64);
-        let yaw = self.yaw_waking.read(self.axes[4]);
-        self.rudder_axis = rudder_axis(yaw, roll, self.roll_share);
+        let key_yaw = KEY_RUDDER.lock().map_or(0., |mut a| key_rudder_step(&mut a, dt));
+        let yaw = self.yaw_waking.read(self.axes[4]).map_or(key_yaw, |v| v + key_yaw);
+        self.rudder_axis = rudder_axis(Some(yaw), roll, self.roll_share);
         vars.write(&self.ids.rudder_pedal_position, 100. * self.rudder_axis);
+        let key_tiller = KEY_TILLER.lock().map_or(0., |mut a| key_tiller_step(&mut a, dt));
+        if key_tiller != self.key_tiller_sent {
+            self.key_tiller_sent = key_tiller;
+            self.aspects.handle(vars, "AXIS_STEERING_SET", aspects::f64_to_pos_32k((1. - key_tiller) / 2.), t);
+        }
 
         self.cockpit_levers(vars, xplm);
     }
@@ -842,7 +927,25 @@ impl Handling {
     }
 
     /// Hand gear, brakes and steering back to X-Plane.
+    fn register_key_axes(&mut self, xplm: &Xplm) {
+        for a in [&KEY_RUDDER, &KEY_TILLER] {
+            if let Ok(mut a) = a.lock() {
+                *a = KeyAxis::default();
+            }
+        }
+        for (name, description, code) in KEY_COMMANDS {
+            let command = if description.is_empty() { crate::xp::find_command(name) } else { xplm.create_command(name, description) };
+            if let Some(command) = command {
+                crate::xp::add_command_handler(command, key_axis_command, true, code as *mut c_void);
+                self.key_commands.push((command, code));
+            }
+        }
+    }
+
     pub fn release(&mut self, xplm: &Xplm) {
+        for (command, code) in self.key_commands.drain(..) {
+            crate::xp::remove_command_handler(command, key_axis_command, true, code as *mut c_void);
+        }
         for d in self.refs.overrides().into_iter().flatten() {
             xplm.set_i(d, 0);
         }
@@ -858,6 +961,35 @@ impl Handling {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_keyboard_rudder_steps_per_press_sweeps_while_held_and_centres() {
+        let mut a = KeyAxis { pending: KEY_RUDDER_STEP, held: 1., ..KeyAxis::default() };
+        assert!((key_rudder_step(&mut a, 0.1) - 0.1).abs() < 1e-9);
+        for _ in 0..10 {
+            key_rudder_step(&mut a, 0.1);
+        }
+        assert!(a.value > 0.8 && a.value <= 1.);
+        a.held = 0.;
+        let held = key_rudder_step(&mut a, 0.1);
+        assert_eq!(key_rudder_step(&mut a, 0.1), held);
+        a.centre = true;
+        assert_eq!(key_rudder_step(&mut a, 0.1), 0.);
+    }
+
+    #[test]
+    fn a_keyboard_tiller_turns_while_held_and_springs_back() {
+        let mut a = KeyAxis { held: -1., ..KeyAxis::default() };
+        for _ in 0..5 {
+            key_tiller_step(&mut a, 0.1);
+        }
+        assert!((a.value + 0.5).abs() < 1e-9);
+        a.held = 0.;
+        for _ in 0..3 {
+            key_tiller_step(&mut a, 0.1);
+        }
+        assert_eq!(a.value, 0.);
+    }
 
     #[test]
     fn centred_pedals_sit_mid_clip_as_fbws_anim_code_puts_them() {

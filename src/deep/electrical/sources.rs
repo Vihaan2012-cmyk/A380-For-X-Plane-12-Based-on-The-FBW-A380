@@ -745,6 +745,15 @@ impl ChargeLimiter {
 pub const TR_COUNT: usize = 5;
 /// Each unit's AC input: BCRU 1 from AC 2, BCRU 2 and TR 2 from AC 3, BCRU ESS from AC ESS, APU TR from AC 4.
 pub const TR_AC_INPUT: [BusId; TR_COUNT] = [BusId::Ac2, BusId::Ac3, BusId::AcEss, BusId::Ac4, BusId::Ac3];
+
+/// BCRU 2 is supplied by the AC ground-service bus in ground servicing (A380 TTM ATA 24).
+pub fn tr_ac_input(i: usize, ground_service: bool) -> BusId {
+    if ground_service && i == 1 {
+        BusId::AcGndFltSvc
+    } else {
+        TR_AC_INPUT[i]
+    }
+}
 /// And the DC bus each feeds.
 pub const TR_DC_OUTPUT: [BusId; TR_COUNT] = [BusId::Dc1, BusId::Dc2, BusId::DcEss, BusId::DcApu, BusId::Dc2];
 
@@ -897,6 +906,9 @@ impl Wiring {
             net.add_contactor(Contactor::new(contactor_id, ContactorKind::Feeder, FeedSource::Source(gpu), bus, MIN_RESISTANCE_OHM));
         }
 
+        net.add_contactor(Contactor::new("ext-1-gnd-svc", ContactorKind::Feeder, FeedSource::Source(gpu), BusId::AcGndFltSvc, MIN_RESISTANCE_OHM));
+        net.add_contactor(Contactor::new("gslc", ContactorKind::Feeder, FeedSource::Source(tr[1]), BusId::DcGndFltSvc, MIN_RESISTANCE_OHM));
+
         let rat = net.add_source(Source::new("rat"));
         // The emergency generator supplies AC ESS (FCOM DSC-24-10-40, FlyByWire's 5XE).
         net.add_contactor(Contactor::new("rat-line", ContactorKind::Feeder, FeedSource::Source(rat), BusId::AcEss, MIN_RESISTANCE_OHM));
@@ -933,7 +945,7 @@ impl Wiring {
             let out = self.apu_gen[i].step(ApuGeneratorInputs { apu_speed_fraction: inputs.apu_speed_fraction, measured_load_w: inputs.measured_apu_gen_load_w[i] }, inputs.apu_gen_faults[i], dt_s);
             net.set_source(self.source_index.apu_gen[i], out.open_circuit_v, out.resistance_ohm, out.frequency_hz);
         }
-        let ac_powered = TR_AC_INPUT.map(|b| net.bus(b).voltage > 90.0);
+        let ac_powered: [bool; TR_COUNT] = std::array::from_fn(|i| net.bus(tr_ac_input(i, inputs.ground_service)).voltage > 90.0);
         for i in 0..TR_COUNT {
             let (v, r) = self.tru[i].terminal(ac_powered[i], inputs.tru_faults[i]);
             net.set_source(self.source_index.tr[i], v, r, 0.0);
@@ -965,7 +977,7 @@ impl Wiring {
         for i in 0..4usize {
             self.battery[i].step(inputs.measured_battery_current_a[i], inputs.battery_faults[i], inputs.ambient_c, dt_s);
         }
-        let ac_powered = TR_AC_INPUT.map(|b| net.bus(b).voltage > 90.0);
+        let ac_powered: [bool; TR_COUNT] = std::array::from_fn(|i| net.bus(tr_ac_input(i, inputs.ground_service)).voltage > 90.0);
         for i in 0..TR_COUNT {
             self.tru[i].step(ac_powered[i], inputs.measured_tr_load_w[i], inputs.tru_faults[i], inputs.ambient_c, dt_s);
         }
@@ -993,6 +1005,8 @@ pub struct WiringInputs {
     pub airspeed_kt: f64,
     pub rat_faults: RatFaults,
     pub ambient_c: f64,
+    /// Ground servicing: EXT 1 on the ground-service buses alone, BCRU 2 fed from AC GND/FLT SVC.
+    pub ground_service: bool,
 }
 
 impl Default for WiringInputs {
@@ -1014,6 +1028,7 @@ impl Default for WiringInputs {
             airspeed_kt: 0.0,
             rat_faults: RatFaults::default(),
             ambient_c: 15.0,
+            ground_service: false,
         }
     }
 }

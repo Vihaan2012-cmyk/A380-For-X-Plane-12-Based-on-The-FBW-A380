@@ -375,6 +375,7 @@ struct ControlIds {
     /// `A32NX_EXT_PWR_AVAIL:{1..4}`, for `Truth::gpu_plugged_in`.
     ext_pwr_avail: [VariableIdentifier; 4],
     ext_pwr_pb_on: [VariableIdentifier; 4],
+    gnd_svc_select: VariableIdentifier,
     /// `A32NX_LGCIU_1_{NOSE,LEFT,RIGHT}_GEAR_COMPRESSED`, for
     /// `Truth::leg_on_ground`.
     lgciu_gear_compressed: [VariableIdentifier; 3],
@@ -443,6 +444,7 @@ impl ControlIds {
             apu_start_pb_on: vars.get("OVHD_APU_START_PB_IS_ON".to_owned()),
             ext_pwr_avail: [1, 2, 3, 4].map(|n| vars.get(format!("EXT_PWR_AVAIL:{n}"))),
             ext_pwr_pb_on: [1, 2, 3, 4].map(|n| vars.get(format!("OVHD_ELEC_EXT_PWR_{n}_PB_IS_ON"))),
+            gnd_svc_select: vars.get("ELEC_GND_SVC_SELECT_PB_IS_ON".to_owned()),
             lgciu_gear_compressed: ["NOSE", "LEFT", "RIGHT"].map(|s| vars.get(format!("LGCIU_1_{s}_GEAR_COMPRESSED"))),
             cabin_delta_pressure: vars.get("PRESS_CPC_1_CABIN_DELTA_PRESSURE".to_owned()),
             cabin_temp_c: vars.get("COND_MAIN_DECK_1_TEMP".to_owned()),
@@ -1057,6 +1059,7 @@ impl DeepLayer {
             controls.commercial_pb_on = vars.read(&c.commercial_pb_on) != 0.0;
             controls.drive_disc_pressed = c.drive_disc_pressed.map(|id| vars.read(&id) != 0.0);
             controls.ext_pwr_pb_on = c.ext_pwr_pb_on.map(|id| vars.read(&id) != 0.0);
+            controls.gnd_svc_select = vars.read(&c.gnd_svc_select) != 0.0;
             controls.apu_master_sw_on = vars.read(&c.apu_master_sw_on) != 0.0;
             controls.apu_start_pb_on = vars.read(&c.apu_start_pb_on) != 0.0;
             // E-ELEC Phase 2: `340800018 NAV CAPT AND F/O BARO REF

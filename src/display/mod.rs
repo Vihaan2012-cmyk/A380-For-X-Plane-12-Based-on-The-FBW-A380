@@ -1849,13 +1849,41 @@ impl Displays {
         log(&line);
     }
 
+    /// Which native screens nobody can see: from outside the aircraft, the flight deck and cabin
+    /// screens that are not in a window of their own.
+    #[cfg(feature = "native-displays")]
+    fn native_unseen(&self) -> Vec<bool> {
+        static OUTSIDE: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+        let Some(route) = self.native.as_ref() else { return Vec::new() };
+        let outside = self.xplm.and_then(|x| x.find("sim/graphics/view/view_is_external").map(|d| x.get_i(d) != 0)).unwrap_or(false);
+        let flags: Vec<bool> = route
+            .source
+            .screens()
+            .iter()
+            .map(|id| {
+                outside
+                    && crate::native_displays::screen::unseen_outside(id)
+                    && !self.screens.iter().position(|s| s.def.id.eq_ignore_ascii_case(id)).is_some_and(|i| popout::is_shown(self, i))
+            })
+            .collect();
+        if OUTSIDE.swap(outside, std::sync::atomic::Ordering::Relaxed) != outside {
+            let paused = flags.iter().filter(|u| **u).count();
+            log(&if outside { format!("native displays: view outside, {paused} screens stop drawing") } else { "native displays: view inside, all screens drawing".to_string() });
+        }
+        flags
+    }
+
     /// Tells XPHFBW which views to stop painting and, every 10 s, logs what
     /// the native screens and the Chromium ones cost. Nothing runs without a
     /// native route.
     #[cfg(feature = "native-displays")]
     fn native_tick(&mut self) {
         let started = std::time::Instant::now();
+        let unseen = self.native_unseen();
         let Some(route) = self.native.as_mut() else { return };
+        for (slot, u) in unseen.iter().enumerate() {
+            route.source.set_unseen(slot, *u);
+        }
         route.source.frame();
         route.cost_frames += 1;
         if route.cost_at.elapsed() >= crate::native_displays::cost::REPORT_EVERY {

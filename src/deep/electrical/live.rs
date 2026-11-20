@@ -89,6 +89,12 @@ const AC_OVERVOLTAGE_TRIP_V: f64 = 118.0;
 /// already derives and cites from MIL-STD-704F: below this a 28 V DC source
 /// is no longer holding its own bus up at all, which is what a TR FAULT or a
 /// BAT FAULT annunciates.
+/// Ground servicing: the GND SELECT CTL pushbutton on the ground with a cart plugged in, until a
+/// normal source comes on line, which always takes priority (A380 TTM ATA 24, PCDM).
+fn ground_service_mode(selected: bool, on_ground: bool, gpu_live: bool, normal_source_on_line: bool) -> bool {
+    selected && on_ground && gpu_live && !normal_source_on_line
+}
+
 fn dc_undervoltage_trip_v() -> f64 {
     BusId::Dc1.nominal_voltage() * 0.85
 }
@@ -1119,6 +1125,8 @@ pub struct ElectricalLive {
     gen_pb_on: [bool; 4],
     /// Seconds since BCRU 1, BCRU 2 and BCRU ESS last had their AC input.
     bcru_ac_lost_s: [f64; 3],
+    /// Ground servicing (GND SELECT CTL): EXT 1 supplies only the ground-service buses.
+    ground_service: bool,
     tefo: bool,
     drive_low_pressure_s: [f64; 4],
     drive_hot_s: [f64; 4],
@@ -1133,6 +1141,8 @@ struct ContactorIndices {
     static_inv_line: usize,
     bat_direct: [usize; 4],
     gpu_line: [usize; 4],
+    ext_1_gnd_svc: usize,
+    gslc: usize,
     rat_line: usize,
     /// BTC 1-6 and the SIC.
     btc: [usize; 6],
@@ -1335,6 +1345,8 @@ impl ElectricalLive {
             static_inv_line: find_c(&net, "static-inv-line"),
             bat_direct: [1, 2, 3, 4].map(|n| find_c(&net, &format!("bat-{n}-direct"))),
             gpu_line: [1, 2, 3, 4].map(|n| find_c(&net, &format!("gpu-{n}-line"))),
+            ext_1_gnd_svc: find_c(&net, "ext-1-gnd-svc"),
+            gslc: find_c(&net, "gslc"),
             rat_line: find_c(&net, "rat-line"),
             btc,
             sic,
@@ -1486,6 +1498,7 @@ impl ElectricalLive {
             rat_fault: false,
             gen_pb_on: [false; 4],
             bcru_ac_lost_s: [f64::INFINITY; 3],
+            ground_service: false,
             tefo: false,
             drive_low_pressure_s: [0.0; 4],
             drive_hot_s: [0.0; 4],
@@ -1688,6 +1701,7 @@ impl ElectricalLive {
         self.net.contactors[self.contactor.sic].commanded_closed = plan.sic;
 
         let main_ac_anchored = plan.fed_by.iter().any(|s| s.is_some());
+        self.ground_service = ground_service_mode(c.gnd_svc_select, truth.on_ground, gpu_live, main_ac_anchored);
         let main_ac_at_voltage = [BusId::Ac1, BusId::Ac2, BusId::Ac3, BusId::Ac4].map(|b| self.net.bus(b).voltage >= AC_UNDERVOLTAGE_TRIP_V);
         let ac_live: [bool; 4] = std::array::from_fn(|i| plan.fed_by[i].is_some() && main_ac_at_voltage[i]);
         let altn = c.ac_ess_feed_altn;
@@ -1727,7 +1741,7 @@ impl ElectricalLive {
         }
         let blc_open = |lost: f64| lost >= BLC_OPEN_DELAY_S;
         for i in 0..4 {
-            self.net.contactors[self.contactor.tr_line[i]].commanded_closed = tr_live[i];
+            self.net.contactors[self.contactor.tr_line[i]].commanded_closed = tr_live[i] && !(i == 1 && self.ground_service);
         }
         // TR 2 backs BCRU 2 up once BCRU 2's own line contactor has opened.
         let tr_lc_2 = tr_live[4] && blc_open(self.bcru_ac_lost_s[1]);
@@ -1775,8 +1789,11 @@ impl ElectricalLive {
         self.net.contactors[self.contactor.bat_1_emer].commanded_closed = auto[0] && auto[2] && !self.bat_fault[0] && emergency_hold;
 
         // Ground/flight service buses: on their AC and DC bus in flight too; the nav lights are on them.
-        self.net.contactors[self.contactor.ac_gnd_svc_feed].commanded_closed = ac_live[0];
-        self.net.contactors[self.contactor.dc_gnd_svc_feed].commanded_closed = dc2_source;
+        // Ground servicing puts EXT 1 on them alone, and only while no normal source is on line (A380 TTM ATA 24).
+        self.net.contactors[self.contactor.ext_1_gnd_svc].commanded_closed = self.ground_service;
+        self.net.contactors[self.contactor.gslc].commanded_closed = self.ground_service && producing(&self.net, self.src_tr[1]);
+        self.net.contactors[self.contactor.ac_gnd_svc_feed].commanded_closed = ac_live[0] && !self.ground_service;
+        self.net.contactors[self.contactor.dc_gnd_svc_feed].commanded_closed = dc2_source && !self.ground_service;
 
         // The EHA busbars: AC 3 and DC 2, or AC ESS and DC ESS once the hydraulics are gone (TEFO).
         let dc2_live = self.net.bus(BusId::Dc2).voltage >= dc_undervoltage_trip_v();
@@ -2091,6 +2108,7 @@ impl Area for ElectricalLive {
             // target range, not ambient) only until `thermal_zones` has
             // published its first frame.
             ambient_c: truth.published.get_or("THERMAL_ZONE_MAINAVIONICS_TEMPERATURE_C", EQUIPMENT_BAY_FALLBACK_C),
+            ground_service: self.ground_service,
         };
         self.wiring.pre_step(&mut self.net, &inputs, dt);
 
@@ -2846,6 +2864,27 @@ mod tests {
         let lit = run(&mut plugged, &plugged_in, &Faults::default(), 20);
         assert_eq!(lit["ELEC_AC_GND_FLT_SVC_BUS_IS_POWERED"], 1.0, "a plugged-in GPU must actually energise the AC ground-service bus");
         assert!(lit["ELEC_AC_GND_FLT_SVC_BUS_POTENTIAL"] > 100.0, "{}", lit["ELEC_AC_GND_FLT_SVC_BUS_POTENTIAL"]);
+        board::clear();
+    }
+
+    #[test]
+    fn ground_servicing_powers_only_the_ground_service_buses_until_a_normal_source_comes_on_line() {
+        board::clear();
+        let mut truth = Truth { on_ground: true, gpu_plugged_in: true, ..Truth::default() };
+        truth.controls.ext_pwr_pb_on = [false; 4];
+        truth.controls.gnd_svc_select = true;
+        let mut live = ElectricalLive::new();
+        let gs = run(&mut live, &truth, &Faults::default(), 40);
+        assert_eq!(gs["ELEC_AC_GND_FLT_SVC_BUS_IS_POWERED"], 1.0, "EXT 1 must supply the AC ground-service bus");
+        assert_eq!(gs["ELEC_DC_GND_FLT_SVC_BUS_IS_POWERED"], 1.0, "BCRU 2 must supply the DC ground-service bus");
+        assert_eq!(gs["ELEC_AC_1_BUS_IS_POWERED"], 0.0, "ground servicing must leave the main network dark");
+        assert_eq!(gs["ELEC_DC_2_BUS_IS_POWERED"], 0.0, "BCRU 2 must not feed DC 2 in ground servicing");
+
+        truth.controls.ext_pwr_pb_on = [true; 4];
+        let normal = run(&mut live, &truth, &Faults::default(), 40);
+        assert_eq!(normal["ELEC_AC_1_BUS_IS_POWERED"], 1.0, "a normal source on line ends ground servicing");
+        assert_eq!(normal["ELEC_AC_GND_FLT_SVC_BUS_IS_POWERED"], 1.0, "and the service bus returns to AC 1");
+        assert_eq!(normal["ELEC_DC_2_BUS_IS_POWERED"], 1.0);
         board::clear();
     }
 

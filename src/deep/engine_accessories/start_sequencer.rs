@@ -10,6 +10,9 @@
 
 use crate::physics::engine::engine_data::EngineData;
 
+/// The fan is only driven once the core is lit, and takes this long to turn visibly.
+const N1_JAM_AFTER_LIGHT_OFF_S: f64 = 15.0;
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum StartSelector {
     Crank,
@@ -350,7 +353,7 @@ impl StartSequencer {
             Some(StartFault::EgtOverlimit)
         } else if i.starter_failed && starter_engaged {
             Some(StartFault::StarterFailure)
-        } else if i.hp_pct > s.n1_jam_hp_pct && i.lp_pct < s.n1_jam_lp_pct {
+        } else if self.phase == Phase::AutoLit && self.timer_s > N1_JAM_AFTER_LIGHT_OFF_S && i.hp_pct > s.n1_jam_hp_pct && i.lp_pct < s.n1_jam_lp_pct {
             Some(StartFault::N1Jam)
         } else if self.phase == Phase::AutoFuel && self.timer_s > s.no_light_up_s {
             Some(StartFault::NoLightUp)
