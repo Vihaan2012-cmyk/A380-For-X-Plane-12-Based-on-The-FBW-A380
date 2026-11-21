@@ -1108,6 +1108,8 @@ pub fn load_glb(bytes: &[u8]) -> Result<Model, ModelError> {
             let mut vertices: Vec<Vertex> = Vec::with_capacity(used.len());
             // Per vertex, the joint slots and weights posing it (skinned only).
             let mut influences: Vec<Vec<(usize, f32)>> = Vec::new();
+            // Weighted only to joints the skin does not list: left in bind space at the model origin, metres from the part.
+            let mut unposed: Vec<bool> = Vec::new();
             if let (Some(sk), Some(js), Some(ws)) = (skin, &joints, &weights) {
                 for &i in &used {
                     let (j, w) = (js.get(i).copied().unwrap_or_default(), ws.get(i).copied().unwrap_or_default());
@@ -1117,10 +1119,12 @@ pub fn load_glb(bytes: &[u8]) -> Result<Model, ModelError> {
                         .collect();
                     let sum: f32 = infl.iter().map(|x| x.1).sum();
                     if sum <= 1e-6 {
+                        unposed.push((0..4).any(|k| w[k] > 0.0 && (j[k] as usize) >= sk.len()));
                         vertices.push(rigid(i));
                         influences.push(Vec::new());
                         continue;
                     }
+                    unposed.push(false);
                     let (p, n) = (positions[i], normals.as_ref().and_then(|n| n.get(i)).copied());
                     let (mut pos, mut nor) = ([0.0f32; 3], [0.0f32; 3]);
                     for &(s, wt) in &infl {
@@ -1141,6 +1145,14 @@ pub fn load_glb(bytes: &[u8]) -> Result<Model, ModelError> {
                 }
             } else {
                 vertices.extend(used.iter().map(|&i| rigid(i)));
+            }
+            if unposed.iter().any(|&u| u) {
+                let before = indices.len() / 3;
+                indices = indices.chunks_exact(3).filter(|t| t.iter().all(|&v| !unposed[v as usize])).flatten().copied().collect();
+                model.warnings.push(format!("{mesh_name}: {} triangles weighted to joints the skin does not list were left out", before - indices.len() / 3));
+                if indices.is_empty() {
+                    continue;
+                }
             }
             // Each triangle's node, and whether its transform mirrors it (a
             // mirror flips which side faces front).

@@ -34,12 +34,9 @@ static REGISTERED: AtomicBool = AtomicBool::new(false);
 static FRAMES: AtomicU32 = AtomicU32::new(0);
 static DECK_FRAMES: AtomicU32 = AtomicU32::new(0);
 static CABIN_FRAMES: AtomicU32 = AtomicU32::new(0);
-/// Model hiding is off for now: every hide dataref reads 0 so nothing is skipped.
-/// The eye/deck state is still worked out for the screens and the perf log.
-const HIDE_MODELS: bool = false;
 
 fn shown(flag: &AtomicBool) -> bool {
-    HIDE_MODELS && flag.load(Ordering::Relaxed)
+    flag.load(Ordering::Relaxed)
 }
 
 static NAMES: OnceLock<[std::ffi::CString; 4]> = OnceLock::new();

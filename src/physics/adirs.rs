@@ -2494,6 +2494,33 @@ mod tests {
     }
 
     #[test]
+    fn the_ir_position_follows_the_aircraft_across_the_ground() {
+        for gps in [true, false] {
+            let mut a = Adiru::new_for_test(1);
+            let mut t = stationary_level_state(45.0);
+            t.on_ground = false;
+            t.v_north_ms = 250.0;
+            a.lat_rad = t.lat_deg.to_radians();
+            a.lon_rad = t.lon_deg.to_radians();
+            a.v_north = 250.0;
+            a.running = true;
+            let start = t.lat_deg;
+            let dt = 0.1;
+            for _ in 0..(600.0 / dt) as u64 {
+                t.lat_deg += 250.0 * dt / EARTH_RADIUS_M * 180.0 / PI;
+                a.mechanize(dt, &t, [t.p_xp, t.q_xp, t.r_xp]);
+                a.baro_inertial_correct(dt, &t);
+                if gps {
+                    a.gpirs_correct(dt, &t);
+                }
+            }
+            let flown_nm = (t.lat_deg - start) * 60.0;
+            let ir_nm = (a.lat_rad.to_degrees() - start) * 60.0;
+            assert!((ir_nm - flown_nm).abs() < 2.0, "gps {gps}: flew {flown_nm:.1} nm, the IR moved {ir_nm:.1} nm");
+        }
+    }
+
+    #[test]
     fn stationary_drift_over_one_hour_is_within_1_nm_per_hour() {
         let error_nm = run_stationary_hours(1.0);
         assert!(

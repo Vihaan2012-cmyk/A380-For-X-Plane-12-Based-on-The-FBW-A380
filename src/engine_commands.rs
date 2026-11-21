@@ -843,6 +843,7 @@ impl EngineCommands {
                     leak: crate::failures::magnitude(79_004 + i as u64),
                     ..Default::default()
                 },
+                tgt_limit_c: rating_tgt_limit_c(o.thrust_limit_type),
                 dt_s: delta,
             };
             if quick && phys_inputs.fuel_valve_open && self.last_out[i].n3_pct < fbw_idle_n3(&phys_inputs) {
@@ -910,8 +911,7 @@ impl EngineCommands {
             // engine's own measured TGT goes to `ENGINE_EGT_UNTRIMMED:n`.
             // The trim never takes the display below ambient: a stopped
             // engine's TGT is the air's, trimmed or not.
-            let takeoff_rating = matches!(o.thrust_limit_type, 3 | 4); // FLEX, TOGA
-            let trim = crate::physics::damage::tgt_trim_c(takeoff_rating);
+            let trim = crate::physics::damage::tgt_trim_c(takeoff_rating(o.thrust_limit_type));
             let ambient_c = ambient_temp_k - 273.15;
             let egt_displayed = (phys.egt_c - trim).max(phys.egt_c.min(ambient_c));
             vars.write(&e.egt_untrimmed, phys.egt_c);
@@ -1418,6 +1418,7 @@ mod tests {
             oil_pressure_fraction: 1.0,
             fuel_temp_k: ambient_temp_c + 273.15,
             oil_faults: Default::default(),
+            tgt_limit_c: crate::physics::damage::trent900::TGT_TAKEOFF_UNTRIMMED_C,
             dt_s: 0.02,
         };
 
@@ -1548,25 +1549,14 @@ struct EngineDamage {
 const HP_COMPRESSOR_DESTROYED: EngineDamage =
     EngineDamage { compressor_efficiency_loss: 1.0, compressor_flow_capacity_loss: 0.9, turbine_efficiency_loss: 0.0, bearing_friction: 0.3 };
 
+/// Extra shaft friction of a worn or debris-loaded main bearing, x HP turbine design torque (54.5 MW at design N3).
+pub(crate) const BEARING_WEAR_FRICTION: f64 = 0.0005;
+
 /// Each engine failure (by its base id; engine n is base + n - 1) and the
 /// physical quantities it moves at full magnitude.
 const EXOTIC: [(u64, EngineDamage); 9] = [
-    // Bearing *wear* (`failures.rs`: "a main shaft bearing wears, raising
-    // vibration and running clearances"), not a seizure. This was 1.0 --
-    // a parasitic drag equal to the HP turbine's entire design torque,
-    // which is more than the whole turbine makes anywhere below its design
-    // speed. Armed in flight it did not degrade the engine, it stopped it:
-    // N3 fell from 68 % to 9 % in two seconds, the flame went out, and the
-    // EEC's start-abort latched the fuel off for good. Four engines, every
-    // take-off, from a failure whose own description is a wear item.
-    //
-    // The table contradicted itself, which is the cheapest way to see it:
-    // 72_012 below is HP compressor *destruction* -- blades gone, the rotor
-    // out of balance -- and it asks for 0.3. Wear cannot drag harder than
-    // that. Main-shaft bearings absorb well under a percent of shaft power
-    // when healthy, so a worn one is a few percent: enough to cost fuel,
-    // spool time and oil temperature, which is what a wear failure is for.
-    (72_000, EngineDamage { bearing_friction: 0.03, compressor_efficiency_loss: 0.0, compressor_flow_capacity_loss: 0.0, turbine_efficiency_loss: 0.0 }),
+    // Bearing wear: about 27 kW more friction heat into the oil at design N3 (+12 C), against 0.03's 1.6 MW that boiled it at 600 C (issue #55).
+    (72_000, EngineDamage { bearing_friction: BEARING_WEAR_FRICTION, compressor_efficiency_loss: 0.0, compressor_flow_capacity_loss: 0.0, turbine_efficiency_loss: 0.0 }),
     (72_004, EngineDamage { compressor_efficiency_loss: 1.0, compressor_flow_capacity_loss: 1.0, turbine_efficiency_loss: 0.0, bearing_friction: 0.0 }),
     (72_008, EngineDamage { turbine_efficiency_loss: 1.0, compressor_efficiency_loss: 0.0, compressor_flow_capacity_loss: 0.0, bearing_friction: 0.0 }),
     (72_012, HP_COMPRESSOR_DESTROYED),
@@ -1585,7 +1575,7 @@ const EXOTIC: [(u64, EngineDamage); 9] = [
     ),
     (
         crate::failures::extra::COWL_SEPARATION,
-        EngineDamage { compressor_efficiency_loss: 0.04, compressor_flow_capacity_loss: 0.03, turbine_efficiency_loss: 0.0, bearing_friction: 0.02 },
+        EngineDamage { compressor_efficiency_loss: 0.04, compressor_flow_capacity_loss: 0.03, turbine_efficiency_loss: 0.0, bearing_friction: BEARING_WEAR_FRICTION },
     ),
 ];
 
@@ -1679,6 +1669,17 @@ pub(crate) fn real_core_pct(model_pct: f64) -> f64 {
     let i = (1..t.len()).find(|&i| t[i].0 >= model_pct).unwrap_or(t.len() - 1);
     let (a, b) = (t[i - 1], t[i]);
     a.1 + (model_pct - a.0) * (b.1 - a.1) / (b.0 - a.0)
+}
+
+/// FlyByWire's `athr_thrust_limit_type` FLEX (3) or TOGA (4): the take-off rating.
+fn takeoff_rating(thrust_limit_type: i32) -> bool {
+    matches!(thrust_limit_type, 3 | 4)
+}
+
+/// The untrimmed TGT the EEC's running limiter holds: take-off for FLEX/TOGA, max continuous for CLB, MCT and below (issue #55).
+pub(crate) fn rating_tgt_limit_c(thrust_limit_type: i32) -> f64 {
+    use crate::physics::damage::trent900;
+    if takeoff_rating(thrust_limit_type) { trent900::TGT_TAKEOFF_UNTRIMMED_C } else { trent900::TGT_MAX_CONTINUOUS_UNTRIMMED_C }
 }
 
 /// FlyByWire's N1 targets and the EEC's ground limits are physical N1; the

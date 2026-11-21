@@ -3,7 +3,8 @@
 //! samples: L/D near 27 at 215 kt in the circuit, where the aircraft is near
 //! 18 clean). Each frame X-Plane's own aerodynamic drag is measured from the
 //! propulsive force actually applied (`faxil_prop`, X-Plane's engines or
-//! `engine_forces`) and the specific force along the body axis. The target
+//! `engine_forces`) and the body-axis specific force turned onto the flight
+//! path by the angle of attack. The target
 //! drag is OpenAP's A380-800 drag polar for the same lift coefficient, flap,
 //! gear and Mach, and the shortfall is added as an aft plug force, filtered
 //! and capped. Lift, handling and stability stay X-Plane's own; drag already
@@ -56,6 +57,7 @@ pub struct Sample {
     pub thrust_n: f64,
     pub nx: f64,
     pub nz: f64,
+    pub alpha_deg: f64,
     pub q_pa: f64,
     pub mach: f64,
     pub flap: f64,
@@ -75,7 +77,9 @@ impl Controller {
         let usable = s.airborne && s.mass_kg > 100_000.0 && s.q_pa > 1500.0 && (0.5..=2.0).contains(&s.nz);
         let wanted = if usable {
             let weight = s.mass_kg * G;
-            let measured = s.thrust_n + s.nx * weight - self.applied_n - s.other_plug_drag_n;
+            // Body axes tilt by alpha off the flight path: lift there leans forward by L sin(alpha), about 170 kN in cruise.
+            let (sin, cos) = s.alpha_deg.to_radians().sin_cos();
+            let measured = (s.thrust_n - self.applied_n - s.other_plug_drag_n) * cos + weight * (s.nx * cos + s.nz * sin);
             let cl = s.nz * weight / (s.q_pa * WING_AREA_M2);
             let target = s.q_pa * WING_AREA_M2 * target_cd(cl, s.mach, s.flap, s.gear);
             self.last = Some((s.nz * weight, measured, target));
@@ -102,6 +106,7 @@ struct Refs {
     prop: Option<DataRef>,
     nx: Option<DataRef>,
     nz: Option<DataRef>,
+    alpha: Option<DataRef>,
     tas: Option<DataRef>,
     rho: Option<DataRef>,
     mach: Option<DataRef>,
@@ -127,6 +132,7 @@ impl DragMatch {
                 prop: f("sim/flightmodel/forces/faxil_prop"),
                 nx: f("sim/flightmodel/forces/g_axil"),
                 nz: f("sim/flightmodel/forces/g_nrml"),
+                alpha: f("sim/flightmodel/position/alpha"),
                 tas: f("sim/flightmodel/position/true_airspeed"),
                 rho: f("sim/weather/rho"),
                 mach: f("sim/flightmodel/misc/machno"),
@@ -154,6 +160,7 @@ impl DragMatch {
             thrust_n: our_thrust_n.unwrap_or_else(|| -r(self.refs.prop)),
             nx: r(self.refs.nx),
             nz: r(self.refs.nz),
+            alpha_deg: r(self.refs.alpha),
             q_pa: 0.5 * r(self.refs.rho) * tas * tas,
             mach: r(self.refs.mach),
             flap: r(self.refs.flap),
@@ -167,10 +174,11 @@ impl DragMatch {
             self.log_s = 0.0;
             if let (true, Some((lift, measured, target))) = (s.airborne, self.controller.last.take()) {
                 crate::log(&format!(
-                    "drag match: L/D X-Plane {:.1}, flown {:.1}, target {:.1} (flap {:.2} slat {:.2} gear {:.2} M{:.2}), adding {:.0} kN",
+                    "drag match: L/D X-Plane {:.1}, flown {:.1}, target {:.1} (alpha {:.1}, flap {:.2} slat {:.2} gear {:.2} M{:.2}), adding {:.0} kN",
                     lift / measured.max(1.0),
                     lift / (measured + drag).max(1.0),
                     lift / target.max(1.0),
+                    s.alpha_deg,
                     s.flap,
                     s.slat,
                     s.gear,
@@ -212,12 +220,41 @@ mod tests {
     }
 
     fn fly(c: &mut Controller, xplane_drag: f64, other: f64, steps: usize) -> f64 {
+        fly_at(c, circuit(), xplane_drag, other, steps)
+    }
+
+    /// Body-axis specific forces of level flight at the sample's alpha: lift W, drag along the path, thrust and plugs along the body.
+    fn fly_at(c: &mut Controller, base: Sample, xplane_drag: f64, other: f64, steps: usize) -> f64 {
+        let (sin, cos) = base.alpha_deg.to_radians().sin_cos();
+        let weight = base.mass_kg * G;
         let mut plug = 0.0;
         for _ in 0..steps {
-            let nx = (xplane_drag + plug + other - THRUST) / (MASS * G);
-            plug = c.step(&Sample { nx, other_plug_drag_n: other, ..circuit() }, 0.05);
+            let forward = base.thrust_n - plug - other - xplane_drag * cos + weight * sin;
+            let up = xplane_drag * sin + weight * cos;
+            plug = c.step(&Sample { nx: -forward / weight, nz: up / weight, other_plug_drag_n: other, ..base }, 0.05);
         }
         plug
+    }
+
+    /// Issue #55's cruise: 400 t at FL378 M0.82, alpha 2.5 deg, X-Plane's drag already at the polar's.
+    fn cruise() -> (Sample, f64) {
+        let s = Sample { airborne: true, mass_kg: 400_000.0, thrust_n: 4.0 * 55_000.0, nz: 1.0, alpha_deg: 2.5, q_pa: 9985.0, mach: 0.82, ..Default::default() };
+        let weight = s.mass_kg * G;
+        (s, s.q_pa * WING_AREA_M2 * target_cd(weight / (s.q_pa * WING_AREA_M2), s.mach, 0.0, 0.0))
+    }
+
+    #[test]
+    fn cruise_lift_leaning_forward_on_the_body_axis_is_not_read_as_missing_drag() {
+        let (s, target) = cruise();
+        let applied = fly_at(&mut Controller::default(), s, target, 0.0, 600);
+        assert!(applied < 1_000.0, "{:.0} kN added with X-Plane's drag already on the polar", applied / 1000.0);
+    }
+
+    #[test]
+    fn a_cruise_shortfall_is_added_once() {
+        let (s, target) = cruise();
+        let applied = fly_at(&mut Controller::default(), s, target - 40_000.0, 0.0, 600);
+        assert!((applied - 40_000.0).abs() < 2_000.0, "{:.1} kN added for a 40 kN shortfall", applied / 1000.0);
     }
 
     #[test]

@@ -157,6 +157,8 @@ pub struct EngineInputs {
     pub fuel_temp_k: f64,
     /// Oil system faults (`oil::OilFaults`), healthy by default.
     pub oil_faults: oil::OilFaults,
+    /// Untrimmed TGT the running limiter holds for the rating in use: take-off with FLEX or TOGA, max continuous otherwise.
+    pub tgt_limit_c: f64,
     pub dt_s: f64,
 }
 
@@ -561,6 +563,7 @@ pub fn idle_engine() -> Engine {
             oil_pressure_fraction: 1.0,
             fuel_temp_k: T_REF_K,
             oil_faults: Default::default(),
+            tgt_limit_c: crate::physics::damage::trent900::TGT_TAKEOFF_UNTRIMMED_C,
             dt_s: 0.05,
         };
         let mut out = EngineOutputs::default();
@@ -657,16 +660,16 @@ impl Engine {
     }
 
     /// The running over-temperature limiter (see
-    /// [`TGT_RUNNING_CUTBACK_BAND_C`]): 1.0 with the take-off TGT limit a
+    /// [`TGT_RUNNING_CUTBACK_BAND_C`]): 1.0 with the rating's TGT limit a
     /// full band away, falling to [`TGT_RUNNING_CUTBACK_FLOOR`] at it.
     ///
     /// Scoped to the running engine, above the speed the start limiter
     /// covers, so the two never both bite.
-    fn running_tgt_cutback(&self, n3_pct: f64) -> f64 {
+    fn running_tgt_cutback(&self, n3_pct: f64, limit_c: f64) -> f64 {
         if n3_pct < crate::physics::damage::trent900::GROUND_START_HP_PCT {
             return 1.0;
         }
-        let headroom_c = crate::physics::damage::trent900::TGT_TAKEOFF_UNTRIMMED_C - self.egt_lag_c;
+        let headroom_c = limit_c - self.egt_lag_c;
         (headroom_c / TGT_RUNNING_CUTBACK_BAND_C).clamp(TGT_RUNNING_CUTBACK_FLOOR, 1.0)
     }
 
@@ -830,7 +833,7 @@ impl Engine {
             mdot_to_combustor,
             self.gas.design.wf_kg_s,
             dt.max(1e-4),
-        ) * self.running_tgt_cutback(n3_pct);
+        ) * self.running_tgt_cutback(n3_pct, inputs.tgt_limit_c);
         // The start and its handover, one piece. A real FADEC fuels the
         // sub-idle start open-loop from a start schedule keyed to core speed
         // and closes the N1 loop only once the core reaches idle. The schedule
@@ -1100,6 +1103,7 @@ pub(crate) mod tests {
             oil_pressure_fraction: 1.0,
             fuel_temp_k: T_REF_K,
             oil_faults: Default::default(),
+            tgt_limit_c: crate::physics::damage::trent900::TGT_TAKEOFF_UNTRIMMED_C,
             dt_s: 0.02,
         }
     }
@@ -1238,6 +1242,33 @@ pub(crate) mod tests {
             let out = cruise_at(n1);
             println!("target CN1 {n1:6.2}: N1 {:6.2} thrust {:6.1} kN TGT {:5.0} C fuel {:.3} kg/s", out.n1_pct, out.net_thrust_n / 1000.0, out.egt_c, out.fuel_flow_kg_s);
         }
+    }
+
+    #[test]
+    fn a_climb_at_the_top_of_the_rating_holds_tgt_under_max_continuous() {
+        use crate::physics::damage::trent900::{TGT_MAX_CONTINUOUS_UNTRIMMED_C, TGT_TAKEOFF_UNTRIMMED_C};
+        let tgt_at = |limit: f64| {
+            let mut engine = Engine::new();
+            run_to_steady_state(&mut engine, EngineInputs { target_n1_corrected_pct: 70.0, ..isa_sea_level() }, 10.0);
+            let hot = EngineInputs { ambient_temp_k: 218.8 + 15.0, tgt_limit_c: limit, ..cruise_inputs(104.0) };
+            run_for(&mut engine, hot, 120.0).0.egt_c
+        };
+        let (climb, takeoff) = (tgt_at(TGT_MAX_CONTINUOUS_UNTRIMMED_C), tgt_at(TGT_TAKEOFF_UNTRIMMED_C));
+        println!("FL350 ISA+15 flat out: TGT {climb:.0} C on the MCT limit, {takeoff:.0} C on the take-off limit");
+        assert!(climb < TGT_MAX_CONTINUOUS_UNTRIMMED_C, "TGT {climb:.0} C above max continuous");
+        assert!(takeoff > climb, "the take-off limit lets it run hotter: {takeoff:.0} vs {climb:.0} C");
+    }
+
+    #[test]
+    fn a_worn_bearing_warms_the_cruise_oil_by_degrees_not_hundreds() {
+        let oil_at = |wear: f64| {
+            let mut engine = Engine::new();
+            run_to_steady_state(&mut engine, EngineInputs { target_n1_corrected_pct: 70.0, ..isa_sea_level() }, 10.0);
+            run_for(&mut engine, EngineInputs { bearing_friction_extra_fraction: wear, fuel_temp_k: 250.0, ..cruise_inputs(97.0) }, 300.0).0.oil_temp_c
+        };
+        let (healthy, worn) = (oil_at(0.0), oil_at(crate::engine_commands::BEARING_WEAR_FRICTION));
+        assert!((5.0..40.0).contains(&(worn - healthy)), "oil {healthy:.0} C healthy, {worn:.0} C with a worn bearing");
+        assert!(worn < 140.0, "worn-bearing cruise oil {worn:.0} C");
     }
 
     #[test]
@@ -2163,6 +2194,7 @@ mod idle_against_flybywire {
             oil_pressure_fraction: 1.0,
             fuel_temp_k: T_REF_K,
             oil_faults: Default::default(),
+            tgt_limit_c: crate::physics::damage::trent900::TGT_TAKEOFF_UNTRIMMED_C,
             dt_s: 0.05,
         };
         let mut out = EngineOutputs::default();
@@ -2235,6 +2267,7 @@ mod idle_against_flybywire {
             oil_pressure_fraction: 1.0,
             fuel_temp_k: ambient_temp_k,
             oil_faults: Default::default(),
+            tgt_limit_c: crate::physics::damage::trent900::TGT_TAKEOFF_UNTRIMMED_C,
             dt_s: 0.05,
         };
         let mut out = EngineOutputs::default();
@@ -2300,6 +2333,7 @@ mod start_and_handover {
             oil_pressure_fraction: 1.0,
             fuel_temp_k: T_REF_K,
             oil_faults: Default::default(),
+            tgt_limit_c: crate::physics::damage::trent900::TGT_TAKEOFF_UNTRIMMED_C,
             dt_s: 0.05,
         };
         let (mut peak_n3, mut peak_egt, mut started_at) = (0.0f64, 0.0f64, None);
@@ -2368,6 +2402,7 @@ mod total_compressor_loss {
             oil_pressure_fraction: 1.0,
             fuel_temp_k: T_REF_K,
             oil_faults: Default::default(),
+            tgt_limit_c: crate::physics::damage::trent900::TGT_TAKEOFF_UNTRIMMED_C,
             dt_s: 0.05,
         };
         let mut out = EngineOutputs::default();

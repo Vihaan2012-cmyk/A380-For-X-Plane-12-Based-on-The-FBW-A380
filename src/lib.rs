@@ -229,6 +229,7 @@ mod tod_pause;
 #[cfg(feature = "js")]
 mod atc_online;
 mod drag_match;
+mod opensam_cfg;
 mod engine_forces;
 // [slot modules: sound] FlyByWire's Wwise sounds played through X-Plane's sound API.
 mod sound;
@@ -3967,6 +3968,9 @@ pub unsafe extern "C" fn XPluginEnable() -> c_int {
     let Some(xplm) = (*xplm).as_ref() else { return 0 };
     flight_deck_view::register();
     light_spills::register();
+    if let Some(root) = xp::system_path() {
+        opensam_cfg::ensure(&root);
+    }
     // On a large stack: the systems no longer fit X-Plane's main-thread
     // stack while they are built (big_stack.rs). Boxed, so the finished
     // aircraft is not copied back across stack frames.

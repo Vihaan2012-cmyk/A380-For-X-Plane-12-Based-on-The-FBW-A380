@@ -109,6 +109,7 @@ fn isa_sea_level() -> EngineInputs {
         oil_pressure_fraction: 1.0,
         fuel_temp_k: 288.15,
         oil_faults: Default::default(),
+        tgt_limit_c: crate::physics::damage::trent900::TGT_TAKEOFF_UNTRIMMED_C,
         dt_s: 0.02,
     }
 }
