@@ -450,11 +450,30 @@ fn euler_xyz(q: Q) -> [f64; 3] {
 }
 
 /// Writes the animation commands for geometry, by the node it hangs from.
+/// A clip keyed straight on an X-Plane or systems dataref instead of a 0..1
+/// helper a script sets every frame: the dataref's value at the clip's start
+/// (`lo`) and end (`hi`), linear between, held past either end as X-Plane
+/// holds a key table. `period` loops the table (a wheel's 0..360 angle).
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Keys {
+    pub lo: f64,
+    pub hi: f64,
+    pub period: Option<f64>,
+}
+
+impl Keys {
+    pub fn at(&self, fraction: f64) -> f64 {
+        self.lo + fraction * (self.hi - self.lo)
+    }
+}
+
 pub struct Animator<'a> {
     model: &'a Model,
     index: &'a ClipIndex,
-    /// The dataref playing each animated clip (0..1 over the clip).
+    /// The dataref playing each animated clip (0..1 over the clip, unless `keys` says otherwise).
     drefs: HashMap<usize, String>,
+    /// Clips whose dataref is not a 0..1 fraction, and what it reads at each end.
+    keys: HashMap<usize, Keys>,
     /// Extra commands (ANIM_hide/ANIM_show) per node, for all geometry below it.
     vis: HashMap<usize, Vec<String>>,
     /// Per node, the bound clips that move it.
@@ -478,7 +497,13 @@ impl<'a> Animator<'a> {
         for v in moved_by.values_mut() {
             v.sort_unstable();
         }
-        Animator { model, index, drefs, vis, moved_by, cache: RefCell::new(HashMap::new()) }
+        Animator { model, index, drefs, keys: HashMap::new(), vis, moved_by, cache: RefCell::new(HashMap::new()) }
+    }
+
+    /// Clips keyed on their source dataref's own values (see [`Keys`]).
+    pub fn keyed(mut self, keys: HashMap<usize, Keys>) -> Self {
+        self.keys = keys;
+        self
     }
 
     pub fn dataref(&self, clip: usize) -> Option<&str> {
@@ -533,6 +558,21 @@ impl<'a> Animator<'a> {
         let m = self.model;
         let nd = &m.nodes[node];
         let dr = &self.drefs[&clip];
+        let keys = self.keys.get(&clip).copied();
+        // A key table's values in the dataref's units, ascending as X-Plane wants them.
+        let val = |f: f64| keys.map_or(f, |k| k.at(f));
+        let order = |keep: Vec<usize>| -> Vec<usize> {
+            if keys.is_some_and(|k| k.hi < k.lo) {
+                keep.into_iter().rev().collect()
+            } else {
+                keep
+            }
+        };
+        let looped = |out: &mut String| {
+            if let Some(p) = keys.and_then(|k| k.period) {
+                let _ = writeln!(out, "ANIM_keyframe_loop {}", num(p));
+            }
+        };
         let chans: Vec<&Channel> = self
             .index
             .channels(m, node)
@@ -582,7 +622,8 @@ impl<'a> Animator<'a> {
                 let j = (i..hidden.len()).take_while(|&k| hidden[k]).last().unwrap_or(i);
                 let lo = if i == 0 { -1e6 } else { fr[i] - 1e-4 };
                 let hi = if j == hidden.len() - 1 { 1e6 } else { fr[j] + 1e-4 };
-                let _ = writeln!(out, "ANIM_hide {} {} {dr}", num(lo), num(hi));
+                let (a, b) = (val(lo), val(hi));
+                let _ = writeln!(out, "ANIM_hide {} {} {dr}", num(a.min(b)), num(a.max(b)));
                 i = j + 1;
             } else {
                 i += 1;
@@ -597,10 +638,11 @@ impl<'a> Animator<'a> {
                 let _ = writeln!(out, "ANIM_trans {0} {1} {2} {0} {1} {2}", num(d[0]), num(d[1]), num(d[2]));
             } else {
                 let _ = writeln!(out, "ANIM_trans_begin {dr}");
-                for k in keep {
+                for k in order(keep) {
                     let d = trans[k];
-                    let _ = writeln!(out, "ANIM_trans_key {} {} {} {}", num(fr[k]), num(d[0]), num(d[1]), num(d[2]));
+                    let _ = writeln!(out, "ANIM_trans_key {} {} {} {}", num(val(fr[k])), num(d[0]), num(d[1]), num(d[2]));
                 }
+                looped(out);
                 out.push_str("ANIM_trans_end\n");
             }
         }
@@ -631,9 +673,10 @@ impl<'a> Animator<'a> {
                 let _ = writeln!(out, "ANIM_rotate {} {} {} {a} {a}", num(axis[0]), num(axis[1]), num(axis[2]));
             } else {
                 let _ = writeln!(out, "ANIM_rotate_begin {} {} {} {dr}", num(axis[0]), num(axis[1]), num(axis[2]));
-                for k in keep {
-                    let _ = writeln!(out, "ANIM_rotate_key {} {}", num(fr[k]), num(deg[k]));
+                for k in order(keep) {
+                    let _ = writeln!(out, "ANIM_rotate_key {} {}", num(val(fr[k])), num(deg[k]));
                 }
+                looped(out);
                 out.push_str("ANIM_rotate_end\n");
             }
         };
@@ -697,6 +740,33 @@ mod tests {
         // A point 1 m out from the hinge (+X) ends up at -Z after +90 about Y.
         let p = index.carry(&model, 0, [3.0, 0.0, 0.0], &HashMap::from([(0usize, 1.0)]));
         assert!((p[0] - 2.0).abs() < 1e-9 && (p[2] + 1.0).abs() < 1e-9, "{p:?}");
+    }
+
+    #[test]
+    fn a_keyed_clip_reads_its_source_in_the_sources_own_units() {
+        let mut model = Model::default();
+        model.nodes.push(node("hinge", None, [2.0, 0.0, 0.0], [0.0, 0.0, 0.0, 1.0]));
+        model.clips.push(Clip {
+            name: "door".into(),
+            channels: vec![Channel {
+                node: 0,
+                path: AnimPath::Rotation,
+                times: vec![0.0, 1.0],
+                values: vec![[0.0, 0.0, 0.0, 1.0], rot_y(90.0).map(|x| x as f32)],
+                step: false,
+            }],
+        });
+        let index = ClipIndex::new(&model);
+        let run = |k: Keys| Animator::new(&model, &index, HashMap::from([(0usize, "src".to_string())]), HashMap::new()).keyed(HashMap::from([(0, k)])).commands(Some(0));
+        // A percent source: the clip's 0..1 becomes 0..100.
+        let s = run(Keys { lo: 0.0, hi: 100.0, period: None });
+        assert!(s.contains("ANIM_rotate_begin 0 1 0 src\nANIM_rotate_key 0 0\nANIM_rotate_key 100 90\nANIM_rotate_end\n"), "{s}");
+        // Running the other way: source values still ascend, so the angles come reversed.
+        let s = run(Keys { lo: 1.0, hi: -0.2, period: None });
+        assert!(s.contains("ANIM_rotate_key -0.2 90\nANIM_rotate_key 1 0\nANIM_rotate_end\n"), "{s}");
+        // A wheel's angle loops.
+        let s = run(Keys { lo: 0.0, hi: 360.0, period: Some(360.0) });
+        assert!(s.contains("ANIM_rotate_key 360 90\nANIM_keyframe_loop 360\nANIM_rotate_end\n"), "{s}");
     }
 
     #[test]

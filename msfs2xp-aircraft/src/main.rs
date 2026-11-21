@@ -3062,7 +3062,7 @@ fn main() -> anyhow::Result<()> {
             notes.push(format!("{model_name}: {r}"));
         }
         {
-            let animator = Animator::new(&model, &clips, rig.drefs.clone(), rig.vis.clone());
+            let animator = Animator::new(&model, &clips, rig.drefs.clone(), rig.vis.clone()).keyed(rig.keys.clone());
             // Overhead/avionics-bay CB panel geometry: not exterior, and not
             // in rig's own clip/behaviour-driven manips (no clip touches
             // these nodes), so folded into `visible` separately below.
