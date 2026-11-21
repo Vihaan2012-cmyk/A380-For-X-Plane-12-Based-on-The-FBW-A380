@@ -587,6 +587,36 @@ fn button(ui: &mut UiState, src: &Sources, label: &str) -> Vec<Out> {
 
 /// FBW's MFD keys: typed characters go to the scratchpad of the focused field,
 /// ENTER validates, ESC (and a click elsewhere) releases the keyboard.
+/// A KCCU page or arrow key (`DIR`, `FPLN`, `UP`, ...), as FBW `MFD.tsx`'s hEvent listener and
+/// `MfdFmsFpln`'s one-line UP/DOWN scroll. Returns whether the key means anything here.
+pub fn kccu_command(ui: &mut UiState, src: &Sources, key: &str) -> (bool, Vec<Out>) {
+    let uri = match key {
+        "DIR" => "fms/active/f-pln-direct-to",
+        "PERF" => "fms/active/perf",
+        "INIT" => "fms/active/init",
+        "NAVAID" => "fms/position/navaids",
+        "FPLN" => "fms/active/f-pln/top",
+        "DEST" => "fms/active/f-pln/dest",
+        "SECINDEX" => "fms/sec/index",
+        "SURV" => "surv/controls",
+        "ATCCOM" => "atccom/connect",
+        "CLRINFO" => return (true, button(ui, src, "CLEAR INFO")),
+        "UP" | "DOWN" if ui.page() == Page::Fpln => {
+            let (_, start, total) = model::fpln_visible_lines(ui, src);
+            ui.fpln_scroll = Some(if key == "UP" { start.saturating_sub(1) } else { (start + 1).min(total.saturating_sub(1)) });
+            return (true, Vec::new());
+        }
+        _ => return (false, Vec::new()),
+    };
+    ui.navigate(uri);
+    if key == "DEST" {
+        // FBW `f-pln/dest`: the last page of lines, the destination at the bottom.
+        let (_, _, total) = model::fpln_visible_lines(ui, src);
+        ui.fpln_scroll = Some(total.saturating_sub(model::FPLN_PAGE_LINES));
+    }
+    (true, Vec::new())
+}
+
 pub fn key(ui: &mut UiState, src: &Sources, db: Option<&dyn NavDatabase>, k: Key) -> (bool, Vec<Out>) {
     let Some(field) = ui.focus.clone() else { return (false, Vec::new()) };
     match k {

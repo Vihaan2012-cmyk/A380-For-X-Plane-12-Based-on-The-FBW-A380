@@ -214,3 +214,47 @@ fn cpny_fpln_request_then_insert() {
     assert!(matches!(m.act(&src, "c|item:CAPT_MFD_fplnreq_0")[..], [Out::CpnyFplnInsert(0)]));
     assert!(matches!(m.act(&src, "c|item:CAPT_MFD_fplnreq_1")[..], [Out::CpnyFplnClear]));
 }
+
+#[test]
+fn a_kccu_types_only_into_its_own_sides_focused_field() {
+    let empty = Snapshot { plans: vec![None; 6], perf: BTreeMap::new(), phase: 0, ..Default::default() };
+    let src = Sources::from_snapshot(&empty, sources::NO_VARS, &[]);
+    let mut m = Mfd::default();
+    m.act(&src, "c|field:FROM");
+    assert!(!m.kccu_key(true, &src, None, Key::Char('Q')).0, "the right KCCU leaves the captain's field alone");
+    for c in "EGLL/KJFK".chars() {
+        m.kccu_key(false, &src, None, Key::Char(c));
+    }
+    let (_, out) = m.kccu_key(false, &src, None, Key::Enter);
+    assert!(matches!(&out[..], [Out::Fms(HostCommand::Plan(Plan::NewCityPair { from, to, .. }))] if from == "EGLL" && to == "KJFK"));
+}
+
+#[test]
+fn kccu_page_keys_open_fbws_pages_and_arrows_scroll_the_fpln() {
+    let s = snapshot();
+    let src = Sources::from_snapshot(&s, sources::NO_VARS, &[]);
+    let mut m = Mfd::default();
+    for (key, page) in [
+        ("INIT", Page::Init),
+        ("PERF", Page::Perf),
+        ("DIR", Page::DirTo),
+        ("NAVAID", Page::PosNavaids),
+        ("SECINDEX", Page::SecIndex),
+        ("SURV", Page::SurvControls),
+        ("ATCCOM", Page::AtcConnect),
+        ("FPLN", Page::Fpln),
+    ] {
+        assert!(m.kccu_command(false, &src, key).0, "{key}");
+        assert_eq!(m.capt.page(), page, "{key}");
+    }
+    assert_eq!(m.fo.page(), Mfd::default().fo.page(), "the left KCCU leaves the F/O's MFD alone");
+    m.build(&src);
+    m.kccu_command(false, &src, "DOWN");
+    assert_eq!(m.capt.fpln_scroll, Some(1));
+    m.kccu_command(false, &src, "UP");
+    assert_eq!(m.capt.fpln_scroll, Some(0));
+    m.kccu_command(false, &src, "DEST");
+    let (_, start, total) = model::fpln_visible_lines(&m.capt, &src);
+    assert_eq!(start, total.saturating_sub(model::FPLN_PAGE_LINES), "DEST shows the end of the plan");
+    assert!(!m.kccu_command(false, &src, "MAILBOX").0, "FBW moves the cursor to the SD there");
+}

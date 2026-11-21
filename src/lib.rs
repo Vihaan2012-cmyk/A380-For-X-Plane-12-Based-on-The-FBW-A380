@@ -2955,6 +2955,11 @@ impl Plugin {
                 h_events.extend(native_systems_host::take_h_events());
                 crate::perf::lap("native: fms + mfd host");
                 events.extend(native_fms_shadow::tick(&mut self.vars, self.time));
+                #[cfg(feature = "native-displays")]
+                if crate::native_displays::input::is_native("SCREEN_DU_MFD") {
+                    let db = crate::native_fms_shadow::navdb();
+                    crate::mfd_native_host::kccu_events(&h_events, db.as_deref().map(|d| d as &dyn fms::navdb::NavDatabase), &crate::mfd_native_host::cached_var);
+                }
             }
             app_settings::native_mode::show_notices();
             crate::perf::lap("native: screen feed");

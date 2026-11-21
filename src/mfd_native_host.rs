@@ -372,6 +372,50 @@ pub fn key(ch: u32, vkey: u32, db: Option<&dyn NavDatabase>, get: &dyn Fn(&str) 
     .unwrap_or(false)
 }
 
+/// An `A32NX_KCCU_{L,R}_{KEY}` H event: (right side, key name).
+fn kccu_event(event: &str) -> Option<(bool, &str)> {
+    match event.strip_prefix("A32NX_KCCU_")?.split_at_checked(2)? {
+        ("L_", k) => Some((false, k)),
+        ("R_", k) => Some((true, k)),
+        _ => None,
+    }
+}
+
+/// The text key a KCCU key name types, if it types one.
+fn kccu_text_key(key: &str) -> Option<Key> {
+    Some(match key {
+        "ENT" => Key::Enter,
+        "BACKSPACE" => Key::Backspace,
+        "ESC" | "ESC2" => Key::Escape,
+        "SP" => Key::Char(' '),
+        "DOT" => Key::Char('.'),
+        "SLASH" => Key::Char('/'),
+        "PLUSMINUS" => Key::Char('-'),
+        k if k.len() == 1 && k.as_bytes()[0].is_ascii_alphanumeric() => Key::Char(k.as_bytes()[0] as char),
+        _ => return None,
+    })
+}
+
+/// Cockpit KCCU keystrokes: text into the field focused on that side's MFD, page and arrow keys as FBW's MFD.
+pub fn kccu_events(events: &[String], db: Option<&dyn NavDatabase>, get: &dyn Fn(&str) -> f64) {
+    let keys: Vec<(bool, &str)> = events.iter().filter_map(|e| kccu_event(e)).collect();
+    if keys.is_empty() {
+        return;
+    }
+    with(|h| {
+        let snap = h.snapshot.clone().unwrap_or_else(|| Snapshot { plans: vec![None; 6], ..Default::default() });
+        let src = Sources::from_snapshot(&snap, get, &[]);
+        for (fo, key) in keys {
+            let (_, out) = match kccu_text_key(key) {
+                Some(k) => h.mfd.kccu_key(fo, &src, db, k),
+                None => h.mfd.kccu_command(fo, &src, key),
+            };
+            h.pending.extend(out);
+        }
+        crate::display::set_mfd_text_focus(h.mfd.keyboard());
+    });
+}
+
 fn visible_text(html: &str) -> Vec<String> {
     let mut out = Vec::new();
     let mut in_tag = false;
@@ -417,4 +461,23 @@ pub fn observe_cef(batch: &str) -> bool {
         true
     })
     .unwrap_or(false)
+}
+
+#[cfg(test)]
+mod kccu_tests {
+    use super::*;
+
+    #[test]
+    fn kccu_events_map_to_their_side_and_key() {
+        assert_eq!(kccu_event("A32NX_KCCU_L_E"), Some((false, "E")));
+        assert_eq!(kccu_event("A32NX_KCCU_R_FPLN"), Some((true, "FPLN")));
+        assert_eq!(kccu_event("A32NX_EFIS_L_ND_MODE"), None);
+        assert_eq!(kccu_text_key("E"), Some(Key::Char('E')));
+        assert_eq!(kccu_text_key("7"), Some(Key::Char('7')));
+        assert_eq!(kccu_text_key("ENT"), Some(Key::Enter));
+        assert_eq!(kccu_text_key("BACKSPACE"), Some(Key::Backspace));
+        assert_eq!(kccu_text_key("SLASH"), Some(Key::Char('/')));
+        assert_eq!(kccu_text_key("FPLN"), None);
+        assert_eq!(kccu_text_key("UP"), None);
+    }
 }

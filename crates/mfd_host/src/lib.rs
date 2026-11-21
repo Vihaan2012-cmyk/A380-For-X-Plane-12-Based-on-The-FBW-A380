@@ -75,6 +75,20 @@ impl Mfd {
         self.capt.keyboard || self.fo.keyboard
     }
 
+    /// A KCCU key on one side's keyboard (`fo` = the right KCCU); ignored unless that side has a field focused.
+    pub fn kccu_key(&mut self, fo: bool, src: &Sources, db: Option<&dyn NavDatabase>, k: Key) -> (bool, Vec<Out>) {
+        let ui = if fo { &mut self.fo } else { &mut self.capt };
+        if !ui.keyboard {
+            return (false, Vec::new());
+        }
+        input::key(ui, src, db, k)
+    }
+
+    /// A KCCU page or arrow key (`FPLN`, `DIR`, `UP`, ...) on one side.
+    pub fn kccu_command(&mut self, fo: bool, src: &Sources, key: &str) -> (bool, Vec<Out>) {
+        input::kccu_command(if fo { &mut self.fo } else { &mut self.capt }, src, key)
+    }
+
     pub fn key(&mut self, src: &Sources, db: Option<&dyn NavDatabase>, k: Key) -> (bool, Vec<Out>) {
         let ui = if self.fo.keyboard { &mut self.fo } else { &mut self.capt };
         input::key(ui, src, db, k)
