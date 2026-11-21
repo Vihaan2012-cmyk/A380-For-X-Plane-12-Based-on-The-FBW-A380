@@ -56,10 +56,11 @@ const NATIVE_SCREENS: &[&str] = &["FCU", "SCREEN_DU_RMP_1", "SCREEN_DU_RMP_2", "
 const STANDBY_SCREENS: &[&str] = &["SCREEN_ISIS_1", "SCREEN_ISIS_2"];
 
 /// Texels per CSS pixel for a screen the native displays draw
-/// (`FBW_NATIVE_SCALE`, default 1).
+/// (`FBW_NATIVE_SCALE`, else the same display scale XPHFBW screens get,
+/// so going native does not drop the glass to 1x).
 pub fn native_scale() -> f64 {
     static SCALE: std::sync::OnceLock<f64> = std::sync::OnceLock::new();
-    *SCALE.get_or_init(|| std::env::var("FBW_NATIVE_SCALE").ok().and_then(|v| v.parse::<f64>().ok()).filter(|v| (0.5..=2.0).contains(v)).unwrap_or(1.0))
+    *SCALE.get_or_init(|| std::env::var("FBW_NATIVE_SCALE").ok().and_then(|v| v.parse::<f64>().ok()).filter(|v| (0.5..=2.0).contains(v)).unwrap_or_else(screen_supersample))
 }
 
 #[cfg(feature = "native-displays")]

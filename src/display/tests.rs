@@ -1,6 +1,6 @@
 //! Golden streams drawn with the software renderer (the same tessellation
 //! and plan the GL renderer carries out), written as PNG snapshots to
-//! `SNAPSHOTS`, checked against tiny-skia drawing the same commands on its
+//! `snapshots()`, checked against tiny-skia drawing the same commands on its
 //! own, and timed.
 
 use std::path::{Path, PathBuf};
@@ -16,7 +16,11 @@ use super::tessellate::{add_dimming, Images, Mesh, Resources, Tessellator};
 use super::text::{Atlas, Fonts};
 use super::{soft, Displays, Tess};
 
-const SNAPSHOTS: &str = r"E:\A380\fbw-build\display-snapshots";
+/// PNG output folder: A380_DISPLAY_SNAPSHOTS, else <temp>/a380-display-snapshots.
+fn snapshots() -> PathBuf {
+    std::env::var_os("A380_DISPLAY_SNAPSHOTS").map(PathBuf::from)
+        .unwrap_or_else(|| std::env::temp_dir().join("a380-display-snapshots"))
+}
 const PACKAGE_HTML_UI: &str =
     r"D:\Microsoft Flight Simulator 2020\Microsoft Flight Simulator 2020 Packages\Community\flybywire-aircraft-a380-842\html_ui";
 
@@ -96,9 +100,9 @@ fn rgba_of(target: &soft::Target) -> Vec<u8> {
 }
 
 fn save(name: &str, width: u32, height: u32, rgba: Vec<u8>) {
-    let _ = std::fs::create_dir_all(SNAPSHOTS);
+    let _ = std::fs::create_dir_all(snapshots());
     let pixmap = sk::Pixmap::from_vec(rgba, sk::IntSize::from_wh(width, height).unwrap()).unwrap();
-    pixmap.save_png(Path::new(SNAPSHOTS).join(format!("{name}.png"))).unwrap();
+    pixmap.save_png(snapshots().join(format!("{name}.png"))).unwrap();
 }
 
 fn pixel(rgba: &[u8], width: u32, x: u32, y: u32) -> [u8; 4] {
@@ -953,7 +957,7 @@ fn a_wheel_click_reaches_xphfbw_as_one_click_in_the_same_direction() {
 
 /// The HUD page booted headless against a variable store for three scenes (an ILS approach in a
 /// crosswind, a taxi, a turn in cruise), each frame tessellated and rendered to
-/// `SNAPSHOTS/hud-<scene>.png`. Needs the installed aircraft's html_ui (BOOT_HTML_UI to override):
+/// `snapshots()/hud-<scene>.png`. Needs the installed aircraft's html_ui (BOOT_HTML_UI to override):
 /// `cargo test --release --features js -- --ignored the_hud_page_renders`.
 #[test]
 #[ignore]

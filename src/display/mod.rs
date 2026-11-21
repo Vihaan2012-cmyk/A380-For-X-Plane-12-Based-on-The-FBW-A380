@@ -1002,7 +1002,8 @@ impl Displays {
             self.renderer = Some(r);
         }
         let Some(Ok(renderer)) = self.renderer.as_mut() else { return };
-        renderer.prefilter_lod = self.view_scale.lod(self.screens[index].def.id);
+        let bias = crate::app_settings::current().display_prefilter_bias as f32;
+        renderer.prefilter_lod = (self.view_scale.lod(self.screens[index].def.id) - bias).max(0.);
         let framebuffer = self.fbo.map_or(0, |d| xplm.get_i(d)) as u32;
         // `glGetIntegerv(GL_VIEWPORT)` (the old `renderer.viewport()` path)
         // is exactly what developer.x-plane.com's "Plugin Guidance for
