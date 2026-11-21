@@ -280,6 +280,20 @@ fn jstr(v: &Value) -> String {
     efb_pages::model::jstr(v)
 }
 
+/// The page background as a file path the efbx display resolves against
+/// html_ui/Images/fbw-a380x and decodes once. A data: URL put ~3 MB of base64
+/// in every document, copied and hashed on each scroll frame (~8 fps).
+/// shortcut: assumes html_ui sits two folders above the plugin (an A380_HTML_UI override misses it), upgrade if that ever moves.
+fn gate_bg_url() -> String {
+    let fallback = efb_pages::bg::asset_path("gate");
+    let Some(dir) = crate::js_bridge::plugin_dir() else { return fallback };
+    let Some(name) = dir.file_name().and_then(|n| n.to_str()) else { return fallback };
+    if !dir.join("bg").join("gate.png").is_file() {
+        return fallback;
+    }
+    format!("../../../plugins/{name}/bg/gate.png")
+}
+
 impl<B: Backend> Efb<B> {
     pub fn new(mut backend: B) -> Self {
         let raw = backend.load_settings();
@@ -328,7 +342,7 @@ impl<B: Backend> Efb<B> {
             status: StatusModel::default(),
             landings: Vec::new(),
             maintenance: None,
-            bg_url: crate::js_bridge::plugin_dir().map(|d| efb_pages::bg::Backgrounds::load(&d.join("bg")).url("gate")).unwrap_or_else(|| efb_pages::bg::asset_path("gate")),
+            bg_url: gate_bg_url(),
             zoom: "1".into(),
             clock: ("--:--Z".into(), "--:--".into()),
             chrono: (false, 0.0, 0.0),
@@ -634,7 +648,7 @@ impl<B: Backend> Efb<B> {
             }
             4 => match self.hit_at(x, y).and_then(|h| h.scroller) {
                 Some((_, id)) => {
-                    if self.scrolls.by(&id, -(button as f64) * WHEEL_STEP_PX) {
+                    if self.scrolls.wheel(&id, -(button as f64) * WHEEL_STEP_PX) {
                         self.scrolled_away(&id);
                     }
                     true

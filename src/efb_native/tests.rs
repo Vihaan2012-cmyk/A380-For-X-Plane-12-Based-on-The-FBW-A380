@@ -243,7 +243,12 @@ fn drag_scrolls_instead_of_tapping_and_wheel_scrolls() {
     assert!(efb.scrolls.top(&id) > 80., "momentum after release");
     let t = efb.scrolls.top(&id);
     efb.pointer(300., 300., 4, 1);
-    assert_eq!(efb.scrolls.top(&id), (t - 48.).max(0.));
+    efb.pointer(300., 300., 4, 1);
+    efb.tick(430.);
+    let mid = efb.scrolls.top(&id);
+    assert!(mid < t && mid > t - 96., "a wheel step glides, not jumps: {t} -> {mid}");
+    efb.tick(1400.);
+    assert_eq!(efb.scrolls.top(&id), (t - 96.).max(0.));
     assert!(efb.scroll_json().contains(&id));
 }
 
