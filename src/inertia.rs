@@ -1,32 +1,51 @@
-//! X-Plane's moments of inertia built the way MSFS builds FlyByWire's: the empty aircraft's MOI from
-//! flight_model.cfg plus every payload station and fuel tank as a point mass, about the loaded CG.
-//! On unless `xphfbw.fbwInertia` is false, so the control laws fly the inertia FlyByWire tuned them for.
+//! X-Plane's moments of inertia: the empty aircraft's from a component build-up (below), plus every payload
+//! station and fuel tank as a point mass, about the loaded CG. On unless `xphfbw.fbwInertia` is false.
 
 use crate::mass_balance::Mass;
 use crate::xp::{DataRef, Xplm};
 
-const SLUG_FT2_KGM2: f64 = 14.593_902_9 * 0.092_903_04;
 const LB_KG: f64 = 0.453_592_37;
 const FT_M: f64 = 0.3048;
 
-/// The cfg's empty pitch, yaw and roll MOI, slug ft^2.
-pub fn empty_moi(cfg: &str) -> Option<[f64; 3]> {
-    let value = |key: &str| {
-        cfg.lines().find_map(|l| {
-            let l = l.split(';').next()?.trim();
-            let (k, v) = l.split_once('=')?;
-            (k.trim() == key).then(|| v.trim().parse::<f64>().ok()).flatten()
-        })
-    };
-    Some([value("empty_weight_pitch_MOI")?, value("empty_weight_yaw_MOI")?, value("empty_weight_roll_MOI")?])
+/// One structural group: tonnes, centroid (cfg feet: z long, x lat, y vert) and its own rms extent (m: long, lat, vert).
+struct Part(f64, [f64; 3], [f64; 3]);
+
+/// The A380-800's 300 t empty weight by group: engine, gear and tail positions from FlyByWire's cfgs, masses estimated.
+const PARTS: [Part; 11] = [
+    Part(154.4, [3., 0., 4.], [17.6, 2.5, 2.9]),
+    Part(72.0, [-8., 0., -4.], [5.0, 17.6, 0.8]),
+    Part(9.4, [4., -84., -4.], [1.6, 0.8, 0.8]),
+    Part(9.4, [28., -48.6, -6.], [1.6, 0.8, 0.8]),
+    Part(9.4, [28., 48.6, -6.], [1.6, 0.8, 0.8]),
+    Part(9.4, [4., 84., -4.], [1.6, 0.8, 0.8]),
+    Part(8.5, [-108., 0., 17.], [2.5, 6.45, 0.5]),
+    Part(5.5, [-97., 0., 35.], [2.5, 0.3, 4.0]),
+    Part(2.5, [99., 0., -9.], [0.5, 0.5, 1.0]),
+    Part(9.8, [-5.7, 0., -10.], [1.0, 3.6, 1.0]),
+    Part(9.8, [5.7, 0., -10.], [1.0, 7.0, 1.0]),
+];
+
+/// Empty pitch, yaw and roll inertia, kg m^2, about the parts' own CG.
+pub fn empty_moi() -> [f64; 3] {
+    let total: f64 = PARTS.iter().map(|p| p.0).sum();
+    let cg: [f64; 3] = [0, 1, 2].map(|k| PARTS.iter().map(|p| p.0 * p.1[k]).sum::<f64>() / total * FT_M);
+    let mut i = [0.; 3];
+    for Part(t, pos, rms) in &PARTS {
+        let kg = t * 1000.;
+        let [l, a, v] = [0, 1, 2].map(|k| (pos[k] * FT_M - cg[k]).powi(2) + rms[k] * rms[k]);
+        i[0] += kg * (l + v);
+        i[1] += kg * (l + a);
+        i[2] += kg * (a + v);
+    }
+    i
 }
 
 /// Pitch, yaw and roll inertia (kg m^2) about the loaded CG, and the total mass (kg). Positions are the cfg's
 /// feet z (longitudinal), x (lateral), y (vertical).
-pub fn loaded(empty_moi_slug_ft2: [f64; 3], empty: Mass, stations: &[Mass], tanks: &[Mass]) -> ([f64; 3], f64) {
+pub fn loaded(empty_moi_kg_m2: [f64; 3], empty: Mass, stations: &[Mass], tanks: &[Mass]) -> ([f64; 3], f64) {
     let all: Vec<Mass> = std::iter::once(empty).chain(stations.iter().copied()).chain(tanks.iter().copied()).collect();
     let (total_lb, cg) = crate::mass_balance::centre_of_gravity(all.iter().copied());
-    let mut inertia = empty_moi_slug_ft2.map(|i| i * SLUG_FT2_KGM2);
+    let mut inertia = empty_moi_kg_m2;
     for m in &all {
         let kg = m.pounds.max(0.) * LB_KG;
         let [dz, dx, dy] = [0, 1, 2].map(|k| (m.position[k] - cg[k]) * FT_M);
@@ -48,7 +67,7 @@ impl Inertia {
     pub fn new(xplm: &Xplm) -> Self {
         Inertia {
             refs: ["Jxx", "Jyy", "Jzz"].map(|j| xplm.find(&format!("sim/aircraft/weight/acf_{j}_unitmass"))),
-            moi: empty_moi(crate::weight_balance::FLIGHT_MODEL_CFG),
+            moi: Some(empty_moi()),
             logged: false,
             since_s: 1.,
         }
@@ -72,7 +91,7 @@ impl Inertia {
         if !self.logged {
             self.logged = true;
             crate::log(&format!(
-                "inertia: X-Plane's pitch {:.0} yaw {:.0} roll {:.0} m^2 per kg; FlyByWire's loaded {:.0} {:.0} {:.0} at {:.0} t ({})",
+                "inertia: X-Plane's pitch {:.0} yaw {:.0} roll {:.0} m^2 per kg; build-up loaded {:.0} {:.0} {:.0} at {:.0} t ({})",
                 had[0], had[1], had[2], wanted[0], wanted[1], wanted[2], kg / 1000., if on { "applied" } else { "xphfbw.fbwInertia off" }
             ));
         }
@@ -95,7 +114,7 @@ mod tests {
 
     #[test]
     fn fuel_in_the_wings_raises_roll_inertia_and_a_point_at_the_cg_adds_nothing() {
-        let moi = empty_moi(crate::weight_balance::FLIGHT_MODEL_CFG).expect("the cfg has all three");
+        let moi = empty_moi();
         let empty = Mass { pounds: 661_403., position: [0., 0., 0.] };
         let (bare, _) = loaded(moi, empty, &[], &[]);
         let (centre, _) = loaded(moi, empty, &[Mass { pounds: 10_000., position: [0., 0., 0.] }], &[]);
@@ -104,5 +123,14 @@ mod tests {
         let (fuelled, _) = loaded(moi, empty, &[], &wings);
         assert!(fuelled[2] > bare[2] * 1.05, "{} vs {}", fuelled[2], bare[2]);
         assert!((fuelled[0] - bare[0]).abs() < bare[0] * 0.01, "wing fuel on the lateral axis leaves pitch alone");
+    }
+
+    /// Per kg at the cfg's 300 t empty weight: an airliner's yaw is a little under pitch plus roll, and roll sits well under pitch.
+    #[test]
+    fn the_build_up_weighs_the_empty_aircraft_and_has_airliner_proportions() {
+        let total: f64 = PARTS.iter().map(|p| p.0).sum();
+        assert!((total * 1000. / LB_KG - 661_403.).abs() < 661_403. * 0.01, "{total} t");
+        let [pitch, yaw, roll] = empty_moi().map(|i| i / (total * 1000.));
+        assert!((200. ..270.).contains(&pitch) && (120. ..170.).contains(&roll) && (0.9..1.0).contains(&(yaw / (pitch + roll))), "{pitch:.0} {yaw:.0} {roll:.0}");
     }
 }

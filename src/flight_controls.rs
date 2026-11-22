@@ -618,6 +618,9 @@ pub struct FlightControls {
     hyd_green: VariableIdentifier,
     hyd_yellow: VariableIdentifier,
     separation: crate::separation::SeparationAnims,
+    response: crate::control_response::ControlResponse,
+    /// Yoke pitch, roll, heading ratios, running time and frame period for the response recorder.
+    response_refs: [Option<DataRef>; 5],
 }
 
 impl FlightControls {
@@ -711,6 +714,15 @@ impl FlightControls {
             hyd_green: get("HYD_GREEN_SYSTEM_1_SECTION_PRESSURE".to_owned()),
             hyd_yellow: get("HYD_YELLOW_SYSTEM_1_SECTION_PRESSURE".to_owned()),
             separation: crate::separation::SeparationAnims::new(),
+            response: Default::default(),
+            response_refs: [
+                "sim/joystick/yoke_pitch_ratio",
+                "sim/joystick/yoke_roll_ratio",
+                "sim/joystick/yoke_heading_ratio",
+                "sim/time/total_running_time_sec",
+                "sim/operation/misc/frame_rate_period",
+            ]
+            .map(|n| xplm.find(n)),
         }
     }
 
@@ -818,6 +830,9 @@ impl FlightControls {
             }
         }
         let s = Surfaces::from_fbw_missing(&self.read(vars), &missing);
+        let v = self.response_refs.map(|d| d.map_or(0., |d| xplm.get_f(d) as f64));
+        self.response.update(xplm, v[3], v[4], [v[0], v[1], v[2]], &s);
+        let r = &self.refs;
         // The glue's ELEVATOR TRIM POSITION (trimmable_horizontal_stabilizer.rs:21-39), degrees.
         vars.write(&self.ids.trim_position, s.ths_deg);
         let set = |d: Option<DataRef>, wing: usize, v: f64| {

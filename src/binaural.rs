@@ -230,7 +230,7 @@ impl Binaural {
         let guids = crate::sound_pack::plugin_dir()
             .and_then(|d| Some(d.parent()?.parent()?.join("fmod").join("GUIDs.txt")))
             .and_then(|p| std::fs::read_to_string(p).ok())
-            .map(|t| events(&t).into_iter().map(|(g, _)| g).collect())
+            .map(|t| events(&t).into_iter().map(|(g, ..)| g).collect())
             .unwrap_or_default();
         Self { studio: std::ptr::null_mut(), core: std::ptr::null_mut(), api: None, plugin: 0, params: None, descriptions: Vec::new(), guids, tracked: HashMap::new(), failed: false }
     }

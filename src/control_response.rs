@@ -80,7 +80,7 @@ impl ControlResponse {
     }
 
     fn write(&mut self, start: f64, rows: &[Row]) {
-        let dir = self.dir.get_or_insert_with(|| crate::xp::xplane_root().unwrap_or_default().join("Output").join("fbw-a380x").join("control_response")).clone();
+        let dir = self.dir.get_or_insert_with(|| crate::xp::system_path().unwrap_or_default().join("Output").join("fbw-a380x").join("control_response")).clone();
         let _ = std::fs::create_dir_all(&dir);
         let path = dir.join(format!("step_{:03}_{:.0}s.csv", self.written + 1, start));
         let Ok(mut f) = std::fs::File::create(&path) else { return };

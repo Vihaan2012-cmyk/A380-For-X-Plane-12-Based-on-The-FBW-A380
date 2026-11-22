@@ -3,6 +3,8 @@ use std::sync::atomic::{AtomicU32, Ordering};
 
 use systems::simulation::{SimulatorReaderWriter, VariableIdentifier, VariableRegistry};
 
+use crate::sound_mix::{self, Inputs, Mix, Role};
+use crate::xp::{DataRef, Xplm};
 use crate::Vars;
 
 static FBW_GAIN: AtomicU32 = AtomicU32::new(0x3f80_0000);
@@ -88,12 +90,12 @@ pub fn parse_guid(s: &str) -> Option<Guid> {
     Some(Guid { d1: u32::from_str_radix(h[0], 16).ok()?, d2: u16::from_str_radix(h[1], 16).ok()?, d3: u16::from_str_radix(h[2], 16).ok()?, d4 })
 }
 
-pub fn events(guids_txt: &str) -> Vec<(Guid, Group)> {
+pub fn events(guids_txt: &str) -> Vec<(Guid, Group, Option<Role>)> {
     guids_txt
         .lines()
         .filter_map(|line| {
             let (guid, path) = line.trim().split_once(' ')?;
-            Some((parse_guid(guid)?, group_of(path.trim())?))
+            Some((parse_guid(guid)?, group_of(path.trim())?, sound_mix::role(path.trim())))
         })
         .collect()
 }
@@ -103,6 +105,9 @@ type GetEventById = unsafe extern "C" fn(*mut c_void, *const Guid, *mut *mut c_v
 type GetInstanceList = unsafe extern "C" fn(*mut c_void, *mut *mut c_void, i32, *mut i32) -> i32;
 type SetVolume = unsafe extern "C" fn(*mut c_void, f32) -> i32;
 type SetProperty = unsafe extern "C" fn(*mut c_void, i32, f32) -> i32;
+type GetBus = unsafe extern "C" fn(i32) -> *mut c_void;
+type GroupGetVolume = unsafe extern "C" fn(*mut c_void, *mut f32) -> i32;
+type GroupSetVolume = unsafe extern "C" fn(*mut c_void, f32) -> i32;
 
 #[cfg(windows)]
 extern "system" {
@@ -116,6 +121,7 @@ struct Fmod {
     instances: GetInstanceList,
     set_volume: SetVolume,
     set_property: Option<SetProperty>,
+    buses: Option<(GetBus, GroupGetVolume, GroupSetVolume)>,
 }
 
 impl Fmod {
@@ -138,8 +144,22 @@ impl Fmod {
                 instances: std::mem::transmute::<*mut c_void, GetInstanceList>(f("FMOD_Studio_EventDescription_GetInstanceList")?),
                 set_volume: std::mem::transmute::<*mut c_void, SetVolume>(f("FMOD_Studio_EventInstance_SetVolume")?),
                 set_property: f("FMOD_Studio_EventInstance_SetProperty").map(|p| std::mem::transmute::<*mut c_void, SetProperty>(p)),
+                buses: Self::buses(|n| {
+                    let name: Vec<u16> = "fmod.dll\0".encode_utf16().collect();
+                    let core = GetModuleHandleW(name.as_ptr());
+                    let p = if core.is_null() { core } else { GetProcAddress(core, format!("{n}\0").as_ptr()) };
+                    (!p.is_null()).then_some(p)
+                }),
             })
         }
+    }
+
+    unsafe fn buses(f: impl Fn(&str) -> Option<*mut c_void>) -> Option<(GetBus, GroupGetVolume, GroupSetVolume)> {
+        Some((
+            std::mem::transmute::<*mut c_void, GetBus>(crate::xp::Xplm::xplm_symbol("XPLMGetFMODChannelGroup")?),
+            std::mem::transmute::<*mut c_void, GroupGetVolume>(f("FMOD_ChannelGroup_GetVolume")?),
+            std::mem::transmute::<*mut c_void, GroupSetVolume>(f("FMOD_ChannelGroup_SetVolume")?),
+        ))
     }
 
     #[cfg(not(windows))]
@@ -156,19 +176,49 @@ impl Fmod {
                 instances: std::mem::transmute::<*mut c_void, GetInstanceList>(f(c"FMOD_Studio_EventDescription_GetInstanceList")?),
                 set_volume: std::mem::transmute::<*mut c_void, SetVolume>(f(c"FMOD_Studio_EventInstance_SetVolume")?),
                 set_property: f(c"FMOD_Studio_EventInstance_SetProperty").map(|p| std::mem::transmute::<*mut c_void, SetProperty>(p)),
+                buses: Self::buses(|n| {
+                    let name = std::ffi::CString::new(n).ok()?;
+                    let p = crate::xp::library_symbol("fmod", &name);
+                    (!p.is_null()).then_some(p)
+                }),
             })
         }
     }
 }
 
+struct Description {
+    ptr: *mut c_void,
+    group: Group,
+    role: Option<Role>,
+    gain: f32,
+}
+
+/// One of X-Plane's buses a cabin view turns down: its level as found and as last set.
+struct Bus {
+    group: *mut c_void,
+    base: f32,
+    last: f32,
+}
+
+struct MixRefs {
+    outside: Option<DataRef>,
+    head_z: Option<DataRef>,
+    burning: Option<DataRef>,
+    time: Option<DataRef>,
+}
+
 pub struct SoundLevels {
     ids: [VariableIdentifier; 8],
-    events: Vec<(Guid, Group)>,
-    descriptions: Vec<(*mut c_void, Group)>,
+    engine_state: [VariableIdentifier; 4],
+    events: Vec<(Guid, Group, Option<Role>)>,
+    descriptions: Vec<Description>,
     fmod: Option<Fmod>,
     applied: [f32; 6],
     resolved: bool,
     since_s: f64,
+    mix: Mix,
+    refs: Option<MixRefs>,
+    buses: Vec<(i32, Bus)>,
 }
 
 impl SoundLevels {
@@ -180,16 +230,74 @@ impl SoundLevels {
             .unwrap_or_default();
         SoundLevels {
             ids: SETTINGS.map(|s| vars.get(s.to_owned())),
+            engine_state: [1, 2, 3, 4].map(|n| vars.get(format!("ENGINE_STATE:{n}"))),
             fmod: if events.is_empty() { None } else { Fmod::load() },
             events,
             descriptions: Vec::new(),
             applied: [1.0; 6],
             resolved: false,
             since_s: REAPPLY_S,
+            mix: Mix::default(),
+            refs: None,
+            buses: Vec::new(),
         }
     }
 
-    pub fn update(&mut self, vars: &mut Vars, delta: f64) {
+    fn mix_inputs(&mut self, vars: &mut Vars, xplm: &Xplm) -> Inputs {
+        let r = self.refs.get_or_insert_with(|| MixRefs {
+            outside: xplm.find("sim/graphics/view/view_is_external"),
+            head_z: xplm.find("sim/graphics/view/pilots_head_z"),
+            burning: xplm.find("sim/flightmodel2/engines/engine_is_burning_fuel"),
+            time: xplm.find("sim/time/total_running_time_sec"),
+        });
+        let mut burning = [0; 8];
+        if let Some(d) = r.burning {
+            xplm.get_vi(d, &mut burning);
+        }
+        Inputs {
+            now_s: r.time.map_or(0., |d| xplm.get_f(d) as f64),
+            outside_view: r.outside.is_none_or(|d| xplm.get_i(d) != 0),
+            head_z_m: r.head_z.map_or(0., |d| xplm.get_f(d) as f64),
+            starting: std::array::from_fn(|k| matches!(vars.read(&self.engine_state[k]).round() as i64, 2 | 3)),
+            burning: std::array::from_fn(|k| burning[k] != 0),
+        }
+    }
+
+    /// Cabin views turn X-Plane's exterior buses down from whatever level they were found at.
+    fn set_buses(&mut self, inside: bool) {
+        let Some((get_bus, get, set)) = self.fmod.as_ref().and_then(|f| f.buses) else { return };
+        for (bus, gain) in sound_mix::INSIDE_BUS_GAIN {
+            let group = unsafe { get_bus(bus) };
+            let mut current = 0f32;
+            if group.is_null() || unsafe { get(group, &mut current) } != 0 {
+                continue;
+            }
+            let i = match self.buses.iter().position(|(b, _)| *b == bus) {
+                Some(i) => i,
+                None => {
+                    self.buses.push((bus, Bus { group, base: current, last: current }));
+                    self.buses.len() - 1
+                }
+            };
+            let state = &mut self.buses[i].1;
+            if state.group != group || (current - state.last).abs() > 0.001 {
+                *state = Bus { group, base: current, last: current };
+            }
+            state.last = state.base * if inside { gain } else { 1. };
+            unsafe { set(group, state.last) };
+        }
+    }
+
+    fn restore_buses(&mut self) {
+        if let Some((_, _, set)) = self.fmod.as_ref().and_then(|f| f.buses) {
+            for (_, b) in &self.buses {
+                unsafe { set(b.group, b.base) };
+            }
+        }
+        self.buses.clear();
+    }
+
+    pub fn update(&mut self, vars: &mut Vars, xplm: &Xplm, delta: f64) {
         let level = |vars: &mut Vars, i: usize| (vars.read(&self.ids[i]) / 100.).clamp(0., 1.) as f32;
         let master = level(vars, 0);
         FBW_GAIN.store((master * level(vars, 7)).to_bits(), Ordering::Relaxed);
@@ -201,10 +309,10 @@ impl SoundLevels {
                 return;
             }
             self.descriptions.clear();
-            for (guid, group) in &self.events {
+            for (guid, group, role) in &self.events {
                 let mut d = std::ptr::null_mut();
                 if unsafe { (fmod.by_id)(system, guid, &mut d) } == 0 && !d.is_null() {
-                    self.descriptions.push((d, *group));
+                    self.descriptions.push(Description { ptr: d, group: *group, role: *role, gain: 1. });
                 }
             }
             if self.descriptions.is_empty() {
@@ -213,22 +321,35 @@ impl SoundLevels {
             crate::log(&format!("sound levels: {} of the pack's {} events found", self.descriptions.len(), self.events.len()));
             self.resolved = true;
         }
+        let inputs = self.mix_inputs(vars, xplm);
+        self.mix.observe(&inputs);
+        self.set_buses(!inputs.outside_view);
+        let Some(fmod) = &self.fmod else { return };
+        let smooth = (1. - (-delta.max(0.) / sound_mix::SMOOTH_S).exp()) as f32;
         // Instances come and go as the .snd starts and stops events, so new ones are found twice a second.
         self.since_s += delta;
-        if wanted == self.applied && self.since_s < REAPPLY_S {
-            return;
+        let all = wanted != self.applied || self.since_s >= REAPPLY_S;
+        if all {
+            self.since_s = 0.;
         }
-        self.since_s = 0.;
         let mut list = [std::ptr::null_mut(); 32];
-        for (d, group) in &self.descriptions {
-            let g = GROUPS.iter().position(|x| x == group).unwrap_or(0);
+        for d in &mut self.descriptions {
+            let moved = d.role.is_some_and(|r| {
+                let before = d.gain;
+                d.gain += (self.mix.target(r, &inputs) - d.gain) * smooth;
+                (d.gain - before).abs() > 0.001
+            });
+            if !all && !moved {
+                continue;
+            }
+            let g = GROUPS.iter().position(|x| *x == d.group).unwrap_or(0);
             let mut n = 0;
-            if unsafe { (fmod.instances)(*d, list.as_mut_ptr(), list.len() as i32, &mut n) } != 0 {
+            if unsafe { (fmod.instances)(d.ptr, list.as_mut_ptr(), list.len() as i32, &mut n) } != 0 {
                 continue;
             }
             for &instance in &list[..n.clamp(0, list.len() as i32) as usize] {
-                unsafe { (fmod.set_volume)(instance, wanted[g]) };
-                if let (Some(set), Some((min, max))) = (fmod.set_property, RANGE[g]) {
+                unsafe { (fmod.set_volume)(instance, wanted[g] * d.gain) };
+                if let (true, Some(set), Some((min, max))) = (all, fmod.set_property, RANGE[g]) {
                     unsafe {
                         set(instance, PROPERTY_MINIMUM_DISTANCE, min);
                         set(instance, PROPERTY_MAXIMUM_DISTANCE, max);
@@ -241,6 +362,8 @@ impl SoundLevels {
 
     pub fn release(&mut self) {
         FBW_GAIN.store(1.0f32.to_bits(), Ordering::Relaxed);
+        self.restore_buses();
+        self.mix = Mix::default();
         self.descriptions.clear();
         self.resolved = false;
     }
