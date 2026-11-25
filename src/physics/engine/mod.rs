@@ -825,7 +825,8 @@ impl Engine {
         // (`gas_path`), less HP6 bleed: what the governor's fuel-air limits
         // are scheduled on.
         let mdot_to_combustor = (self.gas.state.m_hpc - hp_bleed).max(0.0);
-        let wf = self.governor.step(
+        let fuel_scale = gas::total_pressure(ambient_p, inputs.mach, GAMMA_AIR) / P_REF_PA * correction;
+        let wf = self.governor.step_scaled(
             inputs.target_n1_corrected_pct * 100.0 / TAKEOFF_N1_PCT,
             n1_corr,
             n3_corr,
@@ -833,6 +834,7 @@ impl Engine {
             mdot_to_combustor,
             self.gas.design.wf_kg_s,
             dt.max(1e-4),
+            fuel_scale,
         ) * self.running_tgt_cutback(n3_pct, inputs.tgt_limit_c);
         // The start and its handover, one piece. A real FADEC fuels the
         // sub-idle start open-loop from a start schedule keyed to core speed
@@ -907,7 +909,7 @@ impl Engine {
                     .min(mdot_to_combustor * MAX_COMBUSTOR_FUEL_AIR_RATIO)
                     * self.start_tgt_cutback(n3_pct)
             };
-            self.governor.track(scheduled, n1_corr, self.gas.design.wf_kg_s);
+            self.governor.track_scaled(scheduled, n1_corr, self.gas.design.wf_kg_s, fuel_scale);
             scheduled
         } else {
             wf
@@ -2517,5 +2519,53 @@ mod accel_diagnostic {
             }
             t += dt;
         }
+    }
+}
+
+#[cfg(test)]
+mod cruise_governor {
+    use super::tests::*;
+    use super::*;
+
+    fn cruise(dt: f64) -> EngineInputs {
+        let temp = 216.65;
+        EngineInputs {
+            ambient_pressure_pa: 20_500.0,
+            ambient_temp_k: temp,
+            mach: 0.85,
+            true_airspeed_m_s: 0.85 * (GAMMA_AIR * R_AIR * temp).sqrt(),
+            dt_s: dt,
+            tgt_limit_c: crate::physics::damage::trent900::TGT_MAX_CONTINUOUS_UNTRIMMED_C,
+            ..isa_sea_level()
+        }
+    }
+
+    fn overshoot(from: f64, to: f64) -> f64 {
+        let dt = 0.035;
+        let mut e = Engine::new();
+        run_to_steady_state(&mut e, EngineInputs { target_n1_corrected_pct: 70.0, dt_s: dt, ..isa_sea_level() }, 10.0);
+        let mut inp = cruise(dt);
+        for k in 0..=200 {
+            inp.target_n1_corrected_pct = 70.0 + (from - 70.0) * k as f64 / 200.0;
+            for _ in 0..(1.0 / dt) as u32 {
+                e.step(&inp);
+            }
+        }
+        inp.target_n1_corrected_pct = to;
+        let mut trace = Vec::new();
+        for _ in 0..(90.0 / dt) as u32 {
+            trace.push(e.step(&inp).n1_pct);
+        }
+        let settled = *trace.last().unwrap();
+        let worst = if to > from { trace.iter().cloned().fold(f64::MIN, f64::max) - settled } else { settled - trace.iter().cloned().fold(f64::MAX, f64::min) };
+        worst
+    }
+
+    /// The governor runs in corrected fuel flow, so at FL386 an A/THR step does not overshoot as it did at 3x sea-level loop gain (2.7% N1).
+    #[test]
+    fn a_cruise_thrust_step_settles_without_a_large_overshoot() {
+        let up = overshoot(88.0, 93.0);
+        let down = overshoot(93.0, 88.0);
+        assert!(up < 1.2 && down < 1.5, "overshoot up {up:.2} down {down:.2} % N1");
     }
 }

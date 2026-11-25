@@ -113,6 +113,7 @@ mod throttle;
 mod cockpit_levers;
 pub mod xp;
 // [slot modules: flight_controls] X-Plane's surfaces follow FlyByWire's actuators.
+mod control_response;
 mod flight_controls;
 mod handling;
 // [slot modules: sensors] X-Plane's state for the simulator variables the systems read.
@@ -235,6 +236,7 @@ mod engine_forces;
 mod sound;
 mod procedure_pack;
 mod sound_levels;
+mod sound_mix;
 mod sound_pack;
 // [slot modules: extra_backend] FlyByWire's extra backend: lighting and aircraft presets.
 mod extra_backend;
@@ -3035,7 +3037,7 @@ impl Plugin {
                 log(&format!("sound panicked and is off for this flight: {}", last_panic()));
             }
         }
-        self.sound_levels.update(&mut self.vars, delta);
+        self.sound_levels.update(&mut self.vars, xplm, delta);
         crate::perf::lap("tick-after-systems: key_events");
         // [slot tick-after-systems: key_events] Events with several arguments
         // (TRIGGER_KEY_EVENT, key_events::push).

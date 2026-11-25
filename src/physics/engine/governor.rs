@@ -196,8 +196,14 @@ impl Governor {
     /// ramp from the fan's current speed, so handing control back steps
     /// neither the fuel nor the target.
     pub fn track(&mut self, wf_kg_s: f64, measured_n1_corrected_pct: f64, design_wf_kg_s: f64) {
+        self.track_scaled(wf_kg_s, measured_n1_corrected_pct, design_wf_kg_s, 1.0);
+    }
+
+    /// `track` for a loop run in corrected fuel flow (`step_scaled`).
+    pub fn track_scaled(&mut self, wf_kg_s: f64, measured_n1_corrected_pct: f64, design_wf_kg_s: f64, fuel_scale: f64) {
+        let fuel_scale = fuel_scale.max(1e-3);
         let feedforward = design_wf_kg_s * (measured_n1_corrected_pct / 100.0).max(0.0).powi(3);
-        self.integral = ((wf_kg_s - feedforward) / KI).clamp(-INTEGRAL_LIMIT, INTEGRAL_LIMIT);
+        self.integral = ((wf_kg_s / fuel_scale - feedforward) / KI).clamp(-INTEGRAL_LIMIT, INTEGRAL_LIMIT);
         self.ramp = Some(measured_n1_corrected_pct);
     }
 
@@ -240,6 +246,24 @@ impl Governor {
         design_wf_kg_s: f64,
         dt_s: f64,
     ) -> f64 {
+        self.step_scaled(target_n1_corrected_pct, measured_n1_corrected_pct, measured_n3_corrected_pct, fuel_valve_open, mdot_air_to_combustor_kg_s, design_wf_kg_s, dt_s, 1.0)
+    }
+
+    /// `step` with the law in corrected fuel flow: feedforward and gains times `fuel_scale` (inlet delta times sqrt theta), so the loop keeps its sea-level damping at altitude.
+    #[allow(clippy::too_many_arguments)]
+    pub fn step_scaled(
+        &mut self,
+        target_n1_corrected_pct: f64,
+        measured_n1_corrected_pct: f64,
+        measured_n3_corrected_pct: f64,
+        fuel_valve_open: bool,
+        mdot_air_to_combustor_kg_s: f64,
+        design_wf_kg_s: f64,
+        dt_s: f64,
+        fuel_scale: f64,
+    ) -> f64 {
+        let design_wf_kg_s = design_wf_kg_s * fuel_scale.max(1e-3);
+        let (kp, ki) = (KP * fuel_scale.max(1e-3), KI * fuel_scale.max(1e-3));
         if !fuel_valve_open || !Self::combustion_floor_met(measured_n1_corrected_pct, measured_n3_corrected_pct) {
             // No combustion can be sustained; hold the integrator so it
             // does not wind up while starved of feedback, matching the
@@ -282,12 +306,12 @@ impl Governor {
         // target settled ~1.5% N1 short with the integral saturated.
         let ceiling = accel_limit.min(far_limit);
         let trial = self.integral + error * dt_s;
-        let unclamped = feedforward + KP * error + KI * trial;
+        let unclamped = feedforward + kp * error + ki * trial;
         let pinned = (unclamped > ceiling && error > 0.0) || (unclamped < 0.0 && error < 0.0);
         if !pinned {
             self.integral = trial.clamp(-INTEGRAL_LIMIT, INTEGRAL_LIMIT);
         }
-        let mut wf = feedforward + KP * error + KI * self.integral;
+        let mut wf = feedforward + kp * error + ki * self.integral;
 
         // Overspeed protection: a real FADEC pulls fuel back hard rather
         // than let the core or fan overspeed.

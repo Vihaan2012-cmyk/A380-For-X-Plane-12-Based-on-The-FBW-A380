@@ -218,8 +218,8 @@ pub fn parse(spec: &str) -> Selection {
     Selection { targets: TARGETS.iter().zip(picked).filter(|(_, p)| *p).map(|(t, _)| t).collect(), unknown }
 }
 
-/// What an unset `FBW_NATIVE_SCREENS` and `nativeScreens` select.
-pub const DEFAULT_SPEC: &str = "all";
+/// What an unset `FBW_NATIVE_SCREENS` and `nativeScreens` select: none, the C++ screens are opt-in while in development.
+pub const DEFAULT_SPEC: &str = "off";
 
 /// `FBW_NATIVE_SCREENS` when set, else the `nativeScreens` setting, else
 /// [`DEFAULT_SPEC`]. Blank counts as unset; `off` is the explicit opt-out.
@@ -1053,10 +1053,11 @@ mod tests {
     }
 
     #[test]
-    fn unset_env_and_setting_select_every_screen() {
-        assert_eq!(resolve_spec(None, String::new), "all");
-        assert_eq!(resolve_spec(Some("  ".into()), || " ".into()), "all");
-        assert_eq!(parse(&resolve_spec(None, String::new)).targets.len(), TARGETS.len());
+    fn unset_env_and_setting_select_no_screen() {
+        assert_eq!(resolve_spec(None, String::new), "off");
+        assert_eq!(resolve_spec(Some("  ".into()), || " ".into()), "off");
+        assert!(parse(&resolve_spec(None, String::new)).is_empty());
+        assert_eq!(parse(&resolve_spec(None, || "all".into())).targets.len(), TARGETS.len());
     }
 
     #[test]
