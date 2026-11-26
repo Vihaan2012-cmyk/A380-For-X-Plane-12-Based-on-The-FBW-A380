@@ -571,6 +571,19 @@ pub struct PerfView {
     pub settings: BTreeMap<String, String>,
 }
 
+/// The choices of a Performance dropdown (`kind` `to`/`ldg`, `key` `cond`/`rwy`).
+pub fn select_list(v: &PerfView, kind: &str, key: &str) -> Vec<String> {
+    match (kind, key) {
+        ("to", "cond") => TO_CONDS.iter().map(|c| c.0.to_string()).collect(),
+        (_, "cond") => LDG_CONDS.iter().map(|c| c.0.to_string()).collect(),
+        (_, "rwy") => {
+            let ap = if kind == "to" { v.airport_to.as_ref() } else { v.airport_ldg.as_ref() };
+            ap.and_then(|a| a.get("runways")).and_then(Value::as_array).map(|r| r.iter().map(|x| crate::jv::sv(x, "id", "undefined")).collect()).unwrap_or_default()
+        }
+        _ => Vec::new(),
+    }
+}
+
 /// `pcIn` as the page starts.
 pub fn initial(kind: &str) -> BTreeMap<String, String> {
     let pairs: &[(&str, &str)] = if kind == "to" {

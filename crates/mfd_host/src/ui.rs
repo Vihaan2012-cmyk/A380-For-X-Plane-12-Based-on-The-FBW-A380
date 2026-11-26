@@ -24,6 +24,8 @@ pub struct UiState {
     pub revised_altn: bool,
     pub efob_and_wind: bool,
     pub message_list_open: bool,
+    /// PERF footer: the ACTIVATE APPR ? confirmation.
+    pub approach_dialog_open: bool,
     pub metric: bool,
     pub dir_to_selected: Option<usize>,
     pub dir_to_option: usize,
@@ -71,6 +73,7 @@ impl UiState {
             revised_altn: false,
             efob_and_wind: false,
             message_list_open: false,
+            approach_dialog_open: false,
             metric: true,
             dir_to_selected: None,
             dir_to_option: 0,

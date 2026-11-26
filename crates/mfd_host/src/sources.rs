@@ -10,15 +10,20 @@ pub struct Sources<'a> {
     pub plans: &'a [Option<FlightPlan>],
     pub perf: &'a BTreeMap<usize, PerformanceData>,
     pub phase: u8,
+    /// Active plan F-PLN predictions by leg index.
+    pub predictions: &'a BTreeMap<usize, fms_host::WaypointPrediction>,
     pub vars: &'a dyn Fn(&str) -> f64,
     pub messages: &'a [String],
+    pub navaids: &'a fms_host::NavaidsView,
+    /// Active plan pseudo waypoints (T/C, T/D, DECEL...).
+    pub pseudo_waypoints: &'a [fms_host::PseudoWaypointPrediction],
 }
 
 pub const NO_VARS: &dyn Fn(&str) -> f64 = &|_| 0.;
 
 impl<'a> Sources<'a> {
     pub fn from_snapshot(s: &'a Snapshot, vars: &'a dyn Fn(&str) -> f64, messages: &'a [String]) -> Sources<'a> {
-        Sources { plans: &s.plans, perf: &s.perf, phase: s.phase, vars, messages }
+        Sources { plans: &s.plans, perf: &s.perf, phase: s.phase, predictions: &s.predictions, vars, messages, navaids: &s.navaids, pseudo_waypoints: &s.pseudo_waypoints }
     }
 
     pub fn var(&self, name: &str) -> f64 {

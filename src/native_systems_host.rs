@@ -1324,6 +1324,13 @@ pub fn tick(vars: &mut crate::Vars, time: f64, h_events: &[String]) {
         let mut io = LiveIo { host: &mut host, resolved: &mut running.resolved };
         running.natives.frame(&mut io, time, keys_in, &mut lines);
         let out = running.natives.take_outbox();
+        // Without XPHFBW nothing drains SYSTEMS_OUT: hand the topics (FWS procedures for the EWD) to the native screens.
+        #[cfg(feature = "native-displays")]
+        if !crate::js_bridge::INSTRUMENTS_RUNNING.load(std::sync::atomic::Ordering::Relaxed) {
+            for (topic, value) in &out.bus {
+                crate::native_displays::inputs::tap_bus(topic, value);
+            }
+        }
         push_capped(&SYSTEMS_OUT, out.bus);
         push_capped(&EXTRAS_OUT, out.notifications);
         push_capped(&H_EVENTS, out.h_events);

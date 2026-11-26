@@ -182,7 +182,7 @@ impl Tagger {
     fn walk(&mut self, n: &mut Node, in_dropdown: bool) {
         let mut in_dd = in_dropdown;
         let mut descend = true;
-        if has(n, "mfd-label") && !has(n, "mfd-label-unit") {
+        if (has(n, "mfd-label") || has(n, "mfd-surv-label")) && !has(n, "mfd-label-unit") {
             let t = text_of(n);
             if !t.is_empty() && !t.chars().all(|c| c == '-' || c == ' ') {
                 self.label = t;
@@ -245,6 +245,13 @@ impl Tagger {
             let t = text_of(n);
             self.set(n, format!("btn:{t}"));
             descend = false;
+        } else if has(n, "mfd-surv-button") {
+            // FBW `SurvButton`: an ON/OFF toggle named by the label above it.
+            if !has(n, "disabled") {
+                let l = self.label.clone();
+                self.set(n, format!("surv:{l}"));
+            }
+            descend = false;
         } else if has(n, "mfd-icon-button") {
             self.set(n, if is_down_icon(n) { "icon:down".into() } else { "icon:up".into() });
             descend = false;
@@ -256,6 +263,11 @@ impl Tagger {
         } else if has(n, "mfd-fms-fpln-line") {
             self.fpln_line += 1;
             self.fpln_col = 0;
+            // FBW: a DISCONTINUITY line is pressed as a whole and opens its revision menu.
+            if has(n, "mfd-fms-fpln-line-special") {
+                let k = self.fpln_line - 1;
+                self.set(n, format!("fpln:ident:{k}"));
+            }
         } else if has(n, "mfd-fms-fpln-line-ident") {
             let k = self.fpln_line.saturating_sub(1);
             self.set(n, format!("fpln:ident:{k}"));

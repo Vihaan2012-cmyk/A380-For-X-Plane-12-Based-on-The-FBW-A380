@@ -111,7 +111,19 @@ fn special(label: &str) -> LineData {
     LineData { kind: "special".into(), label: label.into(), ..Default::default() }
 }
 
-fn legs_lines(plan: &FlightPlan, start: usize, altn: bool, out: &mut Vec<LineData>) {
+/// Leg predictions and the UTC seconds now, for the active plan's lines.
+pub type Preds<'a> = Option<(&'a std::collections::BTreeMap<usize, fms_host::WaypointPrediction>, f64)>;
+
+/// The active plan's pseudo waypoints FBW lists on the F-PLN page.
+pub fn pwps<'a>(idx: usize, src: &Sources<'a>) -> &'a [fms_host::PseudoWaypointPrediction] {
+    if idx == 0 {
+        src.pseudo_waypoints
+    } else {
+        &[]
+    }
+}
+
+fn legs_lines(plan: &FlightPlan, start: usize, altn: bool, preds: Preds, pwps: &[fms_host::PseudoWaypointPrediction], out: &mut Vec<LineData>) {
     let legs = plan.all_legs();
     let missed_from = plan.first_missed_approach_leg_index();
     let mut prev_loc: Option<fms::geo::Coordinates> = (0..start).rev().find_map(|i| legs.get(i).and_then(|e| e.leg()).and_then(leg_location));
@@ -135,7 +147,35 @@ fn legs_lines(plan: &FlightPlan, start: usize, altn: bool, out: &mut Vec<LineDat
                 if loc.is_some() {
                     prev_loc = loc;
                 }
+                let p = preds.and_then(|(m, now)| m.get(&i).map(|p| (p, now)));
+                // FBW `MfdFmsFpln.update`: a pseudo waypoint is listed before the leg it lies on, and takes its share of the leg distance.
+                let mut dist = dist;
+                for w in pwps.iter().filter(|w| w.displayed_on_mcdu && w.along_leg_index == Some(i)) {
+                    let prev_dfs = (0..i).rev().find_map(|j| preds.and_then(|(m, _)| m.get(&j)).map(|p| p.distance_from_start));
+                    let share = prev_dfs.map(|d| (w.distance_from_start - d).max(0.));
+                    if let (Some(d), Some(s)) = (dist.as_mut(), share) {
+                        *d = (*d - s).max(0.);
+                    }
+                    out.push(LineData {
+                        kind: "waypoint".into(),
+                        is_pseudo: true,
+                        ident: w.mcdu_ident.clone().unwrap_or_else(|| w.ident.clone()),
+                        altitude_prediction: w.altitude,
+                        eta_ms: preds.map(|(_, now)| now).filter(|now| *now > 0.).zip(w.seconds_from_present).map(|(now, s)| (now + s) * 1000.),
+                        is_missed: i >= missed_from,
+                        transition_altitude: trans_alt,
+                        altitude_constraint_respected: true,
+                        speed_constraint_respected: true,
+                        track,
+                        dist: share,
+                        ..Default::default()
+                    });
+                }
                 out.push(LineData {
+                    altitude_prediction: p.map(|(p, _)| p.altitude),
+                    speed_prediction: p.map(|(p, _)| p.speed),
+                    efob_prediction_kg: p.map(|(p, _)| p.estimated_fuel_on_board * 0.453_592_37),
+                    eta_ms: p.filter(|(_, now)| *now > 0.).map(|(p, now)| (now + p.seconds_from_present) * 1000.),
                     kind: if l.is_hx() { "hold".into() } else { "waypoint".into() },
                     original_leg_index: Some(i),
                     ident: l.ident.clone(),
@@ -148,7 +188,7 @@ fn legs_lines(plan: &FlightPlan, start: usize, altn: bool, out: &mut Vec<LineDat
                     altitude_constraint_altitude1: alt.as_ref().map(|a| a.altitude1),
                     altitude_constraint_altitude2: alt.as_ref().and_then(|a| a.altitude2),
                     altitude_constraint_kind: alt.as_ref().map(|a| constraint_kind(&a.descriptor)).unwrap_or("").into(),
-                    altitude_constraint_respected: true,
+                    altitude_constraint_respected: p.and_then(|(p, _)| p.is_altitude_constraint_met).unwrap_or(true),
                     has_speed_constraint: spd.is_some(),
                     speed_constraint: spd.as_ref().map(|s| s.speed),
                     speed_constraint_respected: true,
@@ -161,8 +201,13 @@ fn legs_lines(plan: &FlightPlan, start: usize, altn: bool, out: &mut Vec<LineDat
     }
 }
 
+/// Predictions exist for the active plan only (index 0).
+pub fn preds<'a>(idx: usize, src: &Sources<'a>) -> Preds<'a> {
+    (idx == 0).then(|| (src.predictions, src.var("ZULU TIME")))
+}
+
 /// FBW `MfdFmsFpln.update`: the plan's legs from the FROM leg, DISCONTINUITY and END OF F-PLN lines, then the alternate.
-pub fn fpln_line_data(plan: Option<&FlightPlan>) -> Vec<LineData> {
+pub fn fpln_line_data(plan: Option<&FlightPlan>, preds: Preds, pwps: &[fms_host::PseudoWaypointPrediction]) -> Vec<LineData> {
     let mut out = Vec::new();
     let Some(plan) = plan.filter(|p| p.leg_count() > 0) else {
         out.push(LineData { kind: "waypoint".into(), ident: "P.POS".into(), ..Default::default() });
@@ -172,11 +217,11 @@ pub fn fpln_line_data(plan: Option<&FlightPlan>) -> Vec<LineData> {
         return out;
     };
     let start = (plan.active_leg_index - 1).max(0) as usize;
-    legs_lines(plan, start, false, &mut out);
+    legs_lines(plan, start, false, preds, pwps, &mut out);
     out.push(special("END OF F-PLN"));
     match plan.alternate.as_deref().filter(|a| a.leg_count() > 0) {
         Some(a) => {
-            legs_lines(a, 0, true, &mut out);
+            legs_lines(a, 0, true, None, &[], &mut out);
             out.push(special("END OF ALTN F-PLN"));
         }
         None => out.push(special("NO ALTN F-PLN")),
@@ -187,7 +232,7 @@ pub fn fpln_line_data(plan: Option<&FlightPlan>) -> Vec<LineData> {
 pub fn fpln_visible_lines(ui: &UiState, src: &Sources) -> (Vec<LineData>, usize, usize) {
     let idx = plan_index(ui, src);
     let plan = src.plan(idx);
-    let all = fpln_line_data(plan);
+    let all = fpln_line_data(plan, preds(idx, src), pwps(idx, src));
     let count = if src.tmpy() && ui.uri.sec().is_none() { 8 } else { 9 };
     let start = ui.fpln_scroll.unwrap_or(0).min(all.len().saturating_sub(1));
     let active_leg = plan.map(|p| p.active_leg_index).unwrap_or(-1);
@@ -199,9 +244,10 @@ pub fn fpln_visible_lines(ui: &UiState, src: &Sources) -> (Vec<LineData>, usize,
         d.last_line = line == count - 1;
         d.after_special = k > 0 && all[k - 1].kind == "special";
         d.before_special = all.get(k + 1).is_some_and(|n| n.kind == "special");
-        let draw_index = k as i64;
-        d.is_active_leg = draw_index == active_leg || d.is_active_hold_leg;
-        d.before_active_leg = !d.is_active_leg && draw_index == active_leg - 1;
+        // By leg index: the list starts at the FROM leg and pseudo waypoints add lines, so the line number is not the leg number.
+        let is_active = |l: &LineData| !l.is_altn && !l.is_pseudo && l.original_leg_index.is_some_and(|i| i as i64 == active_leg);
+        d.is_active_leg = is_active(&d) || d.is_active_hold_leg;
+        d.before_active_leg = !d.is_active_leg && all.get(k + 1).is_some_and(is_active);
         d.selected = ui.open.as_deref() == Some("revisions") && d.original_leg_index == ui.revised_leg && d.is_altn == ui.revised_altn;
         shown.push(d);
     }
@@ -305,12 +351,16 @@ pub fn fpln(ui: &UiState, src: &Sources) -> FplnModel {
     let sec = idx >= 3;
     let dest = plan.and_then(|p| p.destination_airport.as_ref()).map(|a| {
         let rwy = plan.and_then(|p| p.destination_runway.as_ref()).map(|r| r.ident().trim_start_matches(a.ident.as_str()).trim_start_matches("RW").to_string()).unwrap_or_default();
+        // FBW `MfdFmsFpln`: the destination leg's prediction; EFOB amber below the minimum destination fuel.
+        let p = preds(idx, src).and_then(|(m, now)| Some((m.get(&plan?.destination_leg_index()?)?, now)));
+        let efob_kg = p.map(|(p, _)| p.estimated_fuel_on_board * 0.453_592_37);
+        let min_kg = src.perf(idx).and_then(|d| t_to_kg(d.minimum_destination_fuel_on_board()));
         DestRow {
             loaded: true,
             button_label: format!("{}{}", a.ident, rwy),
-            time_ms: None,
-            efob_kg: None,
-            efob_amber: false,
+            time_ms: p.filter(|(_, now)| *now > 0.).map(|(p, now)| (now + p.seconds_from_present) * 1000.),
+            efob_kg,
+            efob_amber: efob_kg.zip(min_kg).is_some_and(|(e, m)| e < m),
             distance: plan.and_then(|p| route_distance_to_dest(p, src)).map(|d| d.round()),
         }
     });
@@ -486,6 +536,7 @@ pub fn perf(ui: &UiState, src: &Sources) -> PerfModel {
         active_flight_phase: src.phase,
         is_active_or_copy: active_or_copy(src, idx),
         eo_active: false,
+        approach_dialog_visible: ui.approach_dialog_open && ui.page() == Page::Perf,
         sec_active: idx >= 3,
         metric: ui.metric,
         selected_tab: ui.tab(Page::Perf, perf_tab_default(src, idx)),
@@ -646,8 +697,43 @@ pub fn position_irs(_ui: &UiState, _src: &Sources) -> PositionIrsModel {
     PositionIrsModel::default()
 }
 
-pub fn position_navaids(ui: &UiState, _src: &Sources) -> PositionNavaidsModel {
-    PositionNavaidsModel { return_visible: matches!(ui.uri.extra.as_str(), "withReturn" | "nav"), ..PositionNavaidsModel::default() }
+pub fn position_navaids(ui: &UiState, src: &Sources) -> PositionNavaidsModel {
+    let n = src.navaids;
+    let freq = |f: Option<f64>| f.map(|f| format!("{f:.2}")).unwrap_or_default();
+    let crs = |c: Option<f64>| c.map(|c| format!("{:03.0}", c.rem_euclid(360.))).unwrap_or_default();
+    let vor = |v: &fms_host::TunedView| mfd_pages_c::position::NavaidTuned {
+        ident: v.ident.clone().unwrap_or_default(),
+        ident_entered: v.ident_manual,
+        freq: freq(v.frequency),
+        freq_entered: v.ident_manual || v.freq_manual,
+        course: crs(v.course),
+        class: match (&v.ident, v.dme_only) {
+            (None, _) => String::new(),
+            (_, true) => "DME".into(),
+            _ => "VOR/DME".into(),
+        },
+    };
+    let mut deselected: [String; 6] = Default::default();
+    for (d, id) in deselected.iter_mut().zip(&n.deselected) {
+        d.clone_from(id);
+    }
+    // shortcut: the SELECTED FOR FMS NAV table and RADIO NAV MODE stay blank; fill them from the tuner's DME pair when asked.
+    PositionNavaidsModel {
+        selected_tab: ui.tab(Page::PosNavaids, 0),
+        vor: [vor(&n.vor[0]), vor(&n.vor[1])],
+        ls_ident: n.ls.ident.clone().unwrap_or_default(),
+        ls_ident_entered: n.ls.ident_manual,
+        ls_freq: freq(n.ls.frequency),
+        ls_freq_entered: n.ls.ident_manual || n.ls.freq_manual,
+        ls_course: crs(n.ls.course),
+        ls_course_entered: n.ls.course_manual,
+        ls_slope: n.ls.slope.map(|s| format!("{s:.1}")).unwrap_or_else(|| "---".into()),
+        ls_class: if n.ls.ident.is_some() { "ILS/DME".into() } else { String::new() },
+        deselected,
+        return_visible: matches!(ui.uri.extra.as_str(), "withReturn" | "nav"),
+        cap_or_fo: ui.side().into(),
+        ..PositionNavaidsModel::default()
+    }
 }
 
 pub fn sec_index(ui: &UiState, src: &Sources) -> SecIndexModel {
@@ -1039,11 +1125,44 @@ pub fn arrival(ui: &UiState, src: &Sources) -> ArrivalModel {
     m
 }
 
+/// The MFD's XPDR and TCAS settings, as FBW's Transponder and TCAS computer read them (`*_MIRROR` = set by the MFD).
+pub const XPDR_MIRROR: &str = "L:A380X_XPDR_MFD_MIRROR";
+pub const XPDR_AUTO: &str = "L:A380X_XPDR_MFD_AUTO";
+pub const XPDR_ALT_RPTG: &str = "L:A380X_XPDR_MFD_ALT_RPTG";
+pub const TCAS_MIRROR: &str = "L:A380X_TCAS_MFD_MIRROR";
+pub const TCAS_ALERT_LEVEL: &str = "L:A380X_TCAS_MFD_ALERT_LEVEL";
+pub const TCAS_ALT_SELECT: &str = "L:A380X_TCAS_MFD_ALT_SELECT";
+
+/// (AUTO, ALT RPTG ON). Before the MFD sets them, what the transponder does: a cold and dark
+/// spawn leaves it in STBY (TRANSPONDER STATE 1), and showing AUTO then hid why TCAS sat in STBY.
+pub fn xpdr_settings(src: &Sources) -> (bool, bool) {
+    if src.flag(XPDR_MIRROR) {
+        (src.flag(XPDR_AUTO), src.flag(XPDR_ALT_RPTG))
+    } else {
+        (src.var("TRANSPONDER STATE:1") >= 3., true)
+    }
+}
+
+/// (alert level 0 STBY / 1 TA / 2 TA-RA, NORM 0 / ABV 1 / BLW 2); before the MFD sets them, the TCAS computer's mode.
+pub fn tcas_settings(src: &Sources) -> (u8, u8) {
+    if src.flag(TCAS_MIRROR) {
+        (src.var(TCAS_ALERT_LEVEL).clamp(0., 2.) as u8, src.var(TCAS_ALT_SELECT).clamp(0., 2.) as u8)
+    } else {
+        (src.var("L:A32NX_TCAS_MODE").clamp(0., 2.) as u8, 0)
+    }
+}
+
 pub fn surv_controls(_ui: &UiState, src: &Sources) -> SurvControlsModel {
-    let code = src.var("TRANSPONDER CODE:1");
+    // TRANSPONDER CODE is BCD16: 0x7700 is squawk 7700.
+    let code = src.var("TRANSPONDER CODE:1").max(0.) as u32;
+    let (auto, alt_rptg) = xpdr_settings(src);
+    let (level, alt_sel) = tcas_settings(src);
     SurvControlsModel {
-        squawk_text: format!("{:04.0}", code.max(0.)),
-        alt_rptg_on: true,
+        squawk_text: format!("{code:04x}"),
+        alt_rptg_on: alt_rptg,
+        xpdr_selected: Some(if auto { 0 } else { 1 }),
+        tcas_tara_selected: Some(2 - level as usize),
+        tcas_alt_selected: Some(alt_sel as usize),
         xpdr_radio_color: "cyan".into(),
         tcas_radio_color: "cyan".into(),
         elevn_tilt_color: "cyan".into(),

@@ -233,10 +233,13 @@ pub fn tick(get: &dyn Fn(&str) -> f64, fms: Option<&mut FmsHost>, messages: &[St
                     Out::CpnyFplnRequest(plan) => writes.extend(cpny_request(plan)),
                     Out::CpnyFplnInsert(_) => writes.extend(cpny_insert(fms)),
                     Out::CpnyFplnClear => writes.extend(cpny_clear(fms)),
-                    Out::KeyEvent(k) => crate::key_events::push(&k, &[0.]),
+                    Out::KeyEvent(k, v) => crate::key_events::push(&k, &[v]),
                 }
             }
             writes.extend(cpny_poll(fms));
+            if h.snapshot.as_ref().is_some_and(|s| s.phase == fms_host::FlightPhase::Done as u8) && h.mfd.preflight_page_open() {
+                fms.send(fms_host::HostCommand::PreflightPageShown);
+            }
             if let Some(s) = fms.snapshot() {
                 h.snapshot = Some(s);
             }
@@ -273,6 +276,16 @@ pub fn set_boxes(xywh: &[[f32; 4]]) {
     if let Ok(mut b) = BOXES.lock() {
         *b = Some(xywh.to_vec());
     }
+}
+
+/// The wheel over the MFD (CSS pixels, `dy` positive down): scrolls an open dropdown.
+pub fn wheel(x: f64, dy: f64) -> bool {
+    let took = with(|h| h.mfd.wheel(x, dy)).unwrap_or(false);
+    if took {
+        // Rebuild on the next tick, as a hover change does.
+        HOVER.lock().unwrap_or_else(|e| e.into_inner()).1 = true;
+    }
+    took
 }
 
 /// A click on the MFD in CSS pixels.
@@ -408,7 +421,13 @@ pub fn kccu_events(events: &[String], db: Option<&dyn NavDatabase>, get: &dyn Fn
         for (fo, key) in keys {
             let (_, out) = match kccu_text_key(key) {
                 Some(k) => h.mfd.kccu_key(fo, &src, db, k),
-                None => h.mfd.kccu_command(fo, &src, key),
+                None => {
+                    let ui = |h: &Host| if fo { h.mfd.fo.uri.uri.clone() } else { h.mfd.capt.uri.uri.clone() };
+                    let before = ui(h);
+                    let r = h.mfd.kccu_command(fo, &src, key);
+                    crate::log(&format!("native mfd: kccu {} {key} used={} {before} -> {}", if fo { "R" } else { "L" }, r.0, ui(h)));
+                    r
+                }
             };
             h.pending.extend(out);
         }
@@ -479,5 +498,15 @@ mod kccu_tests {
         assert_eq!(kccu_text_key("SLASH"), Some(Key::Char('/')));
         assert_eq!(kccu_text_key("FPLN"), None);
         assert_eq!(kccu_text_key("UP"), None);
+    }
+
+    #[test]
+    fn kccu_page_keys_reach_the_hosts_mfd() {
+        let ev = |k: &str| vec![format!("A32NX_KCCU_L_{k}")];
+        let none = |_: &str| 0.0;
+        kccu_events(&ev("INIT"), None, &none);
+        assert_eq!(with(|h| h.mfd.capt.page()), Some(mfd_host::page::Page::Init));
+        kccu_events(&ev("FPLN"), None, &none);
+        assert_eq!(with(|h| h.mfd.capt.page()), Some(mfd_host::page::Page::Fpln));
     }
 }

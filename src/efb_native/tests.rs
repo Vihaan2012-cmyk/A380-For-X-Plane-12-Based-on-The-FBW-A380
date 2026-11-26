@@ -336,3 +336,45 @@ fn failures_diagram_dump() {
     std::fs::write(std::env::var("FAIL_DUMP").unwrap_or("failures.html".into()), &html).unwrap();
     eprintln!("ff-family {} ff-diagram {} svg {}", html.matches("ff-family").count(), html.matches("ff-diagram").count(), html.matches("<svg").count());
 }
+
+#[test]
+fn ground_plan_chips_and_hint_reach_the_document() {
+    let _g = crate::failures::tests::serial();
+    let mut efb = Efb::new(FileBackend::new("ground"));
+    efb.locked = false;
+    efb.activate("tab:ground");
+    let html = page(&mut efb);
+    assert!(html.contains(">CHOCKS</text>") && html.contains(">TUG</text>"), "chip names are written into <text>");
+    assert!(html.contains("Tap a door, a cowl or a service"));
+}
+
+#[test]
+fn performance_tabs_options_inputs_and_calculate_work() {
+    let mut efb = Efb::new(FileBackend::new("perf"));
+    efb.locked = false;
+    efb.activate("tab:performance");
+    assert!(page(&mut efb).contains("data-act=\"pc:calc:to\""));
+    efb.activate("pc:to:thrust=TOGA");
+    page(&mut efb);
+    assert_eq!(efb.perf.to.get("thrust").map(String::as_str), Some("TOGA"));
+    efb.activate("focus:pc:to:oat");
+    page(&mut efb);
+    efb.activate("kb:char:50");
+    efb.activate("kb:char:53");
+    assert!(efb.key(27, vk::ESCAPE, vk::DOWN_FLAG));
+    assert_eq!(efb.perf.to.get("oat").map(String::as_str), Some("25"));
+    efb.activate("pc:calc:to");
+    assert!(efb.perf.calc_to);
+    efb.activate("pc:tab:ldg");
+    assert!(page(&mut efb).contains("data-act=\"pc:calc:ldg\""));
+}
+
+#[test]
+fn performance_airport_comes_from_the_navdb() {
+    let db = fms::navdb::MemoryNavDb::from_fixture_json(include_str!("../../crates/fms/tests/fixtures/navdb.json")).unwrap();
+    let ap = super::engine::perf_airport(&db, "EGLL");
+    let ids: Vec<&str> = ap["runways"].as_array().unwrap().iter().filter_map(|r| r["id"].as_str()).collect();
+    assert!(ids.contains(&"09L"), "{ids:?}");
+    assert!(ap["runways"][0]["tora_m"].as_f64().unwrap() > 3000.);
+    assert_eq!(super::engine::perf_airport(&db, "ZZZZ")["error"], "Unknown airport");
+}

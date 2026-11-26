@@ -13,8 +13,9 @@ pub mod runway;
 pub mod symbols;
 pub mod vnav;
 
-pub use command::{Envelope, HostCommand};
-pub use core::{FmsCore, Snapshot};
+pub use command::{Envelope, HostCommand, NavaidEntry};
+pub use core::{FmsCore, NavaidsView, PseudoWaypointPrediction, Snapshot, TunedView, WaypointPrediction};
+pub use fms_perf::FlightPhase;
 pub use host::FmsHost;
 pub use inputs::Inputs;
 pub use outputs::{Outputs, Reply};

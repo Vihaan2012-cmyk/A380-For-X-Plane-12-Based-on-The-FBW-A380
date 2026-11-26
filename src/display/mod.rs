@@ -1618,6 +1618,9 @@ impl Displays {
         if id == MFD_SCREEN && matches!(kind, Pointer::Move) && crate::native_displays::input::is_native(MFD_SCREEN) {
             crate::mfd_native_host::hover(cx, cy);
         }
+        if id == MFD_SCREEN && matches!(kind, Pointer::Wheel) && crate::mfd_native_host::wheel(cx, delta) {
+            return true;
+        }
         if id == MFD_SCREEN && matches!(kind, Pointer::Down) && crate::mfd_native_host::pointer(cx, cy, &crate::mfd_native_host::cached_var) {
             return true;
         }

@@ -71,6 +71,11 @@ impl Mfd {
         true
     }
 
+    /// FBW `shouldBePreflightPhase`: either side shows the active INIT, FUEL&LOAD or PERF page.
+    pub fn preflight_page_open(&self) -> bool {
+        [&self.capt, &self.fo].iter().any(|u| u.uri.sys == "fms" && u.uri.category == "active" && matches!(u.uri.page.as_str(), "init" | "fuel-load" | "perf"))
+    }
+
     pub fn keyboard(&self) -> bool {
         self.capt.keyboard || self.fo.keyboard
     }
@@ -86,6 +91,10 @@ impl Mfd {
 
     /// A KCCU page or arrow key (`FPLN`, `DIR`, `UP`, ...) on one side.
     pub fn kccu_command(&mut self, fo: bool, src: &Sources, key: &str) -> (bool, Vec<Out>) {
+        // UP/DOWN step an open dropdown (SID/STAR lists) one 33 px item before anything else.
+        if matches!(key, "UP" | "DOWN") && self.wheel(if fo { 768. + 110. } else { 0. }, if key == "UP" { -33. } else { 33. }) {
+            return (true, Vec::new());
+        }
         input::kccu_command(if fo { &mut self.fo } else { &mut self.capt }, src, key)
     }
 

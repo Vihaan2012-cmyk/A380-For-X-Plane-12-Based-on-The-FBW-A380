@@ -3,7 +3,7 @@ use fms::navdb::{Fix, NavDatabase};
 use fms::plan::AltitudeConstraint;
 use fms::service::{Command as Plan, PlanRef};
 use fms_data::{ClimbDerated, CostIndexMode, Entry, TakeoffAntiIce, TakeoffDerated, TakeoffPacks, TakeoffPowerSetting};
-use fms_host::HostCommand;
+use fms_host::{HostCommand, NavaidEntry};
 
 use crate::model::{self, plan_index};
 use crate::page::{fms_uri, header_menu_uri, sub_header_uri, sys_uri, Page};
@@ -17,7 +17,8 @@ pub enum Out {
     CpnyFplnRequest(usize),
     CpnyFplnInsert(usize),
     CpnyFplnClear,
-    KeyEvent(String),
+    /// A `K:` event and its value.
+    KeyEvent(String, f64),
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -141,6 +142,7 @@ pub fn click(ui: &mut UiState, src: &Sources, act: &str) -> Vec<Out> {
         }
         "fpln" => out.extend(fpln_click(ui, src, key)),
         "radio" => out.extend(radio(ui, src, key)),
+        "surv" => out.extend(surv_toggle(src, strip_dup(key))),
         "btn" if had_entry && strip_dup(key) == "CLEAR INFO" => ui.close_popups(),
         "btn" => out.extend(button(ui, src, strip_dup(key))),
         _ => ui.close_popups(),
@@ -416,8 +418,43 @@ fn perf_dropdown(ui: &UiState, src: &Sources, name: &str, i: usize) -> Vec<Out> 
     vec![perf(idx, e)]
 }
 
+/// FBW `MfdSurvControls` writes: the XPDR and TCAS pairs go together with their `*_MIRROR` flag.
+fn xpdr_out(auto: bool, alt_rptg: bool) -> Vec<Out> {
+    let b = |v: bool| if v { 1. } else { 0. };
+    vec![Out::Var(model::XPDR_AUTO.into(), b(auto)), Out::Var(model::XPDR_ALT_RPTG.into(), b(alt_rptg)), Out::Var(model::XPDR_MIRROR.into(), 1.)]
+}
+
+fn tcas_out(level: u8, alt_select: u8) -> Vec<Out> {
+    vec![Out::Var(model::TCAS_ALERT_LEVEL.into(), level as f64), Out::Var(model::TCAS_ALT_SELECT.into(), alt_select as f64), Out::Var(model::TCAS_MIRROR.into(), 1.)]
+}
+
+/// A SURV ON/OFF button, by the label above it. The TAWS ones write FBW's `*_OFF` vars.
+fn surv_toggle(src: &Sources, label: &str) -> Vec<Out> {
+    let off = |var: &str| vec![Out::Var(var.into(), if src.flag(var) { 0. } else { 1. })];
+    match label {
+        "ALT RPTG" => {
+            let (auto, alt) = model::xpdr_settings(src);
+            xpdr_out(auto, !alt)
+        }
+        "TERR SYS" => off("L:A32NX_GPWS_TERR_OFF"),
+        "GPWS" => off("L:A32NX_GPWS_SYS_OFF"),
+        "G/S MODE" => off("L:A32NX_GPWS_GS_OFF"),
+        "FLAP MODE" => off("L:A32NX_GPWS_FLAPS_OFF"),
+        // shortcut: WXR buttons (WXR, PRED W/S, TURB, GAIN, MODE, WX ON VD) do nothing yet; wire them with the native WXR.
+        _ => Vec::new(),
+    }
+}
+
 fn radio(ui: &mut UiState, src: &Sources, key: &str) -> Vec<Out> {
     let Some((prefix, i)) = item_index(key) else { return Vec::new() };
+    // SURV radio ids always carry CAPT_MFD_, on both sides.
+    let surv = prefix.rsplit("_MFD_").next().unwrap_or(prefix);
+    match surv {
+        "survControlsXpdrStatus" => return xpdr_out(i == 0, model::xpdr_settings(src).1),
+        "survControlsTcasTara" if i < 3 => return tcas_out(2 - i as u8, model::tcas_settings(src).1),
+        "survControlsTcasNormAbvBlw" if i < 3 => return tcas_out(model::tcas_settings(src).0, i as u8),
+        _ => {}
+    }
     let side = format!("{}_MFD_", ui.side());
     let name = prefix.strip_prefix(&side).unwrap_or(prefix);
     let idx = plan_index(ui, src);
@@ -494,6 +531,9 @@ fn button(ui: &mut UiState, src: &Sources, label: &str) -> Vec<Out> {
     ui.close_popups();
     let idx = plan_index(ui, src);
     let label = label.trim_end_matches('*').trim_end();
+    if ui.page() == Page::SurvControls && label == "IDENT" {
+        return vec![Out::KeyEvent("XPNDR_IDENT_ON".into(), 1.)];
+    }
     if page_button(ui, label) {
         return Vec::new();
     }
@@ -519,7 +559,13 @@ fn button(ui: &mut UiState, src: &Sources, label: &str) -> Vec<Out> {
                 ui.cleared_messages.push(m.clone());
             }
         }
+        "ACTIVATE APPR" if ui.page() == Page::Perf => ui.approach_dialog_open = true,
+        "CONFIRM" if ui.approach_dialog_open => {
+            ui.approach_dialog_open = false;
+            return vec![Out::Fms(HostCommand::ActivateApproach)];
+        }
         "CANCEL" => {
+            ui.approach_dialog_open = false;
             ui.new_dest_open = false;
             ui.insert_next_open = false;
             reset_revised(ui);
@@ -551,7 +597,7 @@ fn button(ui: &mut UiState, src: &Sources, label: &str) -> Vec<Out> {
                 ui.navigate(&fms_uri(&category(ui), "f-pln"));
             }
             if label == "INSERT DIR TO" {
-                return vec![Out::KeyEvent("A32NX.FMGC_DIR_TO_TRIGGER".into()), plan_cmd(Plan::TemporaryInsert)];
+                return vec![Out::KeyEvent("A32NX.FMGC_DIR_TO_TRIGGER".into(), 0.), plan_cmd(Plan::TemporaryInsert)];
             }
             return vec![plan_cmd(Plan::TemporaryInsert)];
         }
@@ -570,7 +616,7 @@ fn button(ui: &mut UiState, src: &Sources, label: &str) -> Vec<Out> {
         "DEST" => {
             let plan = src.plan(idx);
             let dest = plan.and_then(|p| p.destination_leg_index());
-            let lines = model::fpln_line_data(plan);
+            let lines = model::fpln_line_data(plan, model::preds(idx, src), model::pwps(idx, src));
             let count = if src.tmpy() && ui.uri.sec().is_none() { 8 } else { 9 };
             let line = dest.and_then(|d| lines.iter().position(|l| !l.is_altn && l.original_leg_index == Some(d)));
             ui.fpln_scroll = Some(line.map_or(0, |k| (k + 1).saturating_sub(count)));
@@ -838,6 +884,33 @@ fn commit(ui: &mut UiState, src: &Sources, db: Option<&dyn NavDatabase>, label: 
     let metric = ui.metric;
     let page = ui.page();
     match (page, label) {
+        (Page::PosNavaids, "VOR1" | "VOR2" | "LS") => navaid_entry(src, db, label, nth, text),
+        (Page::PosNavaids, "LIST OF DESELECTED NAVAIDS") => {
+            let des = &src.navaids.deselected;
+            if text == "CLR" {
+                let ident = des.get(nth - 1).ok_or(NOT_ALLOWED)?;
+                return Ok(vec![Out::Fms(HostCommand::DeselectNavaid { ident: ident.clone(), deselect: false })]);
+            }
+            if !(1..=5).contains(&text.len()) || !text.chars().all(|c| c.is_ascii_alphanumeric()) {
+                return Err(FORMAT_ERROR);
+            }
+            if db.is_some_and(|d| d.navaids(text).is_empty()) {
+                return Err(NOT_IN_DATABASE);
+            }
+            let mut out = Vec::new();
+            if let Some(old) = des.get(nth - 1) {
+                out.push(Out::Fms(HostCommand::DeselectNavaid { ident: old.clone(), deselect: false }));
+            }
+            out.push(Out::Fms(HostCommand::DeselectNavaid { ident: text.to_string(), deselect: true }));
+            Ok(out)
+        }
+        (Page::SurvControls, "SQWK") => {
+            // FBW `SquawkFormat`: four octal digits, sent as BCD16.
+            if text.len() != 4 || !text.chars().all(|c| ('0'..='7').contains(&c)) {
+                return Err(FORMAT_ERROR);
+            }
+            Ok(vec![Out::KeyEvent("XPNDR_SET".into(), u32::from_str_radix(text, 16).unwrap_or(0) as f64)])
+        }
         (Page::Init, "FLT NBR") => Ok(vec![Out::Fms(HostCommand::SetFlightNumber { plan: idx, number: text.to_string() })]),
         (Page::Init, "FROM") | (Page::Init, "TO") => {
             let (from, to) = match text.split_once('/') {
@@ -968,4 +1041,57 @@ fn time_min(text: &str) -> Result<Option<f64>, &'static str> {
         return Ok(Some(h * 60. + m));
     }
     num(text)
+}
+
+/// FBW `MfdFmsPositionNavaids`: VOR1/VOR2/LS rows, field 1 ident, 2 frequency, 3 course.
+fn navaid_entry(src: &Sources, db: Option<&dyn NavDatabase>, label: &str, nth: usize, text: &str) -> Result<Vec<Out>, &'static str> {
+    let n = src.navaids;
+    let vor = match label {
+        "VOR1" => Some(0),
+        "VOR2" => Some(1),
+        _ => None,
+    };
+    let t = vor.map_or(&n.ls, |i| &n.vor[i]);
+    if vor.is_none() && nth < 3 && n.ls_locked {
+        return Err(NOT_ALLOWED);
+    }
+    let tune = |entry| Out::Fms(match vor {
+        Some(index) => HostCommand::TuneVor { index, entry },
+        None => HostCommand::TuneLs(entry),
+    });
+    let entry = match (nth, text) {
+        (3, _) => {
+            let course = num_in(text, 0., 360.)?;
+            return Ok(vec![Out::Fms(match vor {
+                Some(index) => HostCommand::VorCourse { index, course },
+                None => HostCommand::LsCourse(course),
+            })]);
+        }
+        (1, "CLR") if t.ident_manual => NavaidEntry::Clear,
+        (2, "CLR") if t.freq_manual => NavaidEntry::Clear,
+        (_, "CLR") => return Err(NOT_ALLOWED),
+        (1, _) => {
+            if !(1..=4).contains(&text.len()) || !text.chars().all(|c| c.is_ascii_alphanumeric()) {
+                return Err(FORMAT_ERROR);
+            }
+            // The FMS picks the nearest match; this only catches idents the database lacks.
+            let known = |d: &dyn NavDatabase| match vor {
+                Some(_) => d.navaids(text).iter().any(|f| f.database_id.starts_with('V')),
+                None => d.search_fix(text).iter().any(|f| f.database_id.starts_with('V')),
+            };
+            if db.is_some_and(|d| !known(d)) {
+                return Err(NOT_IN_DATABASE);
+            }
+            if vor.is_some() && n.deselected.iter().any(|d| d == text) {
+                return Err(NOT_ALLOWED);
+            }
+            NavaidEntry::Ident(text.to_string())
+        }
+        _ => {
+            // FBW `VorFrequencyFormat` / `LsFrequencyFormat`.
+            let hi = if vor.is_some() { 117.95 } else { 111.95 };
+            NavaidEntry::Freq(in_range(parse_num(text)?, 108., hi)?)
+        }
+    };
+    Ok(vec![tune(entry)])
 }
