@@ -118,8 +118,9 @@ const BARO_LOOP_PERIOD_S: f64 = 20.0;
 const ZERO_VELOCITY_TAU_S: f64 = 2.0;
 const STATIONARY_SPEED_MS: f64 = 0.5;
 /// Position disagreement beyond which the aircraft was relocated rather than
-/// flown (GPIRS keeps the real error to metres).
-const RELOCATION_RESEED_M: f64 = 100_000.0;
+/// flown (GPIRS keeps the real error to metres; free-inertial drift takes
+/// hours to reach it). X-Plane's "final approach" placement moves 20-40 km.
+const RELOCATION_RESEED_M: f64 = 5_000.0;
 
 /// Initial gyrocompass heading uncertainty at the *start* of alignment,
 /// degrees, decaying exponentially during alignment (see [`Adiru::update`]).
@@ -2724,6 +2725,20 @@ mod tests {
         assert!(a.advance(dt, &t, 2.0, true, true, true));
         assert!((a.lat_rad.to_degrees() + 30.0).abs() < 0.01, "{}", a.lat_rad.to_degrees());
         assert!((a.lon_rad.to_degrees() - 150.0).abs() < 0.01, "{}", a.lon_rad.to_degrees());
+    }
+
+    #[test]
+    fn a_short_relocation_onto_an_approach_reseeds_too() {
+        let _guard = crate::failures::tests::serial();
+        let mut a = Adiru::new_for_test(1);
+        let mut t = stationary_level_state(51.46);
+        let dt = 0.1;
+        for _ in 0..50 {
+            a.advance(dt, &t, 2.0, true, true, true);
+        }
+        t.lon_deg += 0.5; // ~35 km, EGLL to its 27L approach
+        a.advance(dt, &t, 2.0, true, true, true);
+        assert!((a.lon_rad.to_degrees() - t.lon_deg).abs() < 0.001, "{} vs {}", a.lon_rad.to_degrees(), t.lon_deg);
     }
 
     #[test]

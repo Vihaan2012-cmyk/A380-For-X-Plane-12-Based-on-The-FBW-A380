@@ -288,6 +288,10 @@ pub struct RadioModel {
 }
 
 pub fn radio_group(id_prefix: &str, values: &[&str], spacing: u32, color: &str, disabled: bool) -> Node {
+    radio_group_sel(id_prefix, values, None, spacing, color, disabled)
+}
+
+pub fn radio_group_sel(id_prefix: &str, values: &[&str], selected: Option<usize>, spacing: u32, color: &str, disabled: bool) -> Node {
     let mut form = Node::new("form");
     for (i, v) in values.iter().enumerate() {
         let mut label = Node::el("label", &format!("mfd-radio-button {color}"))
@@ -297,7 +301,14 @@ pub fn radio_group(id_prefix: &str, values: &[&str], spacing: u32, color: &str, 
             label = label.style(&format!("margin-top: {spacing}px;"));
         }
         label = label
-            .child(Node::new("input").id(&format!("{id_prefix}_{i}")))
+            .child({
+                let mut input = Node::new("input").id(&format!("{id_prefix}_{i}"));
+                if selected == Some(i) {
+                    input.attrs.insert("type".into(), "radio".into());
+                    input.attrs.insert("checked".into(), String::new());
+                }
+                input
+            })
             .child(Node::new("span").text(v));
         form = form.child(label);
     }

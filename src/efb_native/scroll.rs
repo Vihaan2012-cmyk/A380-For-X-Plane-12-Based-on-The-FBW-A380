@@ -5,6 +5,8 @@ pub const FLING_TAU_MS: f64 = 325.0;
 pub const FLING_STOP: f64 = 0.02;
 pub const FLING_MAX: f64 = 8.0;
 pub const WHEEL_STEP_PX: f64 = 48.0;
+/// A wheel click glides over ~4 tau instead of jumping 48 px in one frame.
+pub const WHEEL_TAU_MS: f64 = 60.0;
 const VELOCITY_WINDOW_MS: f64 = 100.0;
 
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
@@ -12,6 +14,8 @@ pub struct Scroll {
     pub top: f64,
     pub max: f64,
     pub vel: f64,
+    /// Wheel distance still to travel.
+    pub glide: f64,
 }
 
 #[derive(Clone, Debug, Default)]
@@ -43,9 +47,20 @@ impl Scrolls {
         self.set(id, t)
     }
 
+    /// A wheel step: glides `dy` on from wherever the last step's glide is
+    /// heading; true when there is room to move.
+    pub fn wheel(&mut self, id: &str, dy: f64) -> bool {
+        let s = self.map.entry(id.to_string()).or_default();
+        s.vel = 0.0;
+        let to = (s.top + s.glide + dy).clamp(0.0, s.max);
+        s.glide = to - s.top;
+        s.glide != 0.0
+    }
+
     pub fn stop(&mut self, id: &str) {
         if let Some(s) = self.map.get_mut(id) {
             s.vel = 0.0;
+            s.glide = 0.0;
         }
     }
 
@@ -53,6 +68,7 @@ impl Scrolls {
         if let Some(s) = self.map.get_mut(id) {
             s.top = 0.0;
             s.vel = 0.0;
+            s.glide = 0.0;
         }
     }
 
@@ -66,13 +82,21 @@ impl Scrolls {
     }
 
     pub fn moving(&self) -> bool {
-        self.map.values().any(|s| s.vel != 0.0)
+        self.map.values().any(|s| s.vel != 0.0 || s.glide != 0.0)
     }
 
     /// Advances every fling by `dt_ms`; true when an offset changed.
     pub fn tick(&mut self, dt_ms: f64) -> bool {
         let mut moved = false;
         for s in self.map.values_mut() {
+            if s.glide != 0.0 && dt_ms > 0.0 {
+                let eased = s.glide * (1.0 - (-dt_ms / WHEEL_TAU_MS).exp());
+                let step = if (s.glide - eased).abs() < 0.5 { s.glide } else { eased };
+                let t = (s.top + step).clamp(0.0, s.max);
+                moved |= t != s.top;
+                s.glide = if t == s.top + step { s.glide - step } else { 0.0 };
+                s.top = t;
+            }
             if s.vel == 0.0 || dt_ms <= 0.0 {
                 continue;
             }

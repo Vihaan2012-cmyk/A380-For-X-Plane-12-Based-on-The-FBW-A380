@@ -2564,6 +2564,17 @@ impl Plugin {
             let id = self.vars.get("ISIS_BARO_MODE".to_owned());
             self.vars.write(&id, standby.std as u8 as f64);
         }
+        // KOHLSMAN_SET and SimOutputAltimeter (FlyByWireInterface.cpp:2637-2642): the FCU's baro into X-Plane's own
+        // altimeters, which VATSIM clients and the A380 systems' KOHLSMAN SETTING read (#65).
+        for (bus, side) in self.prims.fcu_buses().iter().zip(["pilot", "copilot"]) {
+            let hpa = prim::value_or(bus.baro_setting_hpa, 1013.) as f64;
+            if let Some(d) = xplm.find(&format!("sim/cockpit2/gauges/actuators/barometer_setting_in_hg_{side}")) {
+                xplm.set_f(d, (hpa / sensors::kohlsman_mb_from_inhg(1.)) as f32);
+            }
+            if let Some(d) = xplm.find(&format!("sim/cockpit2/gauges/actuators/barometer_setting_is_std_{side}")) {
+                xplm.set_i(d, prim::bit_or(bus.efis_discrete_word_2, 11, true) as i32);
+            }
+        }
         let eec = self.engine_commands.update(
             &mut self.vars,
             xplm,
@@ -2957,12 +2968,17 @@ impl Plugin {
                 h_events.extend(native_systems_host::take_h_events());
                 crate::perf::lap("native: fms + mfd host");
                 events.extend(native_fms_shadow::tick(&mut self.vars, self.time));
+                #[cfg(feature = "native-displays")]
+                if crate::native_displays::input::is_native("SCREEN_DU_MFD") {
+                    let db = crate::native_fms_shadow::navdb();
+                    crate::mfd_native_host::kccu_events(&h_events, db.as_deref().map(|d| d as &dyn fms::navdb::NavDatabase), &crate::mfd_native_host::cached_var);
+                }
             }
             app_settings::native_mode::show_notices();
             crate::perf::lap("native: screen feed");
             #[cfg(feature = "native-displays")]
             if self.xphfbw.as_ref().map_or(true, |h| h.gone()) {
-                publish_native_without_xphfbw(&self.vars, self.time);
+                publish_native_without_xphfbw(&mut self.vars, self.time, &h_events);
             }
             if !self.gaps_logged && self.time >= 90. {
                 self.gaps_logged = true;
@@ -3746,12 +3762,23 @@ fn slot_of(refcon: *mut c_void) -> (usize, usize) {
 }
 
 #[cfg(feature = "native-displays")]
-fn publish_native_without_xphfbw(vars: &Vars, time: f64) {
-    struct Src<'a>(&'a Vars);
+fn publish_native_without_xphfbw(vars: &mut Vars, time: f64, h_events: &[String]) {
+    struct Src<'a> {
+        vars: &'a mut Vars,
+        state: &'a mut js_bridge::HostState,
+        env: &'a js_bridge::EnvRefs,
+        time: f64,
+    }
     impl native_displays::inputs::VarSource for Src<'_> {
-        fn read_var(&mut self, name: &str, _unit: &str) -> Option<f64> {
+        fn read_var(&mut self, name: &str, unit: &str) -> Option<f64> {
+            // E: (clock, date) is not a stored var: the JS bridge's resolver computes it.
+            if name.starts_with("E:") {
+                let mut host = js_bridge::VarsHost::new(self.vars, self.state, self.env, self.time);
+                let r = host.resolve(name, unit);
+                return Some(host.read(name, r));
+            }
             let bare = name.strip_prefix("L:").or_else(|| name.strip_prefix("A:")).unwrap_or(name);
-            self.0.value_named(bare)
+            self.vars.value_named(bare)
         }
         fn read_string(&mut self, name: &str) -> Option<String> {
             #[cfg(feature = "js")]
@@ -3763,11 +3790,18 @@ fn publish_native_without_xphfbw(vars: &Vars, time: f64) {
     }
     thread_local! {
         static FEED: std::cell::RefCell<Option<Option<native_displays::inputs::Publisher>>> = const { std::cell::RefCell::new(None) };
+        static HOST: std::cell::RefCell<Option<(js_bridge::HostState, js_bridge::EnvRefs)>> = const { std::cell::RefCell::new(None) };
     }
     FEED.with(|f| {
         let mut f = f.borrow_mut();
         if let Some(feed) = f.get_or_insert_with(native_displays::inputs::publisher) {
-            feed.publish(&mut Src(vars), time * 1000.);
+            HOST.with(|h| {
+                let mut h = h.borrow_mut();
+                let (state, env) = h.get_or_insert_with(|| (js_bridge::HostState::default(), js_bridge::EnvRefs::new(vars.xplm)));
+                // The pages' native logic (chrono, ...) runs from XPHFBW's host when it is there.
+                crate::native_page_state::tick(vars, state, env, time, h_events);
+                feed.publish(&mut Src { vars, state, env, time }, time * 1000.);
+            });
         }
     });
 }

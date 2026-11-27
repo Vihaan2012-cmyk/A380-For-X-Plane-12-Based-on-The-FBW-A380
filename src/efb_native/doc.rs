@@ -355,6 +355,10 @@ fn write_node(n: &Node, styles: &[Style], nodes: &[NodeInfo], cur: &mut usize, b
         }
         attr(out, "data-cs", &styles[si].to_data_cs());
         out.push('>');
+        // An SVG <text>'s content rides in `_text` (efb_pages js.rs / jv.rs / ground.rs).
+        if let Some(t) = s.a.get("_text") {
+            esc_text(t, out);
+        }
         open.push((d, s.t.as_str()));
     }
     while let Some((_, t)) = open.pop() {

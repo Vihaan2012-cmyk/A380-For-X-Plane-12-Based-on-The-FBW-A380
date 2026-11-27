@@ -219,6 +219,14 @@ fn native_displays() {
     let manifest = PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap());
     let out = PathBuf::from(std::env::var("OUT_DIR").unwrap());
     let profile = std::env::var("PROFILE").unwrap_or_else(|_| "release".into());
+    // A release's a380_displays.dll, for builds without the a380-displays source and Skia.
+    let prebuilt = env_or("A380_DISPLAYS_PREBUILT", "");
+    if !prebuilt.is_empty() {
+        let copy = out.ancestors().nth(3).unwrap_or(&out).join("a380_displays.dll");
+        std::fs::copy(&prebuilt, &copy).unwrap_or_else(|e| panic!("copying {prebuilt} to {}: {e}", copy.display()));
+        println!("cargo:rustc-env=A380_DISPLAYS_DLL_BUILT={}", copy.display());
+        return;
+    }
     let default_src = manifest.join("../a380-displays");
     let src = env_or("A380_DISPLAYS_DIR", &default_src.to_string_lossy());
     let src = std::fs::canonicalize(&src).unwrap_or_else(|e| panic!("a380-displays not found at {src}: {e}"));

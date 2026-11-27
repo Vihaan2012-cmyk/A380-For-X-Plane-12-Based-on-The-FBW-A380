@@ -177,7 +177,7 @@ pub fn report(samples_csv: &str, events_log: &str, processes_csv: &str) -> Strin
     r.section("Exterior lights against their switches");
     let checks: [(&str, &str, &dyn Fn(&Samples, &[f64]) -> bool); 3] = [
         ("STROBE", "fbw/cockpit/SWITCH_OVHD_EXTLT_STROBE", &|s, row| s.get(row, "sim/cockpit2/switches/strobe_lights_on") > 0.5),
-        ("NOSE", "fbw/cockpit/SWITCH_OVHD_EXTLT_NOSE", &|s, row| s.get(row, "sim/cockpit2/switches/landing_lights_switch[0]") > 0.5 || s.get(row, "sim/cockpit2/switches/taxi_light_on") > 0.5),
+        ("NOSE", "fbw/cockpit/SWITCH_OVHD_EXTLT_NOSE", &|s, row| s.get(row, "sim/cockpit2/switches/landing_lights_switch[4]") > 0.5 || s.get(row, "sim/cockpit2/switches/taxi_light_on") > 0.5),
         ("LOGO", "fbw/cockpit/SWITCH_OVHD_EXTLT_LOGO", &|s, row| s.get(row, "sim/cockpit2/switches/generic_lights_switch[2]") > 0.5),
     ];
     for (name, anim, lit) in checks {

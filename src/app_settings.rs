@@ -134,6 +134,9 @@ pub struct AppSettings {
     /// How hard the screens are sharpened as they are copied into X-Plane's
     /// devices, 0 (off) to 1 (display/gl.rs's `draw_bridge`).
     pub display_sharpen: f64,
+    /// Mip levels taken off display/view_scale.rs's distance prefilter, 0 (full
+    /// prefilter, softest) to 3 (none, sharpest but may shimmer).
+    pub display_prefilter_bias: f64,
     pub display_glow: f64,
     pub display_line_weight: f64,
     pub display_sheen: f64,
@@ -190,6 +193,7 @@ impl Default for AppSettings {
             walkaround: false,
             hud_seats: 0,
             display_sharpen: 0.6,
+            display_prefilter_bias: 3.0,
             display_glow: 0.,
             display_line_weight: 0.,
             display_sheen: 0.5,
@@ -270,6 +274,7 @@ fn parse(map: &Map<String, Value>) -> AppSettings {
         walkaround: as_bool(map, "walkaround", defaults.walkaround),
         hud_seats: defaults.hud_seats,
         display_sharpen: as_f64(map, "displaySharpen", defaults.display_sharpen).clamp(0.0, 1.0),
+        display_prefilter_bias: as_f64(map, "displayPrefilterBias", defaults.display_prefilter_bias).clamp(0.0, 3.0),
         display_glow: as_f64(map, "displayGlow", defaults.display_glow).clamp(0.0, 1.0),
         display_line_weight: as_f64(map, "displayLineWeight", defaults.display_line_weight).clamp(0.0, 1.0),
         display_sheen: as_f64(map, "displaySheen", defaults.display_sheen).clamp(0.0, 1.0),

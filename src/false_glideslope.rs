@@ -33,6 +33,12 @@ pub fn received(elevation_deg: f64, path_deg: f64, distance_m: f64, lateral_deg:
     if !(path_deg > 0.) || !(distance_m <= COVERAGE_M) || !(lateral_deg.abs() <= COVERAGE_AZIMUTH_DEG) || !(elevation_deg / path_deg >= LOWEST) {
         return None;
     }
+    shown(elevation_deg, path_deg)
+}
+
+/// What a receiver on the beam shows at `elevation_deg`: the deviation in degrees (positive above
+/// the path) inside the protected sector, the false paths above it, `None` with the flag in view.
+pub fn shown(elevation_deg: f64, path_deg: f64) -> Option<f64> {
     match indicated(elevation_deg, path_deg) {
         Err(()) => Some((elevation_deg - path_deg).clamp(-SATURATION_DEG, SATURATION_DEG)),
         Ok(shown) => shown,

@@ -235,16 +235,11 @@ pub fn glide_slope_angle_from_bearing_field(field: f32) -> Option<f64> {
     (field >= 1000.).then(|| (field / 1000.).floor() / 100.)
 }
 
-/// MSFS's NAV RADIAL ERROR for a localizer, which FlyByWire's LOC laws are tuned on: the true angle
-/// off the course seen from the antenna, positive with the beam to the right, never stopped at a dot limit.
-pub fn localizer_error_deg(lat: f64, lon: f64, loc_lat: f64, loc_lon: f64, course_true_deg: f64) -> f64 {
-    let (p1, p2, dl) = (lat.to_radians(), loc_lat.to_radians(), (loc_lon - lon).to_radians());
-    let to_antenna = (dl.sin() * p2.cos()).atan2(p1.cos() * p2.sin() - p1.sin() * p2.cos() * dl.cos()).to_degrees();
-    (to_antenna - course_true_deg + 540.).rem_euclid(360.) - 180.
+/// The true course a nav.dat localizer carries in its bearing field: the magnetic course, a whole
+/// number, times 360 plus the true course (97109.709 is 269 magnetic, 269.709 true; EGLL 27R).
+pub fn localizer_course_from_bearing_field(field: f32) -> f64 {
+    (field as f64).rem_euclid(360.)
 }
-
-/// How far from its antenna a localizer is flown on its geometry rather than X-Plane's needle.
-const LOC_GEOMETRY_RANGE_KM: f64 = 60.;
 
 /// The FLS beam reaches this far from its anchor (FCOM DSC-22-FMS FLS beam computation).
 pub const FLS_RANGE_NM: f64 = 100.;
@@ -256,14 +251,37 @@ pub const FLS_RANGE_NM: f64 = 100.;
 pub fn fls_deviations(lat: f64, lon: f64, altitude_ft: f64, anchor_lat: f64, anchor_lon: f64, anchor_altitude_ft: f64, course_deg: f64, slope_deg: f64) -> Option<(f64, f64, f64)> {
     let distance_m = crate::false_glideslope::distance_m(lat, lon, anchor_lat, anchor_lon);
     let distance_nm = distance_m / 1852.;
-    let (p1, p2, dl) = (lat.to_radians(), anchor_lat.to_radians(), (anchor_lon - lon).to_radians());
-    let to_anchor = (dl.sin() * p2.cos()).atan2(p1.cos() * p2.sin() - p1.sin() * p2.cos() * dl.cos()).to_degrees();
-    let lateral = (to_anchor - course_deg + 540.).rem_euclid(360.) - 180.;
+    let lateral = course_deviation_deg(lat, lon, anchor_lat, anchor_lon, course_deg);
     if distance_nm > FLS_RANGE_NM || (lateral.abs() > 90. && distance_nm > 0.05) {
         return None;
     }
     let elevation = ((altitude_ft - anchor_altitude_ft) * 0.3048).atan2(distance_m.max(1.)).to_degrees();
     Some((lateral, elevation - slope_deg, distance_nm))
+}
+
+/// The angle at a beam's antenna between its true course and the aircraft, degrees in [-180, 180),
+/// positive with the beam to the right: MSFS's NAV RADIAL ERROR for a localizer, which FlyByWire's
+/// LOC law takes as a true angle (sin(error) x DME is its cross-track distance, A380FgOuterLoops.cpp:2222).
+pub fn course_deviation_deg(lat: f64, lon: f64, anchor_lat: f64, anchor_lon: f64, course_deg: f64) -> f64 {
+    // Measured at the antenna, as the beam is: the bearing seen from the aircraft differs by the meridians' convergence.
+    let (p1, p2, dl) = (anchor_lat.to_radians(), lat.to_radians(), (lon - anchor_lon).to_radians());
+    let to_aircraft = (dl.sin() * p2.cos()).atan2(p1.cos() * p2.sin() - p1.sin() * p2.cos() * dl.cos()).to_degrees();
+    (to_aircraft - course_deg + 360.).rem_euclid(360.) - 180.
+}
+
+/// The localizer serving the aircraft among a frequency's antennas (lat, lon, true course), with its
+/// deviation: the nearest within reach that has the aircraft in its front sector, as both ends of a
+/// runway can share a frequency (EGLL 09R and 27L on 109.50) and the other end's antenna is nearer.
+fn serving_localizer(lat: f64, lon: f64, sites: &[(f64, f64, f64)]) -> Option<((f64, f64, f64), f64)> {
+    sites
+        .iter()
+        .filter(|&&(la, lo, _)| (lat - la).abs() < 0.4 && (lon - lo).abs() < 0.6)
+        .map(|&(la, lo, course)| ((la, lo, course), course_deviation_deg(lat, lon, la, lo, course)))
+        .filter(|(_, d)| d.abs() < LOC_FRONT_DEG)
+        .min_by(|((a1, o1, _), _), ((a2, o2, _), _)| {
+            let d = |la: f64, lo: f64| crate::false_glideslope::distance_m(lat, lon, la, lo);
+            d(*a1, *o1).total_cmp(&d(*a2, *o2))
+        })
 }
 
 /// True height above the aerodrome for a barometric one when colder than ISA (ICAO PANS-OPS cold temperature correction).
@@ -281,6 +299,10 @@ pub const ILS_RECEIVER: usize = 2;
 
 /// X-Plane's localizer needle stops at 2.5 dots, so beyond it the course offset is unknown.
 const LOC_SATURATED_DOTS: f64 = 2.45;
+
+/// A localizer serves only in front of its antenna (ICAO Annex 10 3.1.3.3: 35 degrees either side);
+/// beyond it the antenna found is another runway's on the same frequency, and X-Plane's needle is used.
+const LOC_FRONT_DEG: f64 = 35.;
 
 const MMR_RECEIVERS: std::ops::Range<usize> = 2..4;
 
@@ -303,6 +325,8 @@ use crate::xp::{GetProcAddress, LoadLibraryA};
 
 type FindNavAidFn =
     unsafe extern "C" fn(*const c_char, *const c_char, *mut f32, *mut f32, *mut c_int, c_int) -> c_int;
+/// XPLMFindFirstNavAidOfType / XPLMFindLastNavAidOfType: a type's navaids are contiguous.
+type NavAidOfTypeFn = unsafe extern "C" fn(c_int) -> c_int;
 type GetNavAidInfoFn = unsafe extern "C" fn(
     c_int,
     *mut c_int,
@@ -360,12 +384,14 @@ struct Ils {
     ids: [VariableIdentifier; 8],
     find_navaid: Option<FindNavAidFn>,
     navaid_info: Option<GetNavAidInfoFn>,
+    first_of_type: Option<NavAidOfTypeFn>,
+    last_of_type: Option<NavAidOfTypeFn>,
     elevation: Option<DataRef>,
     /// The frequency last looked up, when, and the glide slope found.
     looked_up: Option<(c_int, f64, Option<GsSite>)>,
-    /// The localizer last looked up for a frequency, when: antenna lat, lon, true course.
-    localizer: Option<(c_int, f64, Option<(f64, f64, f64)>)>,
-    localizer_noted: Option<c_int>,
+    /// Every localizer antenna on the frequency: (lat, lon, true course).
+    loc_sites: Option<(c_int, Vec<(f64, f64, f64)>)>,
+    geometric_loc_noted: Option<(c_int, i64)>,
     /// The frequency whose glide slope was last taken from the nav database, logged once.
     own_gs_noted: Option<c_int>,
     borrowed_gs_noted: Option<c_int>,
@@ -375,6 +401,9 @@ struct Ils {
     fls_ids: [VariableIdentifier; 7],
     /// Which of the deviations are the FLS's, for the FMA and PFD: 0 none, 1 vertical, 2 both.
     fls_active_id: VariableIdentifier,
+    /// FMA lateral/vertical mode, FG roll command, FG track error: for the approach log.
+    approach_ids: [VariableIdentifier; 4],
+    approach_logged: f64,
     altitude: Option<DataRef>,
 }
 
@@ -426,14 +455,20 @@ impl Ils {
                 .map(|p| unsafe { std::mem::transmute::<*mut c_void, FindNavAidFn>(p) }),
             navaid_info: xplm_function("XPLMGetNavAidInfo")
                 .map(|p| unsafe { std::mem::transmute::<*mut c_void, GetNavAidInfoFn>(p) }),
+            first_of_type: xplm_function("XPLMFindFirstNavAidOfType")
+                .map(|p| unsafe { std::mem::transmute::<*mut c_void, NavAidOfTypeFn>(p) }),
+            last_of_type: xplm_function("XPLMFindLastNavAidOfType")
+                .map(|p| unsafe { std::mem::transmute::<*mut c_void, NavAidOfTypeFn>(p) }),
             looked_up: None,
-            localizer: None,
-            localizer_noted: None,
+            loc_sites: None,
+            geometric_loc_noted: None,
             own_gs_noted: None,
             borrowed_gs_noted: None,
             nav3_gs_seen: None,
             fls_ids: ["FM_FLS_STATE", "FM_FLS_ANCHOR_LAT", "FM_FLS_ANCHOR_LONG", "FM_FLS_ANCHOR_ALT", "FM_FLS_COURSE", "FM_FLS_SLOPE", "FM_FLS_ISA_DEV"].map(|n| vars.get(n.to_owned())),
             fls_active_id: vars.get("FLS_1_ACTIVE".to_owned()),
+            approach_ids: ["FMA_LATERAL_MODE", "FMA_VERTICAL_MODE", "FG_PHI_COMMAND", "FG_TRACK_ANGLE_ERROR"].map(|n| vars.get(n.to_owned())),
+            approach_logged: f64::NEG_INFINITY,
             altitude: xplm.find("sim/cockpit2/gauges/indicators/altitude_ft_pilot"),
         }
     }
@@ -507,12 +542,26 @@ impl Ils {
         let mut published = None;
         let lat = self.latitude.map_or(0., |d| xplm.get_d(d));
         let near = |site: &GsSite| (lat - site.lat).abs() < 0.4 && (longitude - site.lon).abs() < 0.6;
+        // X-Plane's needle dot is no fixed angle (the beam's width follows the runway), while FlyByWire's LOC
+        // law takes the deviation as a true angle; with the antenna known it is measured from it, as MSFS does.
+        let serving = if loc_valid { serving_localizer(lat, longitude, self.localizers(freq)) } else { None };
+        let geometric_loc = serving.map(|(_, d)| d);
+        let hdef_dots = floats(self.hdef)[ILS_RECEIVER] as f64;
+        let loc_deg = geometric_loc.unwrap_or(hdef_dots * LOC_DEG_PER_DOT);
+        // Logged again when the serving antenna changes (the other runway end on the same frequency).
+        if let Some(((_, _, course), d)) = serving.filter(|((_, _, c), _)| self.geometric_loc_noted != Some((freq, (c * 100.) as i64))) {
+            self.geometric_loc_noted = Some((freq, (course * 100.) as i64));
+            crate::log(&format!("ils: localizer at {freq} measured from its antenna, course {course:.2} true: {d:.2} deg (X-Plane's needle {hdef_dots:.2} dots)"));
+        }
         if let (true, Some(path), Some(site)) = (loc_valid && vertical != 0, gs_deg, site.filter(near)) {
             let height = self.elevation.map_or(0., |d| xplm.get_d(d)) - site.elevation_m;
             let elevation = crate::false_glideslope::elevation_deg(lat, longitude, site.lat, site.lon, height);
-            if let Ok(shown) = crate::false_glideslope::indicated(elevation, path) {
-                gs_valid = shown.is_some();
-                gs_error = shown.unwrap_or(0.);
+            // Inside the protected sector too: X-Plane's needle dot is no fixed angle, while FlyByWire's G/S law
+            // takes the deviation as a true angle, and switching between the two would step the deviation.
+            let shown = crate::false_glideslope::shown(elevation, path);
+            gs_valid = shown.is_some();
+            gs_error = shown.unwrap_or(0.);
+            if crate::false_glideslope::indicated(elevation, path).is_ok() {
                 published = Some(shown);
             }
         }
@@ -524,8 +573,11 @@ impl Ils {
             let height = self.elevation.map_or(0., |d| xplm.get_d(d)) - site.elevation_m;
             let elevation = crate::false_glideslope::elevation_deg(lat, longitude, site.lat, site.lon, height);
             let distance = crate::false_glideslope::distance_m(lat, longitude, site.lat, site.lon);
-            let dots = floats(self.hdef)[ILS_RECEIVER] as f64;
-            let lateral = if dots.abs() < LOC_SATURATED_DOTS { dots * LOC_DEG_PER_DOT } else { f64::INFINITY };
+            let lateral = match geometric_loc {
+                Some(d) => d,
+                None if hdef_dots.abs() < LOC_SATURATED_DOTS => loc_deg,
+                None => f64::INFINITY,
+            };
             let shown = crate::false_glideslope::received(elevation, path, distance, lateral);
             if shown.is_some() && self.own_gs_noted != Some(freq) {
                 self.own_gs_noted = Some(freq);
@@ -539,11 +591,9 @@ impl Ils {
             own = Some(shown);
         }
         crate::false_glideslope::publish_own(freq, own);
-        let needle_deg = floats(self.hdef)[ILS_RECEIVER] as f64 * LOC_DEG_PER_DOT;
-        let loc_error = if loc_valid { self.localizer_error(lat, longitude, freq, needle_deg, time) } else { None };
         let mut values = [
             loc_valid as i32 as f64,
-            loc_error.unwrap_or(needle_deg),
+            loc_deg,
             gs_valid as i32 as f64,
             gs_error,
             (ints(self.has_dme)[ILS_RECEIVER] != 0) as i32 as f64,
@@ -572,40 +622,21 @@ impl Ils {
             }
         }
         vars.write_from_xplane(&self.fls_active_id, fls_active);
+        // Once a second with LOC (30-34) engaged: what the LOC and G/S laws are fed and what they command.
+        let [lateral, vertical_mode, phi_c, track_err] = self.approach_ids.map(|id| vars.read(&id));
+        if (30. ..=34.).contains(&lateral) && (time - self.approach_logged).abs() >= 1. {
+            self.approach_logged = time;
+            let x = |n: &str| xplm.find(n).map_or(f64::NAN, |d| xplm.get_f(d) as f64);
+            crate::log(&format!(
+                "approach: lat {lateral} vert {vertical_mode} loc {:.3} deg dme {:.2} gs {:.3} deg ({}) | phi cmd {phi_c:.1} roll {:.1} hdg {:.1} trk {:.1} trk err {track_err:.2} | vs {:.0} ias {:.0} alpha {:.1}",
+                values[1], values[5], values[3], if values[2] > 0. { "valid" } else { "flag" },
+                x("sim/flightmodel/position/phi"), x("sim/flightmodel/position/psi"), x("sim/flightmodel/position/hpath"),
+                x("sim/flightmodel/position/vh_ind_fpm"), x("sim/flightmodel/position/indicated_airspeed"), x("sim/flightmodel/position/alpha"),
+            ));
+        }
         for (id, v) in self.ids.iter().zip(values) {
             vars.write_from_xplane(id, v);
         }
-    }
-
-    /// The localizer error from the antenna and course in X-Plane's nav database; None out of range, not
-    /// found, or when it disagrees in sign with an unsaturated needle.
-    fn localizer_error(&mut self, lat: f64, lon: f64, freq: c_int, needle_deg: f64, time: f64) -> Option<f64> {
-        let site = match self.localizer {
-            Some((f, when, site)) if f == freq && time - when < GS_LOOKUP_SECONDS => site,
-            _ => {
-                let site = crate::xp::nearest_nav_aid(lat, lon, Some(freq), crate::xp::NAV_ILS | crate::xp::NAV_LOCALIZER)
-                    .map(|n| (n.lat, n.lon, n.heading.rem_euclid(360.)));
-                self.localizer = Some((freq, time, site));
-                site
-            }
-        };
-        let (loc_lat, loc_lon, course) = site?;
-        let km = crate::false_glideslope::distance_m(lat, lon, loc_lat, loc_lon) / 1000.;
-        if km > LOC_GEOMETRY_RANGE_KM {
-            return None;
-        }
-        let error = localizer_error_deg(lat, lon, loc_lat, loc_lon, course);
-        let needle_live = needle_deg.abs() < LOC_SATURATED_DOTS * LOC_DEG_PER_DOT;
-        let agrees = !needle_live || needle_deg.abs() < 0.4 || error.signum() == needle_deg.signum();
-        if self.localizer_noted != Some(freq) {
-            self.localizer_noted = Some(freq);
-            crate::log(&format!(
-                "ils: localizer {freq} course {course:.1} {} km from its antenna: geometry {error:.2} deg, X-Plane's needle {needle_deg:.2} deg{}",
-                km.round(),
-                if agrees { "" } else { "; signs disagree, the needle is used" }
-            ));
-        }
-        agrees.then_some(error)
     }
 
     fn glide_slope_angle(
@@ -635,6 +666,45 @@ impl Ils {
     }
 
     fn look_up_site(&self, xplm: &Xplm, freq: c_int, longitude: f64) -> Option<GsSite> {
+        self.look_up(xplm, freq, longitude, XPLM_NAV_GLIDESLOPE).map(|(lat, lon, elevation_m, field)| GsSite {
+            angle: glide_slope_angle_from_bearing_field(field),
+            lat,
+            lon,
+            elevation_m,
+        })
+    }
+
+    /// Every localizer antenna on `freq` (lat, lon, true course), read once per frequency by walking
+    /// the database's localizers: XPLMFindNavAid returns the nearest whatever ident it is given
+    /// (EGLL 27L from the east got 09R's antenna, the plane behind it, so no measured deviation).
+    fn localizers(&mut self, freq: c_int) -> &[(f64, f64, f64)] {
+        if self.loc_sites.as_ref().map(|(f, _)| *f) != Some(freq) {
+            let mut sites = Vec::new();
+            if let (Some(first), Some(last), Some(info)) = (self.first_of_type, self.last_of_type, self.navaid_info) {
+                // XPLMNavType's ILS localizer and standalone localizer (XPLMNavigation.h:57-59).
+                for nav_type in [8, 16] {
+                    let (a, b) = unsafe { (first(nav_type), last(nav_type)) };
+                    if a < 0 || b < a {
+                        continue;
+                    }
+                    for navaid in a..=b {
+                        let (mut f, mut la, mut lo, mut field) = (0 as c_int, 0f32, 0f32, 0f32);
+                        use std::ptr::null_mut as null;
+                        unsafe { info(navaid, null(), &mut la, &mut lo, null(), &mut f, &mut field, null(), null(), null()) };
+                        if f == freq {
+                            sites.push((la as f64, lo as f64, localizer_course_from_bearing_field(field)));
+                        }
+                    }
+                }
+            }
+            crate::log(&format!("ils: {} localizer antennas on {freq} in the nav database", sites.len()));
+            self.loc_sites = Some((freq, sites));
+        }
+        self.loc_sites.as_ref().map_or(&[], |(_, s)| s)
+    }
+
+    /// The nearest navaid of `nav_type` on `freq`: (lat, lon, elevation m, heading field).
+    fn look_up(&self, xplm: &Xplm, freq: c_int, longitude: f64, nav_type: c_int) -> Option<(f64, f64, f64, f32)> {
         let (find, info) = (self.find_navaid?, self.navaid_info?);
         let mut lat = self.latitude.map_or(0., |d| xplm.get_d(d)) as f32;
         let mut lon = longitude as f32;
@@ -646,7 +716,7 @@ impl Ils {
                 &mut lat,
                 &mut lon,
                 &mut frequency,
-                XPLM_NAV_GLIDESLOPE,
+                nav_type,
             );
             if navaid < 0 {
                 None
@@ -664,7 +734,7 @@ impl Ils {
                     std::ptr::null_mut(),
                     std::ptr::null_mut(),
                 );
-                Some(GsSite { angle: glide_slope_angle_from_bearing_field(field), lat: site_lat as f64, lon: site_lon as f64, elevation_m: height as f64 })
+                Some((site_lat as f64, site_lon as f64, height as f64, field))
             }
         }
     }
@@ -1349,6 +1419,31 @@ mod tests {
     }
 
     #[test]
+    fn the_localizer_deviation_is_a_true_angle_from_its_antenna() {
+        // EGLL 27R's IRR from X-Plane 12's earth_nav.dat: antenna at the west end, 97109.709.
+        let course = localizer_course_from_bearing_field(97109.709);
+        assert!((course - 269.709).abs() < 0.01, "{course}");
+        assert!((localizer_course_from_bearing_field(32129.709) - 89.709).abs() < 0.01, "09L");
+        let (loc_lat, loc_lon) = (51.477466667f64, -0.493719444f64);
+        // 10 NM out on the extended centreline (great circle from the antenna), then 300 m south of it,
+        // left of the inbound course.
+        let out = |bearing: f64, d: f64| {
+            let (p1, l1, b, a) = (loc_lat.to_radians(), loc_lon.to_radians(), bearing.to_radians(), d / 6_371_000.);
+            let p2 = (p1.sin() * a.cos() + p1.cos() * a.sin() * b.cos()).asin();
+            let l2 = l1 + (b.sin() * a.sin() * p1.cos()).atan2(a.cos() - p1.sin() * p2.sin());
+            (p2.to_degrees(), l2.to_degrees())
+        };
+        let (lat, lon) = out(course - 180., 18_520.);
+        let on = course_deviation_deg(lat, lon, loc_lat, loc_lon, course);
+        assert!(on.abs() < 0.001, "on the centreline: {on}");
+        let left = course_deviation_deg(lat - 300. / 111_200., lon, loc_lat, loc_lon, course);
+        assert!((left - (300f64 / 18_520.).atan().to_degrees()).abs() < 0.03, "beam to the right, positive: {left}");
+        // 09L's antenna, at the east end on the same frequency, is behind the aircraft: rejected.
+        let other = course_deviation_deg(lat, lon, 51.477697222, -0.426961111, localizer_course_from_bearing_field(32129.709));
+        assert!(other.abs() > LOC_FRONT_DEG, "{other}");
+    }
+
+    #[test]
     fn the_fls_deviations_follow_the_virtual_beam() {
         // 5 NM out on a 143 deg final, 3 deg slope, anchor at 550 ft: on the beam at 550 + 1592 ft.
         let (lat0, lon0): (f64, f64) = (43.64, 1.37);
@@ -1415,15 +1510,32 @@ mod tests {
     }
 
     #[test]
+    fn the_serving_localizer_is_the_one_facing_the_aircraft_not_the_nearest() {
+        // EGLL 109.50 (earth_nav.dat): 09R's antenna at the east end, 27L's at the west end; EGCC far away.
+        let ibb = (51.464969444, -0.428230556, 89.717);
+        let ill = (51.464761111, -0.491166667, 269.717);
+        let egcc = (53.35, -2.27, 50.);
+        let sites = [ibb, egcc, ill];
+        // 7 NM east on the 27L final (the 18:50 autosave): IBB is nearer, but the plane is behind it.
+        let (site, d) = serving_localizer(51.46383, -0.23791, &sites).expect("27L serves");
+        assert_eq!(site, ill);
+        assert!(d.abs() < 1., "{d}");
+        // West of the field it is 09R's.
+        assert_eq!(serving_localizer(51.4645, -0.70, &sites).map(|(s, _)| s), Some(ibb));
+        // Abeam the field, outside both front sectors: none, X-Plane's needle is used.
+        assert!(serving_localizer(51.60, -0.46, &sites).is_none());
+    }
+
+    #[test]
     fn localizer_error_is_the_true_angle_with_the_beam_to_the_right_positive() {
-        assert!(localizer_error_deg(0., -0.1, 0., 0., 90.).abs() < 1e-6);
-        let left = localizer_error_deg(0.01, -0.1, 0., 0., 90.);
+        assert!(course_deviation_deg(0., -0.1, 0., 0., 90.).abs() < 1e-6);
+        let left = course_deviation_deg(0.01, -0.1, 0., 0., 90.);
         assert!((left - 5.71).abs() < 0.02, "{left}");
-        let right = localizer_error_deg(-0.01, -0.1, 0., 0., 90.);
+        let right = course_deviation_deg(-0.01, -0.1, 0., 0., 90.);
         assert!((right + left).abs() < 1e-6);
-        let wide = localizer_error_deg(0.05, -0.1, 0., 0., 90.);
+        let wide = course_deviation_deg(0.05, -0.1, 0., 0., 90.);
         assert!(wide > 25., "not stopped at a dot limit: {wide}");
-        assert!(crate::prim::correct_msfs_localiser_error(localizer_error_deg(0., 0.1, 0., 0., 90.)).abs() < 1e-6);
+        assert!(crate::prim::correct_msfs_localiser_error(course_deviation_deg(0., 0.1, 0., 0., 90.)).abs() < 1e-6);
     }
 
     #[test]

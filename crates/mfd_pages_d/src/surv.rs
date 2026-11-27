@@ -11,6 +11,9 @@ pub struct SurvControlsModel {
     pub alt_rptg_on: bool,
     pub alt_rptg_disabled: bool,
     pub xpdr_radio_color: String,
+    pub xpdr_selected: Option<usize>,
+    pub tcas_tara_selected: Option<usize>,
+    pub tcas_alt_selected: Option<usize>,
     pub tcas_failed: bool,
     pub tcas_radio_color: String,
     pub tcas_radio_disabled: bool,
@@ -68,9 +71,10 @@ pub fn controls_body(m: &SurvControlsModel) -> Node {
         .child(button(&ButtonOpts::new("IDENT").style("width: 100px;")))
         .child(label_big("margin-top: 20px; margin-bottom: 5px;", "ALT RPTG"))
         .child(surv_button(m.alt_rptg_on, m.alt_rptg_disabled, "ON", "OFF"));
-    let xpdr_right = Node::el("div", "mfd-surv-controls-xpdr-right").child(radio_group(
+    let xpdr_right = Node::el("div", "mfd-surv-controls-xpdr-right").child(radio_group_sel(
         "CAPT_MFD_survControlsXpdrStatus",
         &["AUTO", "STBY"],
+        m.xpdr_selected,
         50,
         &color(&m.xpdr_radio_color),
         false,
@@ -78,16 +82,18 @@ pub fn controls_body(m: &SurvControlsModel) -> Node {
     let xpdr = Node::el("div", "mfd-surv-controls-xpdr-section").child(xpdr_left).child(xpdr_right);
     let tcas = Node::el("div", "mfd-surv-controls-tcas-section")
         .child(heading("mfd-surv-tcas-label", m.tcas_failed, "TCAS"))
-        .child(Node::el("div", "mfd-surv-controls-tcas-left").child(radio_group(
+        .child(Node::el("div", "mfd-surv-controls-tcas-left").child(radio_group_sel(
             "CAPT_MFD_survControlsTcasTara",
             &["TA/RA", "TA ONLY", "STBY"],
+            m.tcas_tara_selected,
             10,
             &color(&m.tcas_radio_color),
             m.tcas_radio_disabled,
         )))
-        .child(Node::el("div", "mfd-surv-controls-tcas-right").child(radio_group(
+        .child(Node::el("div", "mfd-surv-controls-tcas-right").child(radio_group_sel(
             "CAPT_MFD_survControlsTcasNormAbvBlw",
             &["NORM", "ABV", "BLW"],
+            m.tcas_alt_selected,
             10,
             &color(&m.tcas_radio_color),
             m.tcas_radio_disabled,

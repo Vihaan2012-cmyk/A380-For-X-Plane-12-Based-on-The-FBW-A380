@@ -1,12 +1,13 @@
 //! What drives each animation, and the SASL script that does it.
 //!
-//! Exterior: every clip gets a dataref, `fbw/anim/<clip>`, running 0..1 over
-//! the clip. SASL sets the ones X-Plane knows about every frame: gear, doors,
-//! bogie tilt, steering, wheels, flaps, slats, spoilers, ailerons, elevators,
-//! stabiliser trim, rudders, fans and reversers, and the wing flex and engine
-//! wobble from FlyByWire's own flex model. The rest (passenger and cargo
-//! doors, RAT, outflow valves) start at their rest position, ready for the
-//! systems to drive.
+//! Exterior: a clip whose source is one dataref read linearly (gear doors,
+//! bogie tilt, steering, wheels, flaps, slats, spoilers, ailerons,
+//! elevators, stabiliser trim, rudders, reversers, RAT, outflow valves) is
+//! keyed straight on that X-Plane or `fbw/` dataref in the OBJ, so X-Plane
+//! reads it and no script runs. Every other clip gets `fbw/anim/<clip>`,
+//! 0..1 over the clip: SASL still sets the gear legs and fans every frame;
+//! the rest (passenger and cargo doors, the frozen flex clips) start at their
+//! rest position, ready for the systems to drive.
 //! Which way each surface moves is measured from the model, not assumed.
 //!
 //! Cockpit: every clip gets a dataref, `fbw/cockpit/<clip>`, and a
@@ -37,7 +38,7 @@ use crate::behaviour::emissive::Drive;
 use crate::behaviour::expand::LightKind;
 use crate::behaviour::sim::SimState;
 use crate::behaviour::{bind, Click, Resolution};
-use crate::model::anim::{apply, inverse, norm, num, qangle, qconj, qmul, quat_of, sub, xp, ClipIndex, V3};
+use crate::model::anim::{apply, inverse, norm, num, qangle, qconj, qmul, quat_of, sub, xp, ClipIndex, Keys, V3};
 use crate::model::glb::{mul, M4};
 use crate::model::Model;
 
@@ -46,6 +47,9 @@ use crate::model::Model;
 pub struct Rig {
     /// Dataref playing each animated clip.
     pub drefs: HashMap<usize, String>,
+    /// Clips keyed on their source dataref's own values rather than a 0..1
+    /// `fbw/anim/*` helper: X-Plane reads the source itself, no script runs.
+    pub keys: HashMap<usize, Keys>,
     /// Show/hide commands per node.
     pub vis: HashMap<usize, Vec<String>>,
     /// Manipulator per clip, with its priority when clips share a node.
@@ -264,23 +268,42 @@ fn aileron_panel(n: &str) -> &'static str {
     }
 }
 
-/// `raw` is a FlyByWire actuator ratio in its own convention (0 down/1 up
-/// for ailerons and elevators, 0 left/1 right for the rudder); invert it
-/// when this clip's own geometry runs the opposite way (`flip`, measured by
-/// the caller from the model, not assumed).
-fn maybe_flip(raw: String, flip: bool) -> String {
+/// What drives an exterior clip: its source dataref keyed straight into the
+/// OBJ (X-Plane reads it, nothing runs), or a Lua expression SASL evaluates
+/// into the clip's `fbw/anim/*` helper every frame, for sources that are
+/// not one dataref read linearly.
+#[derive(Debug, PartialEq)]
+enum Source {
+    Key(String, Keys),
+    Lua(String),
+}
+
+/// `dref` reads `lo` at the clip's start and `hi` at its end.
+fn key(dref: impl Into<String>, lo: f64, hi: f64) -> Source {
+    Source::Key(dref.into(), Keys { lo, hi, period: None })
+}
+
+/// `raw` is a FlyByWire actuator ratio dataref in its own convention (0
+/// down/1 up for ailerons and elevators, 0 left/1 right for the rudder);
+/// invert it when this clip's own geometry runs the opposite way (`flip`,
+/// measured by the caller from the model, not assumed).
+fn maybe_flip(raw: String, flip: bool) -> Source {
     if flip {
-        format!("1 - {raw}")
+        key(raw, 1.0, 0.0)
     } else {
-        raw
+        key(raw, 0.0, 1.0)
     }
 }
 
-fn msfs_surface_fraction(raw: &str, negated: bool) -> String {
+/// MSFS plays the surface clip at `(raw * 50 + 10) / 60` (negated:
+/// `(50 - raw * 50) / 60`): the clip spans 60 degrees, of which the
+/// actuator's 0..1 covers 50. So the clip's start and end sit at raw -0.2
+/// and 1 (negated: 1 and -0.2).
+fn msfs_surface_fraction(raw: &str, negated: bool) -> Source {
     if negated {
-        format!("(50 - {raw} * 50) / 60")
+        key(raw, 1.0, -0.2)
     } else {
-        format!("({raw} * 50 + 10) / 60")
+        key(raw, -0.2, 1.0)
     }
 }
 
@@ -301,8 +324,8 @@ fn spoiler_panel(n: &str) -> u32 {
 /// property of the real actuator's range, not the (larger) authored clip
 /// range this scales it into, so nothing here guarantees the result stays
 /// inside 0..1 on its own.
-fn spoiler_source(n: &str) -> String {
-    format!("clamp(rd(\"fbw/A32NX_HYD_SPOILER_{}_{}_DEFLECTION\") * 50 / 65, 0, 1)", spoiler_panel(n), side_of(n))
+fn spoiler_source(n: &str) -> Source {
+    key(format!("fbw/A32NX_HYD_SPOILER_{}_{}_DEFLECTION", spoiler_panel(n), side_of(n)), 0.0, 65.0 / 50.0)
 }
 
 /// The Lua expression driving one of the model's structural-flex clips (the
@@ -335,12 +358,12 @@ fn flex_source(clip: &str) -> Option<String> {
 /// animation-position variable (`fbw/A32NX_<side>_FLAPS_ANIMATION_POSITION`,
 /// a 0..100 percent MSFS's own exterior model reads directly for this exact
 /// clip -- see `exterior`'s own doc comment on the flap match arm).
-fn fbw_percent(name: &str) -> String {
-    format!("rd(\"fbw/A32NX_{name}\") / 100")
+fn fbw_percent(name: &str) -> Source {
+    key(format!("fbw/A32NX_{name}"), 0.0, 100.0)
 }
 
-fn flap_source(side: &str) -> String {
-    format!("rd(\"fbw/A32NX_{side}_FLAPS_ANIMATION_POSITION\") / 100")
+fn flap_source(side: &str) -> Source {
+    fbw_percent(&format!("{side}_FLAPS_ANIMATION_POSITION"))
 }
 
 /// The Lua expression driving a slat clip from the real, surface-angle
@@ -350,8 +373,8 @@ fn flap_source(side: &str) -> String {
 /// comment on the slat match arm for why this is a different FlyByWire
 /// variable to the flaps' own `flap_source` above, not just a renamed
 /// copy of it).
-fn slat_source(side: &str) -> String {
-    format!("rd(\"fbw/A32NX_{side}_SLATS_POSITION_PERCENT\") / 100")
+fn slat_source(side: &str) -> Source {
+    fbw_percent(&format!("{side}_SLATS_POSITION_PERCENT"))
 }
 
 /// Exterior: datarefs, X-Plane sources and show/hide rules.
@@ -462,13 +485,16 @@ pub fn exterior(model: &Model, idx: &ClipIndex, res: Option<&Resolution>) -> Rig
                 _ => 4,
             }
         };
-        let expr: Option<String> = match lname.as_str() {
-            n if flex_source(n).is_some() => flex_source(n),
-            "c_gear" => Some("g(DEP, 0)".into()),
-            "c_gear_comp" => Some("g(DEP, 0) * comp(0)".into()),
+        // Gear legs stay in Lua for now: gear_collapse.rs's gear_fold_N
+        // overrides their deployment, and a main leg's clip mixes
+        // deployment and compression, neither one dataref read linearly.
+        let expr: Option<Source> = match lname.as_str() {
+            n if flex_source(n).is_some() => flex_source(n).map(Source::Lua),
+            "c_gear" => Some(Source::Lua("g(DEP, 0)".into())),
+            "c_gear_comp" => Some(Source::Lua("g(DEP, 0) * comp(0)".into())),
             "l_b_gear" | "r_b_gear" | "l_w_gear" | "r_w_gear" => {
                 let i = side_gear(&lname[..3]);
-                Some(format!("g(DEP, {i}) * (0.5 + 0.5 * comp({i}))"))
+                Some(Source::Lua(format!("g(DEP, {i}) * (0.5 + 0.5 * comp({i}))")))
             }
             "c_gear_door1" => Some(fbw_percent("GEAR_DOOR_CENTER_POSITION")),
             n if n.starts_with("c_gear_door") => Some(fbw_percent("GEAR_CENTER_SMALL_POSITION")),
@@ -480,16 +506,18 @@ pub fn exterior(model: &Model, idx: &ClipIndex, res: Option<&Resolution>) -> Rig
                 let i = side_gear(&n[..3]);
                 let level = level_fraction(model, idx, ci, gear_of(i).1);
                 rig.report.push(format!("{}: level on the ground at {:.2}", c.name, level));
-                Some(format!("rd(\"fbw/A32NX_GEAR_{i}_TILT_POSITION\")"))
+                Some(key(format!("fbw/A32NX_GEAR_{i}_TILT_POSITION"), 0.0, 1.0))
             }
             "c_wheel" => {
                 let base = down_base(0);
                 let half = half_range_deg(model, idx, ci, main, &base).max(1.0);
                 let right = moved(model, idx, main, fwd, &base, ci, 0.5, 1.0)[0] < 0.0;
                 rig.report.push(format!("nose wheel steering: {half:.0} degrees each way"));
-                Some(format!("bi(g(STEER, 0) / {}, {})", num(half), if right { 1 } else { -1 }))
+                // bi(steer / half, k): the clip's ends are at -k * half and k * half degrees.
+                let k = if right { 1.0 } else { -1.0 };
+                Some(key("sim/flightmodel2/gear/tire_steer_actual_deg[0]", -k * half, k * half))
             }
-            "left_bws" | "right_bws" => Some("0.5".into()),
+            "left_bws" | "right_bws" => Some(Source::Lua("0.5".into())),
             n if n.ends_with("_tire_key") || n.starts_with("c_tire_anim") => {
                 let g = match n {
                     "ll_tire_key" | "lr_tire_key" | "b_tire_key" => 1,
@@ -499,11 +527,8 @@ pub fn exterior(model: &Model, idx: &ClipIndex, res: Option<&Resolution>) -> Rig
                     _ => 0,
                 };
                 let forward = moved(model, idx, main, up, &down_base(g), ci, 0.0, 0.02)[2] > 0.0;
-                Some(if forward {
-                    format!("(g(TIRE, {g}) % 360) / 360")
-                } else {
-                    format!("1 - (g(TIRE, {g}) % 360) / 360")
-                })
+                let (lo, hi) = if forward { (0.0, 360.0) } else { (360.0, 0.0) };
+                Some(Source::Key(format!("sim/flightmodel2/gear/tire_rotation_angle_deg[{g}]"), Keys { lo, hi, period: Some(360.0) }))
             }
             // FlyByWire's own real surface position, not X-Plane's own
             // flap1_deploy_ratio/slat1_deploy_ratio (which only track the
@@ -550,7 +575,7 @@ pub fn exterior(model: &Model, idx: &ClipIndex, res: Option<&Resolution>) -> Rig
                 // FlyByWire actually commanded, the same thing
                 // `flight_controls.rs` is writing to `sim/flightmodel2/
                 // wing/aileron*_deg` this same tick.
-                let raw = format!("rd(\"fbw/A32NX_HYD_AIL_{}_{}_DEFLECTION\")", side_of(n), aileron_panel(n));
+                let raw = format!("fbw/A32NX_HYD_AIL_{}_{}_DEFLECTION", side_of(n), aileron_panel(n));
                 Some(msfs_surface_fraction(&raw, side_of(n) == "LEFT"))
             }
             n if n.contains("elevator_deflection") => {
@@ -558,7 +583,7 @@ pub fn exterior(model: &Model, idx: &ClipIndex, res: Option<&Resolution>) -> Rig
                 // ratio (`HYD_ELEV_<side>_INWARD/OUTWARD_DEFLECTION`), which
                 // MSFS's two elevator clips per side already match 1:1.
                 let panel = if n.contains("inner") { "INWARD" } else { "OUTWARD" };
-                let raw = format!("rd(\"fbw/A32NX_HYD_ELEV_{}_{}_DEFLECTION\")", side_of(n), panel);
+                let raw = format!("fbw/A32NX_HYD_ELEV_{}_{}_DEFLECTION", side_of(n), panel);
                 Some(msfs_surface_fraction(&raw, false))
             }
             "trimtab_elevator_key" => {
@@ -571,8 +596,8 @@ pub fn exterior(model: &Model, idx: &ClipIndex, res: Option<&Resolution>) -> Rig
                 // one of the two datarefs the plugin overrides, so `TRIM`
                 // here already is FlyByWire's real stabiliser deflection,
                 // not the pilot's own trim wheel.
-                let k = if te(&none)[1] > 0.0 { 1 } else { -1 };
-                Some(format!("bi(TRIM, {k})"))
+                let k = if te(&none)[1] > 0.0 { 1.0 } else { -1.0 };
+                Some(key("sim/cockpit2/controls/elevator_trim", -k, k))
             }
             n if n.contains("rudder") => {
                 // FlyByWire's own per-panel rudder ratio (`HYD_UPPER/LOWER_
@@ -580,7 +605,7 @@ pub fn exterior(model: &Model, idx: &ClipIndex, res: Option<&Resolution>) -> Rig
                 // MSFS's two rudder clips (upper, lower) already match 1:1.
                 let te_right = te(&none)[0] < 0.0;
                 let panel = if n.contains("upper") { "UPPER" } else { "LOWER" };
-                let raw = format!("rd(\"fbw/A32NX_HYD_{panel}_RUD_DEFLECTION\")");
+                let raw = format!("fbw/A32NX_HYD_{panel}_RUD_DEFLECTION");
                 Some(maybe_flip(raw, !te_right))
             }
             // FlyByWire's own per-panel spoiler actuator ratio
@@ -604,23 +629,23 @@ pub fn exterior(model: &Model, idx: &ClipIndex, res: Option<&Resolution>) -> Rig
             n if n.contains("spoiler") => Some(spoiler_source(n)),
             n if n.starts_with("n1_") && n.ends_with("_anim") => {
                 let e: usize = n[3..n.len() - 5].parse().unwrap_or(1);
-                Some(format!("FAN[{e}] / 360"))
+                Some(Source::Lua(format!("FAN[{e}] / 360")))
             }
-            "thrust_rev_1" => Some("g(REV, 1)".into()),
-            "thrust_rev_2" => Some("g(REV, 2)".into()),
+            "thrust_rev_1" => Some(key("sim/flightmodel2/engines/thrust_reverser_deploy_ratio[1]", 0.0, 1.0)),
+            "thrust_rev_2" => Some(key("sim/flightmodel2/engines/thrust_reverser_deploy_ratio[2]", 0.0, 1.0)),
             // The RAT: created but never set before (frozen at its rest
             // pose). FlyByWire's own RAT publishes these three under the
             // plugin's `fbw/A32NX_RAT_*` convention (ram_air_turbine.rs,
             // wind_turbine/mod.rs); MSFS's clips happen to be named after
             // the same variables.
-            "a32nx_hyd_rat_stow_position" => Some("rd(\"fbw/A32NX_RAT_STOW_POSITION\")".into()),
-            "a32nx_hyd_rat_propeller_angle" => Some("rd(\"fbw/A32NX_RAT_PROPELLER_ANGLE\")".into()),
+            "a32nx_hyd_rat_stow_position" => Some(key("fbw/A32NX_RAT_STOW_POSITION", 0.0, 1.0)),
+            "a32nx_hyd_rat_propeller_angle" => Some(key("fbw/A32NX_RAT_PROPELLER_ANGLE", 0.0, 1.0)),
             // `RAT_RPM` is a real RPM (up to ~4300), not a 0..1 ratio: like
             // the engines' `N1_x_anim`, it drives a continuous spin, not a
             // deploy/pitch clip, so it accumulates into `RAT_SPIN` (see
             // `main_lua`) the same way `FAN` does for `N1_x_anim`, with an
             // exact rpm-to-degrees-per-second conversion (RPM * 6).
-            "a32nx_hyd_rat_rpm" => Some("RAT_SPIN / 360".into()),
+            "a32nx_hyd_rat_rpm" => Some(Source::Lua("RAT_SPIN / 360".into())),
             // No travel to measure a blur onset from (there is nothing to
             // move -- it is a blend between a sharp and a blurred texture),
             // so this is a judgement call pending a look in the sim: fully
@@ -628,7 +653,7 @@ pub fn exterior(model: &Model, idx: &ClipIndex, res: Option<&Resolution>) -> Rig
             // holds the RAT at once deployed and unloaded (`RPM_GOVERNOR_
             // BREAKPTS`, ram_air_turbine.rs), so it is not stuck part-blurred
             // in the case that matters.
-            "rat_blur" => Some("clamp(rd(\"fbw/A32NX_RAT_RPM\") / 1000, 0, 1)".into()),
+            "rat_blur" => Some(key("fbw/A32NX_RAT_RPM", 0.0, 1000.0)),
             // The four outflow valves: created but never set before. The
             // emergency pressurisation partition always transmits the real
             // open amount here regardless of manual/auto mode ("We always
@@ -643,13 +668,23 @@ pub fn exterior(model: &Model, idx: &ClipIndex, res: Option<&Resolution>) -> Rig
             // and are rarely visible; flip with `1 -` if backwards in the sim.
             n if n.starts_with("outflow_valve_") => {
                 let id: u32 = n.trim_start_matches("outflow_valve_").parse().unwrap_or(1);
-                Some(format!("clamp(rd(\"fbw/A32NX_PRESS_MAN_OUTFLOW_VALVE_{id}_OPEN_PERCENTAGE\") / 100, 0, 1)"))
+                Some(key(format!("fbw/A32NX_PRESS_MAN_OUTFLOW_VALVE_{id}_OPEN_PERCENTAGE"), 0.0, 100.0))
             }
             _ => None,
         };
-        if let Some(e) = expr {
-            rig.update.push(format!("set(D[\"{dr}\"], {e})"));
-            driven += 1;
+        match expr {
+            Some(Source::Lua(e)) => {
+                rig.update.push(format!("set(D[\"{dr}\"], {e})"));
+                driven += 1;
+            }
+            Some(Source::Key(src, k)) => {
+                // Its helper was pushed just above; X-Plane reads `src` instead.
+                rig.created.pop();
+                rig.drefs.insert(ci, src);
+                rig.keys.insert(ci, k);
+                driven += 1;
+            }
+            None => {}
         }
     }
 
@@ -662,9 +697,7 @@ pub fn exterior(model: &Model, idx: &ClipIndex, res: Option<&Resolution>) -> Rig
         }
     };
     for e in 1..=4 {
-        let dr = format!("fbw/anim/N1_pct_{e}");
-        rig.created.push((dr.clone(), 0.0));
-        rig.update.push(format!("set(D[\"{dr}\"], g(N1, {}))", e - 1));
+        let dr = format!("sim/cockpit2/engine/indicators/N1_percent[{}]", e - 1);
         for k in 1..=4 {
             for p in [format!("FAN_BLADE_BLUR{k}_{e}"), format!("SPINNER_BLUR{k}_{e}")] {
                 add_vis(&mut rig, &p, format!("ANIM_hide -1000 1000 {dr}"));
@@ -693,10 +726,8 @@ pub fn exterior(model: &Model, idx: &ClipIndex, res: Option<&Resolution>) -> Rig
     // purpose: this one only gates the blurred-disc mesh's visibility at
     // 0.5, not a texture blend, but they should agree on when the RAT looks
     // blurred).
-    let rat = unique(&mut used, "fbw/anim/rat_blur_disc".into());
-    rig.created.push((rat.clone(), 0.0));
-    rig.update.push(format!("set(D[\"{rat}\"], clamp(rd(\"fbw/A32NX_RAT_RPM\") / 1000, 0, 1))"));
-    add_vis(&mut rig, "a380_exterior_rat_blur", format!("ANIM_hide -1 0.5 {rat}"));
+    // Hidden below half blur (RAT_RPM / 1000 under 0.5), read straight off the RAT.
+    add_vis(&mut rig, "a380_exterior_rat_blur", "ANIM_hide -1000 500 fbw/A32NX_RAT_RPM".into());
 
     // Manipulators for behaviour-XML controls whose node lives on THIS
     // model's own geometry. `cockpit`'s own pass over the same
@@ -2019,34 +2050,28 @@ mod tests {
         assert_eq!(side_of("r_aileron1_percent_key"), "RIGHT");
     }
 
+    /// The clip fraction a keyed drive plays at for source value `v`.
+    fn frac(d: &Source, v: f64) -> f64 {
+        let Source::Key(_, k) = d else { panic!("not keyed: {d:?}") };
+        (v - k.lo) / (k.hi - k.lo)
+    }
+
     #[test]
     fn surfaces_play_their_clip_where_msfs_does() {
-        let at = |code: &str, n: f64| -> f64 {
-            let x = code.replace("X", &format!("{n}"));
-            let (num, den) = x.rsplit_once(" / ").unwrap();
-            let num = num.trim_matches(|c| c == '(' || c == ')');
-            let v: f64 = if let Some((a, b)) = num.split_once(" - ") {
-                a.parse::<f64>().unwrap() - b.split(" * ").map(|t| t.parse::<f64>().unwrap()).product::<f64>()
-            } else {
-                let (prod, add) = num.split_once(" + ").unwrap();
-                prod.split(" * ").map(|t| t.parse::<f64>().unwrap()).product::<f64>() + add.parse::<f64>().unwrap()
-            };
-            v / den.parse::<f64>().unwrap()
-        };
         let up = msfs_surface_fraction("X", false);
-        assert!((at(&up, 0.4) - 0.5).abs() < 1e-9, "neutral is mid-clip");
-        assert!((at(&up, 1.0) - 1.0).abs() < 1e-9, "30 up is the clip's end");
-        assert!((at(&up, 0.0) - 1.0 / 6.0).abs() < 1e-9, "20 down, short of the clip's 30");
+        assert!((frac(&up, 0.4) - 0.5).abs() < 1e-9, "neutral is mid-clip");
+        assert!((frac(&up, 1.0) - 1.0).abs() < 1e-9, "30 up is the clip's end");
+        assert!((frac(&up, 0.0) - 1.0 / 6.0).abs() < 1e-9, "20 down, short of the clip's 30");
         let left = msfs_surface_fraction("X", true);
-        assert!((at(&left, 0.4) - 0.5).abs() < 1e-9);
-        assert!((at(&left, 1.0) - 0.0).abs() < 1e-9);
-        assert!((at(&left, 0.0) - 5.0 / 6.0).abs() < 1e-9);
+        assert!((frac(&left, 0.4) - 0.5).abs() < 1e-9);
+        assert!((frac(&left, 1.0) - 0.0).abs() < 1e-9);
+        assert!((frac(&left, 0.0) - 5.0 / 6.0).abs() < 1e-9);
     }
 
     #[test]
     fn maybe_flip_inverts_only_when_asked() {
-        assert_eq!(maybe_flip("X".into(), false), "X");
-        assert_eq!(maybe_flip("X".into(), true), "1 - X");
+        assert_eq!(maybe_flip("X".into(), false), key("X", 0.0, 1.0));
+        assert_eq!(maybe_flip("X".into(), true), key("X", 1.0, 0.0));
     }
 
     #[test]
@@ -2063,8 +2088,10 @@ mod tests {
         // same clip by "#DEFLECTION_CODE# 100 * 50 * 65 /"; over X-Plane's
         // own 0..1 clip fraction (not MSFS's 0..100 ANIM_CODE) that is the
         // same *50/65 this mirrors.
-        assert_eq!(spoiler_source("l_spoiler3_key"), "clamp(rd(\"fbw/A32NX_HYD_SPOILER_3_LEFT_DEFLECTION\") * 50 / 65, 0, 1)");
-        assert_eq!(spoiler_source("r_spoiler8_key"), "clamp(rd(\"fbw/A32NX_HYD_SPOILER_8_RIGHT_DEFLECTION\") * 50 / 65, 0, 1)");
+        let l3 = spoiler_source("l_spoiler3_key");
+        assert!(matches!(&l3, Source::Key(d, _) if d == "fbw/A32NX_HYD_SPOILER_3_LEFT_DEFLECTION"), "{l3:?}");
+        assert!((frac(&l3, 1.0) - 50.0 / 65.0).abs() < 1e-9, "full actuator travel is 50 of the clip's 65 degrees");
+        assert!(matches!(spoiler_source("r_spoiler8_key"), Source::Key(d, _) if d == "fbw/A32NX_HYD_SPOILER_8_RIGHT_DEFLECTION"));
     }
 
     #[test]
@@ -2087,15 +2114,15 @@ mod tests {
 
     #[test]
     fn gear_doors_read_flybywires_own_door_sequence() {
-        assert_eq!(fbw_percent("GEAR_DOOR_LEFT_POSITION"), "rd(\"fbw/A32NX_GEAR_DOOR_LEFT_POSITION\") / 100");
+        assert_eq!(fbw_percent("GEAR_DOOR_LEFT_POSITION"), key("fbw/A32NX_GEAR_DOOR_LEFT_POSITION", 0.0, 100.0));
     }
 
     #[test]
     fn flap_source_reads_fbws_real_fppu_animation_position() {
         // A380_EXTERIOR.xml's Flaps component reads this exact variable
         // directly: `<ANIM_CODE>(L:A32NX_LEFT_FLAPS_ANIMATION_POSITION)</ANIM_CODE>`.
-        assert_eq!(flap_source("LEFT"), "rd(\"fbw/A32NX_LEFT_FLAPS_ANIMATION_POSITION\") / 100");
-        assert_eq!(flap_source("RIGHT"), "rd(\"fbw/A32NX_RIGHT_FLAPS_ANIMATION_POSITION\") / 100");
+        assert_eq!(flap_source("LEFT"), key("fbw/A32NX_LEFT_FLAPS_ANIMATION_POSITION", 0.0, 100.0));
+        assert_eq!(flap_source("RIGHT"), key("fbw/A32NX_RIGHT_FLAPS_ANIMATION_POSITION", 0.0, 100.0));
     }
 
     #[test]
@@ -2106,8 +2133,8 @@ mod tests {
         // model's slat clip actually reads from `LEFT_SLATS_POSITION_PERCENT`/
         // `RIGHT_SLATS_POSITION_PERCENT`, not from the animation-position
         // variable flaps use.
-        assert_eq!(slat_source("LEFT"), "rd(\"fbw/A32NX_LEFT_SLATS_POSITION_PERCENT\") / 100");
-        assert_eq!(slat_source("RIGHT"), "rd(\"fbw/A32NX_RIGHT_SLATS_POSITION_PERCENT\") / 100");
+        assert_eq!(slat_source("LEFT"), key("fbw/A32NX_LEFT_SLATS_POSITION_PERCENT", 0.0, 100.0));
+        assert_eq!(slat_source("RIGHT"), key("fbw/A32NX_RIGHT_SLATS_POSITION_PERCENT", 0.0, 100.0));
     }
 
     /// A passenger-door handle: its click's node (`PAX_DOOR_M1L_HANDLE`)

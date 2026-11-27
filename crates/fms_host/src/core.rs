@@ -16,7 +16,7 @@ use fms_lnav::{Coord, Geometry};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 
-use crate::command::{Envelope, HostCommand};
+use crate::command::{Envelope, HostCommand, NavaidEntry};
 use crate::convert::elements_from;
 use crate::efis::{EfisInterface, EfisVectors, VectorsContext, FIRST_SECONDARY};
 use crate::facilities::{Facilities, NoFacilities};
@@ -47,6 +47,33 @@ pub struct Snapshot {
     /// Pseudo waypoints of the active plan, as the MFD F-PLN lists them.
     #[serde(default)]
     pub pseudo_waypoints: Vec<PseudoWaypointPrediction>,
+    /// What the MFD POSITION/NAVAIDS page shows. Not restored after a crash.
+    #[serde(default)]
+    pub navaids: NavaidsView,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+pub struct TunedView {
+    pub ident: Option<String>,
+    pub frequency: Option<f64>,
+    pub course: Option<f64>,
+    /// Ident entered by the pilot (FBW: manual with a facility).
+    pub ident_manual: bool,
+    /// Frequency entered by the pilot without an ident.
+    pub freq_manual: bool,
+    pub course_manual: bool,
+    pub dme_only: bool,
+    pub slope: Option<f64>,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+pub struct NavaidsView {
+    pub vor: [TunedView; 2],
+    pub ls: TunedView,
+    /// FBW `mmrTuningLocked`: approach phase below 700 ft RA.
+    pub ls_locked: bool,
+    /// Deselected navaid idents, in database id order.
+    pub deselected: Vec<String>,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
@@ -255,7 +282,65 @@ impl FmsCore {
                 seconds_from_present: p.seconds_from_present,
             })
             .collect();
-        Snapshot { plans: self.fms.plans.to_vec(), perf: self.fms.perf.plans.clone(), phase: self.phase.phase() as u8, predictions, pseudo_waypoints }
+        Snapshot { plans: self.fms.plans.to_vec(), perf: self.fms.perf.plans.clone(), phase: self.phase.phase() as u8, predictions, pseudo_waypoints, navaids: self.navaids_view() }
+    }
+
+    fn navaids_view(&self) -> NavaidsView {
+        let t = &self.navaids;
+        let vor = |v: &crate::navaids::VorStatus| TunedView {
+            ident: v.ident.clone(),
+            frequency: v.frequency,
+            course: v.course,
+            ident_manual: v.manual && v.facility.is_some(),
+            freq_manual: v.manual && v.facility.is_none(),
+            course_manual: v.course.is_some(),
+            dme_only: v.dme_only,
+            slope: None,
+        };
+        let m = &t.mmr[0];
+        let ls = TunedView {
+            ident: m.ident.clone(),
+            frequency: m.frequency,
+            course: m.course,
+            ident_manual: m.manual && m.facility.is_some(),
+            freq_manual: m.manual && m.facility.is_none(),
+            course_manual: m.course_manual,
+            dme_only: false,
+            slope: m.slope,
+        };
+        let ls_locked = self.phase.phase() == FlightPhase::Approach && self.last.radio_height_ft.is_some_and(|ra| ra < 700.);
+        let deselected = t.selection.deselected.iter().map(|id| id.get(7..).unwrap_or(id).trim().to_string()).collect();
+        NavaidsView { vor: [vor(&t.vor[0]), vor(&t.vor[1])], ls, ls_locked, deselected }
+    }
+
+    /// FBW `searchVor` / `getILSs`: the facility with this ident nearest the aircraft.
+    fn find_navaid<T>(&self, db: &dyn NavDatabase, ident: &str, get: impl Fn(&dyn Facilities, &str) -> Option<T>) -> Option<T> {
+        let here = Coord::new(self.last.lat, self.last.lon);
+        let mut fixes: Vec<_> = db.search_fix(ident).into_iter().filter(|f| f.database_id.starts_with('V')).collect();
+        let d = |f: &fms::navdb::Fix| fms_lnav::geo::distance_to(here, Coord::new(f.location.lat, f.location.long));
+        fixes.sort_by(|a, b| d(a).total_cmp(&d(b)));
+        fixes.iter().find_map(|f| get(self.facilities.as_ref(), &f.database_id))
+    }
+
+    fn tune_navaid(&mut self, db: &dyn NavDatabase, vor: Option<usize>, entry: NavaidEntry) -> Result<(), String> {
+        use crate::facilities::vhf_type::*;
+        const NOT_FOUND: &str = "NOT IN DATABASE";
+        match (vor, entry) {
+            (Some(i), NavaidEntry::Clear) => self.navaids.set_manual_vor(i, None),
+            (Some(i), NavaidEntry::Freq(f)) => self.navaids.set_manual_vor(i, Some(Err(f))),
+            (Some(i), NavaidEntry::Ident(id)) => {
+                let vors = VOR | VOR_DME | DME | TACAN | VORTAC;
+                let n = self.find_navaid(db, &id, |fac, d| fac.vhf_navaid(d).filter(|n| n.vhf_type & vors != 0)).ok_or(NOT_FOUND)?;
+                self.navaids.set_manual_vor(i, Some(Ok(n)));
+            }
+            (None, NavaidEntry::Clear) => self.navaids.set_manual_ils(None),
+            (None, NavaidEntry::Freq(f)) => self.navaids.set_manual_ils(Some(Err(f))),
+            (None, NavaidEntry::Ident(id)) => {
+                let n = self.find_navaid(db, &id, |fac, d| fac.ils(d)).ok_or(NOT_FOUND)?;
+                self.navaids.set_manual_ils(Some(Ok(n)));
+            }
+        }
+        Ok(())
     }
 
     pub fn restore(s: &Snapshot) -> Self {
@@ -402,6 +487,49 @@ impl FmsCore {
                 let pi = self.current_phase_inputs();
                 self.phase.change_phase(p, &pi);
                 Ok(())
+            }
+            HostCommand::PreflightPageShown => {
+                if self.phase.phase() == FlightPhase::Done && self.is_reset {
+                    let pi = self.current_phase_inputs();
+                    self.phase.change_phase(FlightPhase::Preflight, &pi);
+                    self.process_transitions(db);
+                }
+                Ok(())
+            }
+            HostCommand::ActivateApproach => {
+                let pi = self.current_phase_inputs();
+                if self.phase.try_go_in_approach_phase(&pi) {
+                    self.process_transitions(db);
+                    Ok(())
+                } else {
+                    Err("NOT ALLOWED".into())
+                }
+            }
+            HostCommand::TuneVor { index, entry } => self.tune_navaid(db, Some(index), entry),
+            HostCommand::TuneLs(entry) => self.tune_navaid(db, None, entry),
+            HostCommand::VorCourse { index, course } => {
+                self.navaids.set_vor_course(index, course);
+                Ok(())
+            }
+            HostCommand::LsCourse(course) => {
+                self.navaids.set_ils_course(course, false);
+                Ok(())
+            }
+            HostCommand::DeselectNavaid { ident, deselect } => {
+                if deselect {
+                    match db.navaids(&ident).into_iter().next() {
+                        Some(f) => {
+                            self.navaids.deselect_navaid(&f.database_id);
+                            Ok(())
+                        }
+                        None => Err("NOT IN DATABASE".to_string()),
+                    }
+                } else {
+                    if let Some(id) = self.navaids.selection.deselected.iter().find(|d| d.get(7..).unwrap_or(d).trim() == ident).cloned() {
+                        self.navaids.reselect_navaid(&id);
+                    }
+                    Ok(())
+                }
             }
             HostCommand::PresetSpeed(v) => {
                 self.set_preselected(v);
@@ -1515,6 +1643,55 @@ mod tests {
 
     fn written(core: &FmsCore, name: &str) -> Option<f64> {
         core.sink.written.get(name).copied()
+    }
+
+    #[test]
+    fn after_landing_opening_init_starts_the_next_preflight() {
+        let db = MemoryNavDb::default();
+        let inputs = Inputs { on_ground: true, ..Inputs::default() };
+        let mut core = FmsCore::new();
+        core.tick(&db, 50., &inputs);
+        enter(&mut core, FlightPhase::Done);
+        core.tick(&db, 50., &inputs);
+        assert_eq!(core.phase.phase(), FlightPhase::Done);
+        // The plan is wiped in DONE, so INIT's FROM/TO are greyed: only opening the page leaves DONE.
+        core.command(&db, Envelope { id: 1, command: HostCommand::PreflightPageShown });
+        assert_eq!(core.phase.phase(), FlightPhase::Preflight);
+        core.command(&db, Envelope { id: 2, command: HostCommand::PreflightPageShown });
+        assert_eq!(core.phase.phase(), FlightPhase::Preflight);
+    }
+
+    struct TwoVors;
+    impl Facilities for TwoVors {
+        fn vhf_navaid(&self, id: &str) -> Option<crate::facilities::VhfNavaid> {
+            let lat = if id.starts_with("VLF") { 10. } else { 50. };
+            id.starts_with('V').then(|| crate::facilities::VhfNavaid { database_id: id.into(), ident: "ABC".into(), location: fms::navdb::Location { lat, long: 0., alt: None }, frequency: if lat > 20. { 114.5 } else { 112.1 }, vhf_type: crate::facilities::vhf_type::VOR_DME, ..Default::default() })
+        }
+        fn ils(&self, id: &str) -> Option<crate::facilities::IlsNavaid> {
+            (id == "VEGEGLLILL").then(|| crate::facilities::IlsNavaid { database_id: id.into(), ident: "ILL".into(), frequency: 109.5, loc_bearing: 270., gs_slope: Some(-3.), is_localizer_glide_slope: true })
+        }
+    }
+
+    #[test]
+    fn navaids_page_tunes_the_nearest_vor_and_the_ls_and_deselects() {
+        let fix = |id: &str, ident: &str, lat: f64| fms::navdb::Fix { database_id: id.into(), ident: ident.into(), location: fms::navdb::Location { lat, long: 0., alt: None }, section_code: 1, ..Default::default() };
+        let db = MemoryNavDb { fixes: vec![fix("VLF    ABC", "ABC", 10.), fix("VEG    ABC", "ABC", 50.), fix("VEGEGLLILL", "ILL", 51.)], ..Default::default() };
+        let mut core = FmsCore::with_facilities(Arc::new(TwoVors));
+        core.tick(&db, 50., &Inputs { lat: 51., lon: 0., ..Inputs::default() });
+        let mut send = |core: &mut FmsCore, command| core.command(&db, Envelope { id: 1, command });
+        send(&mut core, HostCommand::TuneVor { index: 1, entry: NavaidEntry::Ident("ABC".into()) });
+        send(&mut core, HostCommand::VorCourse { index: 1, course: Some(90.) });
+        send(&mut core, HostCommand::TuneLs(NavaidEntry::Ident("ILL".into())));
+        send(&mut core, HostCommand::DeselectNavaid { ident: "ABC".into(), deselect: true });
+        let v = core.snapshot().navaids;
+        assert_eq!((v.vor[1].ident.as_deref(), v.vor[1].frequency, v.vor[1].course, v.vor[1].ident_manual), (Some("ABC"), Some(114.5), Some(90.), true));
+        assert_eq!((v.ls.ident.as_deref(), v.ls.course, v.ls.slope), (Some("ILL"), Some(270.), Some(-3.)));
+        assert_eq!(v.deselected, ["ABC"]);
+        send(&mut core, HostCommand::DeselectNavaid { ident: v.deselected[0].clone(), deselect: false });
+        send(&mut core, HostCommand::TuneVor { index: 1, entry: NavaidEntry::Freq(110.3) });
+        let v = core.snapshot().navaids;
+        assert!(v.deselected.is_empty());
+        assert_eq!((v.vor[1].ident.as_deref(), v.vor[1].frequency, v.vor[1].freq_manual), (None, Some(110.3), true));
     }
 
     #[test]

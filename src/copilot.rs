@@ -557,7 +557,7 @@ impl Copilot {
                 if let Some(d) = self.refs.landing_lights {
                     xplm.get_vf(d, &mut l);
                 }
-                l[2..].iter().any(|v| *v > 0.5)
+                l[..4].iter().any(|v| *v > 0.5)
             },
             fmgc_phase: vars.read(&self.ids.fmgc_phase),
         }

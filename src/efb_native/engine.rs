@@ -127,6 +127,8 @@ pub enum Field {
     Modal,
     Efb(String),
     FailSearch,
+    /// A Performance page input, `to:icao`.
+    Perf(String),
 }
 
 impl Field {
@@ -138,6 +140,7 @@ impl Field {
             "modal" => Field::Modal,
             "fail-search" => Field::FailSearch,
             _ if s.starts_with("payload/") || s.starts_with("refuel/") => Field::Efb(s.to_string()),
+            _ if s.starts_with("pc:") => Field::Perf(s[3..].to_string()),
             _ => Field::Setting(s.strip_prefix("set:")?.to_string()),
         })
     }
@@ -262,6 +265,7 @@ pub struct Efb<B: Backend> {
     pub clock: (String, String),
     chrono: (bool, f64, f64),
     fail_view: efb_pages::failures::FailuresView,
+    pub(super) perf: efb_pages::perf::PerfView,
     cb_view: efb_pages::maint::ListView,
     comp_view: efb_pages::maint::ListView,
     study_view: efb_pages::study::StudyView,
@@ -278,6 +282,20 @@ pub struct Efb<B: Backend> {
 
 fn jstr(v: &Value) -> String {
     efb_pages::model::jstr(v)
+}
+
+/// The page background as a file path the efbx display resolves against
+/// html_ui/Images/fbw-a380x and decodes once. A data: URL put ~3 MB of base64
+/// in every document, copied and hashed on each scroll frame (~8 fps).
+/// shortcut: assumes html_ui sits two folders above the plugin (an A380_HTML_UI override misses it), upgrade if that ever moves.
+fn gate_bg_url() -> String {
+    let fallback = efb_pages::bg::asset_path("gate");
+    let Some(dir) = crate::js_bridge::plugin_dir() else { return fallback };
+    let Some(name) = dir.file_name().and_then(|n| n.to_str()) else { return fallback };
+    if !dir.join("bg").join("gate.png").is_file() {
+        return fallback;
+    }
+    format!("../../../plugins/{name}/bg/gate.png")
 }
 
 impl<B: Backend> Efb<B> {
@@ -328,11 +346,12 @@ impl<B: Backend> Efb<B> {
             status: StatusModel::default(),
             landings: Vec::new(),
             maintenance: None,
-            bg_url: crate::js_bridge::plugin_dir().map(|d| efb_pages::bg::Backgrounds::load(&d.join("bg")).url("gate")).unwrap_or_else(|| efb_pages::bg::asset_path("gate")),
+            bg_url: gate_bg_url(),
             zoom: "1".into(),
             clock: ("--:--Z".into(), "--:--".into()),
             chrono: (false, 0.0, 0.0),
             fail_view: Default::default(),
+            perf: Default::default(),
             cb_view: Default::default(),
             comp_view: Default::default(),
             study_view: Default::default(),
@@ -634,7 +653,7 @@ impl<B: Backend> Efb<B> {
             }
             4 => match self.hit_at(x, y).and_then(|h| h.scroller) {
                 Some((_, id)) => {
-                    if self.scrolls.by(&id, -(button as f64) * WHEEL_STEP_PX) {
+                    if self.scrolls.wheel(&id, -(button as f64) * WHEEL_STEP_PX) {
                         self.scrolled_away(&id);
                     }
                     true
@@ -1048,6 +1067,7 @@ impl<B: Backend> Efb<B> {
             Field::SavesName => self.saves_name.clone(),
             Field::Modal => String::new(),
             Field::FailSearch => self.fail_view.query.clone(),
+            Field::Perf(k) => k.split_once(':').and_then(|(kind, key)| if kind == "to" { &self.perf.to } else { &self.perf.ldg }.get(key).cloned()).unwrap_or_default(),
             Field::Efb(k) => efb_value(k).filter(|v| v.is_finite()).map(|v| format!("{}", v.round() as i64)).unwrap_or_default(),
         }
     }
@@ -1092,6 +1112,7 @@ impl<B: Backend> Efb<B> {
             Field::SavesName => self.saves_name = t,
             Field::Modal => {}
             Field::FailSearch => self.fail_view.query = t,
+            Field::Perf(k) => self.perf_set(&k, t.trim().to_uppercase()),
             Field::Efb(k) => {
                 if let Ok(v) = t.trim().parse::<f64>() {
                     self.study_action(json!({ "kind": "efbSet", "name": k, "value": v }));
@@ -1124,6 +1145,7 @@ impl<B: Backend> Efb<B> {
                 }
             }
             "tab" => self.go(arg),
+            "pc" => self.perf_act(arg, was_open.as_deref()),
             "chrono" => {
                 let (run, start, acc) = self.chrono;
                 self.chrono = match (run, acc > 0.0) {
@@ -1197,6 +1219,8 @@ impl<B: Backend> Efb<B> {
                     self.commit_setting(k, Value::String(v.to_string()));
                 } else if let Some(f) = target.strip_prefix("saves:") {
                     self.saves_setting(f, json!(v.parse::<f64>().unwrap_or(0.0)));
+                } else if let Some(k) = target.strip_prefix("pc:") {
+                    self.perf_set(k, v.to_string());
                 }
             }
             "focus" => {
@@ -1556,17 +1580,65 @@ impl<B: Backend> Efb<B> {
         self.item(key).and_then(|i| i.sel.clone()).unwrap_or_default().into_iter().filter(|(v, _)| key != "xphfbw.engineRating" || v.starts_with("GP") == rating_gp).collect()
     }
 
+    /// `pc:` acts on the Performance page: tabs, option buttons, dropdowns, CALCULATE.
+    fn perf_act(&mut self, arg: &str, was_open: Option<&str>) {
+        if let Some(t) = arg.strip_prefix("tab:") {
+            self.perf.tab = t.to_string();
+        } else if let Some(k) = arg.strip_prefix("calc:") {
+            if k == "to" {
+                self.perf.calc_to = true;
+            } else {
+                self.perf.calc_ldg = true;
+            }
+        } else if arg == "ofp" || arg.starts_with("aircraft:") || arg.starts_with("metar:") {
+            // shortcut: OFP / aircraft / METAR fill not ported yet, type the values in.
+            self.show("Not available yet: type the values in");
+        } else if let Some((k, v)) = arg.split_once('=') {
+            self.perf_set(k, v.to_string());
+        } else {
+            let target = format!("pc:{arg}");
+            if was_open != Some(target.as_str()) {
+                self.open_dropdown(&target);
+            }
+        }
+    }
+
+    /// One Performance input (`to:oat`); a change drops that side's last result.
+    fn perf_set(&mut self, k: &str, v: String) {
+        let Some((kind, key)) = k.split_once(':') else { return };
+        if key == "icao" {
+            let ap = crate::native_fms_shadow::navdb().map(|db| perf_airport(&*db as &dyn fms::navdb::NavDatabase, &v)).unwrap_or_else(|| json!({ "error": "Navigation data still loading" }));
+            if kind == "to" {
+                self.perf.airport_to = Some(ap);
+            } else {
+                self.perf.airport_ldg = Some(ap);
+            }
+        }
+        if kind == "to" {
+            self.perf.to.insert(key.to_string(), v);
+            self.perf.calc_to = false;
+        } else {
+            self.perf.ldg.insert(key.to_string(), v);
+            self.perf.calc_ldg = false;
+        }
+    }
+
     fn open_dropdown(&mut self, target: &str) {
         let options: Vec<(String, String)> = match target {
             "zoom" => ZOOMS.iter().map(|(v, t)| (v.to_string(), t.to_string())).collect(),
             "saves:interval_min" => INTERVALS.iter().map(|(v, t)| (v.to_string(), t.to_string())).collect(),
             "saves:rolling_slots" => (1..=10).map(|i| (i.to_string(), i.to_string())).collect(),
+            t if t.starts_with("pc:") => {
+                let mut parts = t[3..].splitn(2, ':');
+                let (kind, key) = (parts.next().unwrap_or(""), parts.next().unwrap_or(""));
+                efb_pages::perf::select_list(&self.perf, kind, key).into_iter().map(|o| (o.clone(), o)).collect()
+            }
             t => {
                 let Some(k) = t.strip_prefix("set:") else { return };
                 self.select_options(k)
             }
         };
-        let anchor = self.anchor_of(&format!("select:{target}"));
+        let anchor = self.anchor_of(&if target.starts_with("pc:") { target.to_string() } else { format!("select:{target}") });
         self.scrolls.reset(DROPDOWN_ID);
         self.dropdown = Some(Dropdown { target: target.to_string(), options, anchor });
     }
@@ -1998,7 +2070,7 @@ impl<B: Backend> Efb<B> {
             "atc" => efb_pages::ops::atc_content(&Default::default()),
             "cargo" => efb_pages::ops::cargo_content(&Default::default()),
             "performance" => {
-                let mut v = efb_pages::perf::PerfView::default();
+                let mut v = self.perf.clone();
                 let mut to = efb_pages::perf::initial("to");
                 to.extend(std::mem::take(&mut v.to));
                 let mut ldg = efb_pages::perf::initial("ldg");
@@ -2007,7 +2079,17 @@ impl<B: Backend> Efb<B> {
                 efb_pages::perf::operator_defaults(&mut to, &mut ldg, &mut applied, &v.settings, &table.defaults);
                 v.to = to;
                 v.ldg = ldg;
-                efb_pages::perf::perf_content(&v)
+                let mut node = efb_pages::perf::perf_content(&v);
+                if let Some(Field::Perf(k)) = &self.focus {
+                    let text = self.edit.display(self.caret_on());
+                    let act = format!("focus:pc:{k}");
+                    visit(&mut node, &mut |n| {
+                        if n.data.get("act") == Some(&act) {
+                            n.value = Some(text.clone());
+                        }
+                    });
+                }
+                node
             }
             "loadsheet" => {
                 let page = cached(Source::Pages)["pages"].as_array().and_then(|p| p.iter().find(|x| x.get("zones").is_some()).cloned()).unwrap_or(Value::Null);
@@ -2444,6 +2526,21 @@ fn find_cls<'a>(n: &'a mut Node, c: &str) -> Option<&'a mut Node> {
         }
     }
     None
+}
+
+/// The Performance page's airport (`elevation_ft`, `runways[id, heading, tora_m, ...]`) from the FMS navdb.
+pub(super) fn perf_airport(db: &dyn fms::navdb::NavDatabase, icao: &str) -> Value {
+    let Some(ap) = db.airport(icao) else { return json!({ "error": "Unknown airport" }) };
+    let runways: Vec<Value> = db
+        .runways(icao)
+        .iter()
+        .map(|r| {
+            let id = r.ident().strip_prefix(icao).unwrap_or(r.ident());
+            // shortcut: TORA = TODA = ASDA = LDA = the runway length (no declared distances in the navdb).
+            json!({ "id": id, "heading": r.magnetic_bearing, "tora_m": r.length, "toda_m": r.length, "asda_m": r.length, "lda_m": r.length })
+        })
+        .collect();
+    json!({ "elevation_ft": ap.location.alt.unwrap_or(0.0), "runways": runways })
 }
 
 fn visit(n: &mut Node, f: &mut dyn FnMut(&mut Node)) {

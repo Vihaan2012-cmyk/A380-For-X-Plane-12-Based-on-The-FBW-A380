@@ -413,7 +413,7 @@ pub fn gm_plan(m: &GroundModel) -> Node {
         }
         out.push(shape("g", 0, &[("class", cls), ("data-gm", act.into())]));
         out.push(shape("path", 1, &[("d", squircle(x - wd / 2.0, y - 12.0, wd, 24.0, 7.0))]));
-        out.push(shape("text", 1, &[("x", js_num(x)), ("y", js_num(y + 4.5)), ("text-anchor", "middle".into())]));
+        out.push(shape("text", 1, &[("x", js_num(x)), ("y", js_num(y + 4.5)), ("text-anchor", "middle".into()), ("_text", label.into())]));
     };
     let leader = |out: &mut Vec<mfd_tree::Shape>, x1: f64, y1: f64, x2: f64, y2: f64, on: bool| {
         out.push(shape("line", 0, &[("x1", js_num(x1)), ("y1", js_num(y1)), ("x2", js_num(x2)), ("y2", js_num(y2)), ("class", if on { "gm-lead on" } else { "gm-lead" }.into())]));
@@ -468,7 +468,7 @@ pub fn gm_plan(m: &GroundModel) -> Node {
     let tug = m.var("PUSHBACK ATTACHED") > 0.5;
     let (tx, ty) = p(0.0, -35.2);
     chip(&mut out, tx, ty - 26.0, "TUG", tug, m.gse("tug/state") == 1.0, "tug");
-    out.push(shape("text", 0, &[("x", js_num(w - 16.0)), ("y", js_num(h - 14.0)), ("text-anchor", "end".into()), ("class", "gm-hint".into())]));
+    out.push(shape("text", 0, &[("x", js_num(w - 16.0)), ("y", js_num(h - 14.0)), ("text-anchor", "end".into()), ("class", "gm-hint".into()), ("_text", "Tap a door, a cowl or a service".into())]));
     let mut n = Node::el("svg", "gm-svg");
     n.svgattr.insert("viewBox".into(), "0 0 640 720".into());
     n.shapes = out;
@@ -772,4 +772,15 @@ fn state_content(m: &GroundModel, page: Node) -> Node {
         .child(Node::el("div", "tiles").child(tile("Service oxygen", "refill crew bottles", false, "study:serviceOxygen")).child(tile("Repack escape slides", "after a deployment", false, "gs:slides")))
         .child(label("section-title", "State"))
         .child(render_groups(&m.groups, m))
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn every_ground_plan_chip_carries_its_name() {
+        let plan = super::gm_plan(&super::GroundModel::default());
+        let texts: Vec<&str> = plan.shapes.iter().filter(|s| s.t == "text").map(|s| s.a.get("_text").map_or("", |t| t.as_str())).collect();
+        assert!(texts.contains(&"TUG") && texts.contains(&"CHOCKS"), "{texts:?}");
+        assert!(texts.iter().all(|t| !t.is_empty()), "{texts:?}");
+    }
 }

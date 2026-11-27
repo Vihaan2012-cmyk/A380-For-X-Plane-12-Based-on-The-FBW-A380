@@ -26,7 +26,7 @@ fn style_hides(n: &Node) -> bool {
 
 fn push(n: &Node, parent: Option<usize>, hidden: bool, overlay: bool, out: &mut Vec<Flat>) {
     let hidden = hidden || style_hides(n) || n.cls.iter().any(|c| c == "disabled" || c == "invisible");
-    let overlay = overlay || n.cls.iter().any(|c| c == "mfd-dropdown-menu" || c == "mfd-context-menu");
+    let overlay = overlay || n.cls.iter().any(|c| matches!(c.as_str(), "mfd-dropdown-menu" | "mfd-context-menu" | "mfd-fms-fpln-dialog-outer" | "mfd-dialog"));
     let i = out.len();
     out.push(Flat { parent, act: n.attrs.get(ACT).cloned(), hidden, overlay });
     for k in &n.kids {
@@ -90,5 +90,20 @@ mod tests {
         let boxes = [[0., 0., 800., 600.], [0., 40., 200., 300.], [0., 80., 200., 40.], [0., 90., 300., 40.]];
         assert_eq!(hit(&flat, &boxes, 50., 100.).as_deref(), Some("c|item:x_1"));
         assert_eq!(hit(&flat, &boxes, 250., 100.).as_deref(), Some("c|field:FROM"));
+    }
+
+    #[test]
+    fn a_shown_dialog_wins_over_the_page_container_laid_out_after_it() {
+        // Tester log: CLOSE on MESSAGE LIST (#103) lost to the later page container (#150).
+        let mut dlg = Node::el("div", "mfd-fms-fpln-dialog-outer").style("display: block;");
+        let mut close = Node::el("div", "mfd-button");
+        close.attrs.insert(ACT.into(), "c|btn:CLOSE".into());
+        dlg.kids.push(Kid::Node(close));
+        let page = Node::el("div", "mfd-page-container");
+        let mut body = Node::el("body", "");
+        body.kids.push(Kid::Node(dlg));
+        body.kids.push(Kid::Node(page));
+        let boxes = [[0., 0., 768., 1024.], [0., 95., 768., 929.], [0., 909., 97., 37.], [0., 131., 768., 828.]];
+        assert_eq!(hit(&flatten(&body), &boxes, 47., 915.).as_deref(), Some("c|btn:CLOSE"));
     }
 }

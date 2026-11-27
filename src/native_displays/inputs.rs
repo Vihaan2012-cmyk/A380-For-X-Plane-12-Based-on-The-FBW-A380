@@ -325,6 +325,16 @@ pub fn tap_generic_data(key: &str, data: &str) {
     }
 }
 
+/// One bus topic published natively (no JS bus behind it), stored the way `generic_data` stores an `xplane-js.bus` entry.
+pub fn tap_bus(topic: &str, value: &Value) {
+    if active() {
+        match value {
+            Value::String(text) => global_log().set_bus_string(topic, text.clone()),
+            other => global_log().set_bus(topic, other.to_string()),
+        }
+    }
+}
+
 pub fn tap_fetched(url: &str, body: &[u8]) {
     if active() {
         global_log().set_fetched(url, body);

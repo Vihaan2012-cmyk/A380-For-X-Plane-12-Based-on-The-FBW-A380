@@ -1002,7 +1002,8 @@ impl Displays {
             self.renderer = Some(r);
         }
         let Some(Ok(renderer)) = self.renderer.as_mut() else { return };
-        renderer.prefilter_lod = self.view_scale.lod(self.screens[index].def.id);
+        let bias = crate::app_settings::current().display_prefilter_bias as f32;
+        renderer.prefilter_lod = (self.view_scale.lod(self.screens[index].def.id) - bias).max(0.);
         let framebuffer = self.fbo.map_or(0, |d| xplm.get_i(d)) as u32;
         // `glGetIntegerv(GL_VIEWPORT)` (the old `renderer.viewport()` path)
         // is exactly what developer.x-plane.com's "Plugin Guidance for
@@ -1616,6 +1617,9 @@ impl Displays {
         }
         if id == MFD_SCREEN && matches!(kind, Pointer::Move) && crate::native_displays::input::is_native(MFD_SCREEN) {
             crate::mfd_native_host::hover(cx, cy);
+        }
+        if id == MFD_SCREEN && matches!(kind, Pointer::Wheel) && crate::mfd_native_host::wheel(cx, delta) {
+            return true;
         }
         if id == MFD_SCREEN && matches!(kind, Pointer::Down) && crate::mfd_native_host::pointer(cx, cy, &crate::mfd_native_host::cached_var) {
             return true;

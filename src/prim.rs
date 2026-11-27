@@ -1324,7 +1324,10 @@ impl Prims {
         // own ILS receiver's localizer-without-DME range, from receiver 3's
         // DME the same way A32NX_RADIO_RECEIVER_LOC_DISTANCE above does.
         fm.fms_loc_distance = if self.nav.dme_valid { self.nav.dme_nmi } else { 0. };
-        fm.fms_unrealistic_gs_angle_deg = if self.nav.gs_valid { -self.nav.gs_deg } else { 0. };
+        // FBW sends 0 while the G/S is not received (cpp:1660), but its G/S law latches this angle the tick before
+        // G/S capture (A380FgOuterLoops.cpp:3399). X-Plane's G/S turns valid at 10 NM, often already inside capture,
+        // so the law kept 0 (clamped to -1 deg) and stayed high on the beam. The angle is the database's, known regardless.
+        fm.fms_unrealistic_gs_angle_deg = -self.nav.gs_deg;
         fm.lateral_flight_plan_valid = b(n.get(vars, "A32NX_FM_LATERAL_FLIGHTPLAN_AVAIL"));
         fm.nav_capture_condition = b(n.get(vars, "A32NX_FM1_NAV_CAPTURE_CONDITION"));
         fm.phi_c_deg = n.get(vars, "A32NX_FG_PHI_COMMAND");

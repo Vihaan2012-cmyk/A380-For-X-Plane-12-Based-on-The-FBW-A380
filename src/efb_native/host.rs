@@ -226,12 +226,12 @@ pub fn tick(get: &dyn Fn(&str) -> Option<f64>) {
             let vars = super::engine::PB_VARS.iter().filter_map(|n| Some((n.to_string(), Value::from(get(n)?)))).collect();
             h.efb.pb_update(vars);
         }
-        if !h.efb.tick(now) {
-            return;
+        if h.efb.tick(now) {
+            if let Some(html) = h.efb.document() {
+                publish(DOM_TOPIC, Value::String(html.to_string()));
+            }
         }
-        if let Some(html) = h.efb.document() {
-            publish(DOM_TOPIC, Value::String(html.to_string()));
-        }
+        // Every tick: a drag or wheel step moves the scroll without dirtying the page.
         let scroll = h.efb.scroll_json();
         if scroll != h.published_scroll {
             publish(SCROLL_TOPIC, serde_json::from_str(&scroll).unwrap_or(Value::Null));

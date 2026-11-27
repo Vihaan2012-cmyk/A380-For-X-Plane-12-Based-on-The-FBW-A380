@@ -92,15 +92,14 @@ const ARMED: f64 = -0.5;
 const STANDBY_BARO_INDEX: f64 = 3.;
 
 /// MSFS's `LIGHT LANDING` index to X-Plane's landing lights. The converter
-/// numbers X-Plane's landing lights in systems.cfg order, one per light node
-/// of type 5 that is not an ambient effect (lights.rs `lightdefs`,
-/// `lights_obj`); the package's systems.cfg (lines 147-199) gives
-/// LIGHT_ASOBO_TAKEOFF_3 and _TAKEOFF_2 index 1, then LIGHT_ASOBO_LAND_1_LH,
-/// _1_RH, _2_LH, _2_RH index 2.
+/// (lights.rs `lights_obj`) puts systems.cfg's index-2 lights (LIGHT_ASOBO_
+/// LAND_1_LH, _1_RH, _2_LH, _2_RH) on slots 0-3, so X-Plane's
+/// `landing_lights_on` (slot 0) shows the main lights (#66), and the index-1
+/// nose-gear lights (LIGHT_ASOBO_TAKEOFF_3, _TAKEOFF_2) on slots 4-5.
 pub fn landing_lights(index: usize) -> &'static [usize] {
     match index {
-        1 => &[0, 1],
-        2 => &[2, 3, 4, 5],
+        1 => &[4, 5],
+        2 => &[0, 1, 2, 3],
         _ => &[],
     }
 }
