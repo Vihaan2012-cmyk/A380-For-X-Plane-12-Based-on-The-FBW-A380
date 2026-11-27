@@ -1259,6 +1259,7 @@ const SETTINGS_PAGE = [
     { key: 'PAUSE_AT_TOD_DISTANCE', label: 'Pause distance before T/D', desc: 'How far before top of descent to pause.', unit: 'NM', num: [0, 50, 1], show: 'PAUSE_AT_TOD=ENABLED' },
   ]],
   ['Audio', 'Volumes and sound options', [
+    { key: 'xphfbw.soundSource', label: 'Sounds', desc: 'Engines, APU, warnings and clicks. Switches at once. FTSiM+ needs its pack from the installer.', seg: [['FTSIM', 'FTSiM+'], ['FBW', 'FlyByWire']] },
     ...LEVELS.map(([key, label]) => ({ key, label, desc: LEVEL_DESC[key], range: [0, 100, 5], unit: '%' })),
     { key: 'SOUND_ANNOUNCEMENTS_ENABLED', label: 'Cabin announcements', desc: 'Plays cabin announcements.', bool: '1,0' },
     { key: 'SOUND_PTU_AUDIBLE_COCKPIT', label: 'PTU audible in cockpit', desc: 'Lets you hear the PTU from the cockpit.', bool: '1,0' },
@@ -1348,7 +1349,7 @@ const SETTINGS_PAGE = [
 ];
 Object.assign(DEFAULTS, {
   'xphfbw.engineType': 'TRENT900',
-  'xphfbw.operator': 'AUTO', 'xphfbw.nadp': 'STD', 'xphfbw.stdPaxWeightKg': '84', 'xphfbw.stdBagWeightKg': '20', 'xphfbw.copilotSop': true, 'xphfbw.binauralAudio': true, 'xphfbw.copilotMode': false, 'xphfbw.copilotCallouts': true, 'xphfbw.copilotVoice': 'northern', 'xphfbw.copilotGearUp': false, 'xphfbw.copilotAfterLanding': false, 'xphfbw.copilotAfterStart': false, 'xphfbw.atcNetwork': 'VATSIM', 'xphfbw.copilotChecklist': 'challenge', 'xphfbw.copilotAutoChecklists': false, 'xphfbw.autofillChecklists': true,
+  'xphfbw.operator': 'AUTO', 'xphfbw.nadp': 'STD', 'xphfbw.stdPaxWeightKg': '84', 'xphfbw.stdBagWeightKg': '20', 'xphfbw.copilotSop': true, 'xphfbw.binauralAudio': true, 'xphfbw.soundSource': 'FTSIM', 'xphfbw.copilotMode': false, 'xphfbw.copilotCallouts': true, 'xphfbw.copilotVoice': 'northern', 'xphfbw.copilotGearUp': false, 'xphfbw.copilotAfterLanding': false, 'xphfbw.copilotAfterStart': false, 'xphfbw.atcNetwork': 'VATSIM', 'xphfbw.copilotChecklist': 'challenge', 'xphfbw.copilotAutoChecklists': false, 'xphfbw.autofillChecklists': true,
   'xphfbw.ilsSource': 'NAVDATA', 'xphfbw.registration': '', 'xphfbw.msn': '', 'xphfbw.selcal': '', 'xphfbw.failureSeverity': 'ALL', 'xphfbw.baroLink': 'INDEPENDENT', 'xphfbw.encoderAccel': false,
   'xphfbw.deratesEnabled': true, 'xphfbw.takeoffDerates': '4,8,12,16,20', 'xphfbw.climbDerates': '3,6,9,12,15',
   'xphfbw.hoppieLogon': '', 'xphfbw.vatsimToken': '', 'xphfbw.ivaoToken': '', 'xphfbw.sayIntentionsKey': '',
