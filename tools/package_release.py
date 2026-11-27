@@ -58,6 +58,18 @@ FCU_FONT_URL = (
     "fbw-a380x/src/base/flybywire-aircraft-a380-842/html_ui/Fonts/fbw-a380x/A380X_FCU.ttf"
 )
 FCU_FONT_SHA256 = "fab287f184145206289a04085758e1a6f19c8330b89649ba7fc59f072c049490"
+FBW_SOUND_DIR = "plugins/fbw_a380_systems/sound"
+FBW_SOUND_URL = (
+    "https://raw.githubusercontent.com/flybywiresim/aircraft-large-files/01847d956061b90ec13fe99c6668a7d377708bf5/"
+    "fbw-a380x/src/base/flybywire-aircraft-a380-842/SimObjects/AirPlanes/FlyByWire_A380X/common/sound/"
+)
+FBW_SOUNDS = {
+    "FBW_A320_NEO_1.PC.PCK": "30d8ef9e80f89476d7541b186cde47e054493ee01090a04bb47e1f516e944060",
+    "FBW_A320_NEO_2.PC.PCK": "ece812d8588cc1e02a681aff1f2c361d4eb991088b78abc50e073fbd80486c8f",
+    "FBW_A320_NEO_3.PC.pck": "7b9b527ec390189deb5577f7b519b4e0d30173cba9ae84c32b9589d463286a6f",
+}
+# FlyByWire's own Wwise packages (aurals, callouts, clicks, APU, packs), fetched from their aircraft-large-files repo.
+FBW_SOUND_STEPS = [{"kind": "download", "url": FBW_SOUND_URL + name, "sha256": h, "to": f"{FBW_SOUND_DIR}/{name}"} for name, h in FBW_SOUNDS.items()]
 SASL_URL = "https://1-sim.com/files/SASL-v3.23.3.zip"
 SASL_SHA256 = "f48d71adde3244e091c561ac6f9892b1dead3d98508d779ffb538224a50cceec"
 SOUND_PACK_URL = "https://mega.nz/file/a4IUHByK#0a5HymbXbkhJYQfphs9SYyTBduyRgXJI36C3UiRtlJQ"
@@ -68,6 +80,7 @@ FROM_XPLANE = [
     {"kind": "from_xplane", "from": f"{LAMINAR_A330}/airfoils", "files": AIRFOILS, "to": "airfoils"},
     *[{"kind": "build_acf", "template": f"{LAMINAR_A330}/A330.acf", "patch": acf + "patch", "to": acf} for acf in SHIPPED_ACFS],
     {"kind": "download", "url": FCU_FONT_URL, "sha256": FCU_FONT_SHA256, "to": FCU_FONT},
+    *FBW_SOUND_STEPS,
 ]
 INSTALL = {
     "aircraft": AIRCRAFT_IN_XPLANE,
@@ -108,6 +121,7 @@ LAMINAR_747 = "Aircraft/Laminar Research/Boeing B747-400/747-400.acf"
 FROM_XPLANE11 = [
     *[{"kind": "build_acf", "template": LAMINAR_747, "patch": acf + "patch", "to": acf} for acf in SHIPPED_ACFS],
     {"kind": "download", "url": FCU_FONT_URL, "sha256": FCU_FONT_SHA256, "to": FCU_FONT},
+    *FBW_SOUND_STEPS,
 ]
 INSTALL11 = {
     "aircraft": AIRCRAFT_IN_XPLANE11,
@@ -153,6 +167,9 @@ def tool(name: str):
 def generated(aircraft: Path, sound_pack: Path, work: Path, xp12_root: Path | None = None) -> tuple[dict[str, bytes], dict]:
     if sha256(aircraft / FCU_FONT) != FCU_FONT_SHA256:
         raise SystemExit(f"{FCU_FONT} no longer matches FlyByWire's copy at {FCU_FONT_URL}; update the URL and hash")
+    for name, h in FBW_SOUNDS.items():
+        if (aircraft / FBW_SOUND_DIR / name).exists() and sha256(aircraft / FBW_SOUND_DIR / name) != h:
+            raise SystemExit(f"{FBW_SOUND_DIR}/{name} no longer matches FlyByWire's copy at {FBW_SOUND_URL}; update the URL and hashes")
     acf_patch, spr, text_patch = tool("acf_patch"), tool("sound_pack_release"), tool("text_patch")
     if xp12_root:
         template, second = aircraft.parent.parent / LAMINAR_747, None

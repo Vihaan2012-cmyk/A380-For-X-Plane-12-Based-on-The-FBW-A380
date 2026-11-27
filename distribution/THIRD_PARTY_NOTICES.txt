@@ -16,6 +16,11 @@ supported by FlyByWire Simulations, Microsoft, Laminar Research or Airbus.
      Changes made for this port: the models are converted from MSFS glTF to
      X-Plane OBJ8, textures are re-encoded and resized, and animations, click
      spots and lighting are rebuilt for X-Plane.
+   - FlyByWire's sound packages (plugins/fbw_a380_systems/sound/*.PCK: aural
+     alerts, callouts, cockpit clicks, APU and systems sounds) are not in this
+     release: the installer downloads them, unchanged and hash-checked, from
+     FlyByWire's https://github.com/flybywiresim/aircraft-large-files, under
+     that repository's license.
 
 2. Microsoft Flight Simulator
    FlyByWire's A380X is an add-on for Microsoft Flight Simulator. This port
