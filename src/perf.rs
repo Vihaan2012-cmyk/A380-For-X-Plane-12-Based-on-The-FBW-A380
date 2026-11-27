@@ -46,10 +46,12 @@ struct SimFrames {
     worst_s: f64,
     frames: u32,
     cpu: Option<(Instant, Vec<u64>)>,
+    /// XPHFBW's processes at the last report: pid, Chromium process type, CPU time.
+    chromium: Vec<(u32, String, u64)>,
 }
 
 thread_local! {
-    static SIM: RefCell<SimFrames> = const { RefCell::new(SimFrames { refs: None, frame_s: 0., gpu_s: 0., worst_s: 0., frames: 0, cpu: None }) };
+    static SIM: RefCell<SimFrames> = const { RefCell::new(SimFrames { refs: None, frame_s: 0., gpu_s: 0., worst_s: 0., frames: 0, cpu: None, chromium: Vec::new() }) };
 }
 
 /// Samples X-Plane's frame and GPU time once per frame, for the report.
@@ -88,6 +90,7 @@ fn sim_report() -> String {
         {
             let now = Instant::now();
             let cpu: Vec<u64> = crate::diag::process_stats(&CPU_PROCESSES).iter().map(|t| t.2).collect();
+            let chromium = crate::diag::chromium_process_times("XPHFBW.exe");
             if let Some((then, before)) = &s.cpu {
                 let wall = now.duration_since(*then).as_secs_f64().max(1e-3);
                 let parts: Vec<String> = CPU_PROCESSES
@@ -96,8 +99,13 @@ fn sim_report() -> String {
                     .map(|(name, (a, b))| format!("{} {:.0}% of a core", name.trim_end_matches(".exe"), a.saturating_sub(*b) as f64 / 1e7 / wall * 100.))
                     .collect();
                 out.push_str(&format!(", CPU {}", parts.join(", ")));
+                let split = chromium_split(&s.chromium, &chromium, wall);
+                if !split.is_empty() {
+                    out.push_str(&format!(" (XPHFBW by process: {split})"));
+                }
             }
             s.cpu = Some((now, cpu));
+            s.chromium = chromium;
         }
         s.frame_s = 0.;
         s.gpu_s = 0.;
@@ -105,6 +113,28 @@ fn sim_report() -> String {
         s.frames = 0;
         out
     })
+}
+
+/// Each Chromium process type's share of a core since the last report, busiest first: "gpu-process 120%, renderer x24 180%".
+fn chromium_split(before: &[(u32, String, u64)], now: &[(u32, String, u64)], wall_s: f64) -> String {
+    let mut kinds: Vec<(String, u32, u64)> = Vec::new();
+    for (pid, kind, cpu) in now {
+        let was = before.iter().find(|b| b.0 == *pid).map_or(0, |b| b.2);
+        let used = cpu.saturating_sub(was);
+        match kinds.iter_mut().find(|k| k.0 == *kind) {
+            Some(k) => {
+                k.1 += 1;
+                k.2 += used;
+            }
+            None => kinds.push((kind.clone(), 1, used)),
+        }
+    }
+    kinds.sort_by(|a, b| b.2.cmp(&a.2));
+    kinds
+        .iter()
+        .map(|(kind, n, used)| format!("{kind}{} {:.0}%", if *n > 1 { format!(" x{n}") } else { String::new() }, *used as f64 / 1e7 / wall_s * 100.))
+        .collect::<Vec<_>>()
+        .join(", ")
 }
 
 fn add(totals: &mut Vec<(&'static str, Duration)>, label: &'static str, d: Duration) {
@@ -172,4 +202,16 @@ pub fn time<R>(label: &'static str, f: impl FnOnce() -> R) -> R {
     crate::diag::DRAW_NS.fetch_add(d.as_nanos() as u64, std::sync::atomic::Ordering::Relaxed);
     LAPS.with(|l| add(&mut l.borrow_mut().totals, label, d));
     r
+}
+
+#[cfg(test)]
+mod chromium_split_tests {
+    use super::chromium_split;
+
+    #[test]
+    fn processes_are_summed_by_type_busiest_first_and_a_new_process_counts_from_zero() {
+        let before = vec![(1, "main".to_string(), 0), (2, "gpu-process".to_string(), 0), (3, "renderer".to_string(), 10_000_000)];
+        let now = vec![(1, "main".to_string(), 5_000_000), (2, "gpu-process".to_string(), 30_000_000), (3, "renderer".to_string(), 20_000_000), (4, "renderer".to_string(), 10_000_000)];
+        assert_eq!(chromium_split(&before, &now, 1.0), "gpu-process 300%, renderer x2 200%, main 50%");
+    }
 }

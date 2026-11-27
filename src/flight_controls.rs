@@ -608,6 +608,9 @@ struct Refs {
     /// deprecated CG shift, to tell a balance problem from a frame offset.
     gear_z_nodef: Option<DataRef>,
     cgz_ref_to_default: Option<DataRef>,
+    rho: Option<DataRef>,
+    tas: Option<DataRef>,
+    roll_plug: Option<DataRef>,
 }
 
 pub struct FlightControls {
@@ -688,6 +691,9 @@ impl FlightControls {
             trim_travel_up: xplm.find("sim/aircraft/controls/acf_hstb_trim_up"),
             trim_travel_down: xplm.find("sim/aircraft/controls/acf_hstb_trim_dn"),
             stabilizer: xplm.find("sim/flightmodel2/controls/stabilizer_deflection_degrees"),
+            rho: xplm.find("sim/weather/rho"),
+            tas: xplm.find("sim/flightmodel/position/true_airspeed"),
+            roll_plug: xplm.find("sim/flightmodel/forces/L_plug_acf"),
             tire_force: xplm.find("sim/flightmodel2/gear/tire_vertical_force_n_mtr"),
             pitch_moment: xplm.find("sim/flightmodel/forces/M_total"),
             pitch_moment_aero: xplm.find("sim/flightmodel/forces/M_aero"),
@@ -891,6 +897,12 @@ impl FlightControls {
             }
         }
         set_both(r.rudder1, r.aero_rudder1, VSTAB, s.rudder_deg);
+        if let (Some(rho), Some(tas), Some(plug)) = (r.rho, r.tas, r.roll_plug) {
+            let tas = xplm.get_f(tas) as f64;
+            let q = 0.5 * xplm.get_f(rho) as f64 * tas * tas;
+            let extra = crate::roll_power::extra_moment_nm(q, crate::roll_power::mean_differential_deg(&s.ailerons_deg, &XP_AILERON_SPANS_FT));
+            xplm.set_f(plug, (xplm.get_f(plug) as f64 + extra) as f32);
+        }
 
         let travel = |d: Option<DataRef>| match d.map(|d| xplm.get_f(d) as f64) {
             Some(t) if t > 0. => t,

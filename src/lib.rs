@@ -114,6 +114,7 @@ mod cockpit_levers;
 pub mod xp;
 // [slot modules: flight_controls] X-Plane's surfaces follow FlyByWire's actuators.
 mod control_response;
+mod roll_power;
 mod flight_controls;
 mod handling;
 // [slot modules: sensors] X-Plane's state for the simulator variables the systems read.

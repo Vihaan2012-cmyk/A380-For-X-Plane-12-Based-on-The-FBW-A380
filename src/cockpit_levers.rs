@@ -11,6 +11,8 @@ use crate::Vars;
 const STICK_X: &str = "fbw/cockpit/yoke_lever_stick1_l_r";
 const STICK_Y: &str = "fbw/cockpit/yoke_lever_stick_fore1_aft";
 const SPEEDBRAKE: &str = "fbw/cockpit/lever_speed_brake";
+/// The F/O's sidestick: X-Plane has one joystick, the captain's, and the real sticks are not coupled.
+const FO_STICK: [&str; 2] = ["fbw/cockpit/yoke_lever_stick2_l_r", "fbw/cockpit/yoke_lever_stick_fore2_aft"];
 
 pub fn sidestick_fraction(position: f64) -> f64 {
     ((position + 1.) / 2.).clamp(0., 1.)
@@ -40,6 +42,7 @@ pub struct CockpitLevers {
     sticks: [Cockpit; 2],
     speedbrake: Cockpit,
     xplane_speedbrake: Option<DataRef>,
+    fo_stick: [Option<DataRef>; 2],
     ticks: u32,
 }
 
@@ -53,6 +56,7 @@ impl CockpitLevers {
             sticks: [Cockpit::new(STICK_X), Cockpit::new(STICK_Y)],
             speedbrake: Cockpit::new(SPEEDBRAKE),
             xplane_speedbrake: xplm.find("sim/cockpit2/controls/speedbrake_ratio"),
+            fo_stick: [None; 2],
             ticks: 0,
         }
     }
@@ -64,6 +68,16 @@ impl CockpitLevers {
         for (lever, position) in self.sticks.iter_mut().zip(stick) {
             if look || lever.dataref.is_some() {
                 lever.write(xplm, sidestick_fraction(position) as f32);
+            }
+        }
+        for (d, name) in self.fo_stick.iter_mut().zip(FO_STICK) {
+            if d.is_none() && look {
+                *d = xplm.find(name);
+            }
+            if let Some(d) = *d {
+                if xplm.get_f(d) != 0.5 {
+                    xplm.set_f(d, 0.5);
+                }
             }
         }
         if !(look || self.speedbrake.dataref.is_some()) {

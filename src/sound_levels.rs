@@ -1,5 +1,6 @@
 use std::ffi::c_void;
 use std::sync::atomic::{AtomicU32, Ordering};
+use std::sync::OnceLock;
 
 use systems::simulation::{SimulatorReaderWriter, VariableIdentifier, VariableRegistry};
 
@@ -108,6 +109,23 @@ type SetProperty = unsafe extern "C" fn(*mut c_void, i32, f32) -> i32;
 type GetBus = unsafe extern "C" fn(i32) -> *mut c_void;
 type GroupGetVolume = unsafe extern "C" fn(*mut c_void, *mut f32) -> i32;
 type GroupSetVolume = unsafe extern "C" fn(*mut c_void, f32) -> i32;
+type EventCallback = unsafe extern "C" fn(u32, *mut c_void, *mut c_void) -> i32;
+type SetCallback = unsafe extern "C" fn(*mut c_void, Option<EventCallback>, u32) -> i32;
+
+/// FMOD_STUDIO_EVENT_CALLBACK_CREATED (fmod_studio_common.h).
+const CALLBACK_CREATED: u32 = 0x0000_0001;
+
+static SET_VOLUME: OnceLock<SetVolume> = OnceLock::new();
+
+/// A pack event created while FlyByWire's sounds are chosen starts silent, before FMOD mixes a frame of it.
+unsafe extern "C" fn silent_on_create(kind: u32, instance: *mut c_void, _: *mut c_void) -> i32 {
+    if kind & CALLBACK_CREATED != 0 {
+        if let Some(set) = SET_VOLUME.get() {
+            unsafe { set(instance, 0.) };
+        }
+    }
+    0
+}
 
 #[cfg(windows)]
 extern "system" {
@@ -121,6 +139,7 @@ struct Fmod {
     instances: GetInstanceList,
     set_volume: SetVolume,
     set_property: Option<SetProperty>,
+    set_callback: Option<SetCallback>,
     buses: Option<(GetBus, GroupGetVolume, GroupSetVolume)>,
 }
 
@@ -144,6 +163,7 @@ impl Fmod {
                 instances: std::mem::transmute::<*mut c_void, GetInstanceList>(f("FMOD_Studio_EventDescription_GetInstanceList")?),
                 set_volume: std::mem::transmute::<*mut c_void, SetVolume>(f("FMOD_Studio_EventInstance_SetVolume")?),
                 set_property: f("FMOD_Studio_EventInstance_SetProperty").map(|p| std::mem::transmute::<*mut c_void, SetProperty>(p)),
+                set_callback: f("FMOD_Studio_EventDescription_SetCallback").map(|p| std::mem::transmute::<*mut c_void, SetCallback>(p)),
                 buses: Self::buses(|n| {
                     let name: Vec<u16> = "fmod.dll\0".encode_utf16().collect();
                     let core = GetModuleHandleW(name.as_ptr());
@@ -176,6 +196,7 @@ impl Fmod {
                 instances: std::mem::transmute::<*mut c_void, GetInstanceList>(f(c"FMOD_Studio_EventDescription_GetInstanceList")?),
                 set_volume: std::mem::transmute::<*mut c_void, SetVolume>(f(c"FMOD_Studio_EventInstance_SetVolume")?),
                 set_property: f(c"FMOD_Studio_EventInstance_SetProperty").map(|p| std::mem::transmute::<*mut c_void, SetProperty>(p)),
+                set_callback: f(c"FMOD_Studio_EventDescription_SetCallback").map(|p| std::mem::transmute::<*mut c_void, SetCallback>(p)),
                 buses: Self::buses(|n| {
                     let name = std::ffi::CString::new(n).ok()?;
                     let p = crate::xp::library_symbol("fmod", &name);
@@ -191,6 +212,12 @@ struct Description {
     group: Group,
     role: Option<Role>,
     gain: f32,
+    silent: bool,
+}
+
+/// Whether the pack's event is silenced for FlyByWire's sounds: all but a GP7200's engines.
+fn silenced(role: Option<Role>) -> bool {
+    !crate::sound_pack::pack_plays(role.is_some_and(|r| r.kind != sound_mix::Kind::Apu))
 }
 
 /// One of X-Plane's buses a cabin view turns down: its level as found and as last set.
@@ -312,7 +339,7 @@ impl SoundLevels {
             for (guid, group, role) in &self.events {
                 let mut d = std::ptr::null_mut();
                 if unsafe { (fmod.by_id)(system, guid, &mut d) } == 0 && !d.is_null() {
-                    self.descriptions.push(Description { ptr: d, group: *group, role: *role, gain: 1. });
+                    self.descriptions.push(Description { ptr: d, group: *group, role: *role, gain: 1., silent: false });
                 }
             }
             if self.descriptions.is_empty() {
@@ -333,13 +360,22 @@ impl SoundLevels {
             self.since_s = 0.;
         }
         let mut list = [std::ptr::null_mut(); 32];
+        let _ = SET_VOLUME.set(fmod.set_volume);
         for d in &mut self.descriptions {
+            let silent = silenced(d.role);
+            let switched = silent != d.silent;
+            if switched {
+                d.silent = silent;
+                if let Some(set) = fmod.set_callback {
+                    unsafe { set(d.ptr, silent.then_some(silent_on_create as EventCallback), if silent { CALLBACK_CREATED } else { 0 }) };
+                }
+            }
             let moved = d.role.is_some_and(|r| {
                 let before = d.gain;
                 d.gain += (self.mix.target(r, &inputs) - d.gain) * smooth;
                 (d.gain - before).abs() > 0.001
             });
-            if !all && !moved {
+            if !all && !moved && !switched {
                 continue;
             }
             let g = GROUPS.iter().position(|x| *x == d.group).unwrap_or(0);
@@ -348,7 +384,7 @@ impl SoundLevels {
                 continue;
             }
             for &instance in &list[..n.clamp(0, list.len() as i32) as usize] {
-                unsafe { (fmod.set_volume)(instance, wanted[g] * d.gain) };
+                unsafe { (fmod.set_volume)(instance, if d.silent { 0. } else { wanted[g] * d.gain }) };
                 if let (true, Some(set), Some((min, max))) = (all, fmod.set_property, RANGE[g]) {
                     unsafe {
                         set(instance, PROPERTY_MINIMUM_DISTANCE, min);
@@ -364,6 +400,11 @@ impl SoundLevels {
         FBW_GAIN.store(1.0f32.to_bits(), Ordering::Relaxed);
         self.restore_buses();
         self.mix = Mix::default();
+        if let Some(set) = self.fmod.as_ref().and_then(|f| f.set_callback) {
+            for d in self.descriptions.iter().filter(|d| d.silent) {
+                unsafe { set(d.ptr, None, 0) };
+            }
+        }
         self.descriptions.clear();
         self.resolved = false;
     }

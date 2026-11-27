@@ -1017,3 +1017,49 @@ mod tests {
         }
     }
 }
+
+#[cfg(test)]
+mod apu_start {
+    use super::*;
+
+    /// Batteries, MASTER and START on a fuelled cold aircraft: the generators take load near 95 % N, which used to hold the APU there with AVAIL never lit.
+    #[test]
+    fn a_battery_apu_start_reaches_avail_with_the_generators_on() {
+        use crate::aspects::test_vars::TestVars;
+        use a380_systems::A380;
+        use systems::simulation::Simulation;
+        let mut vars = TestVars::default();
+        vars.set("TOTAL WEIGHT", 750_000.0);
+        vars.set("AMBIENT PRESSURE", 29.92);
+        vars.set("AMBIENT TEMPERATURE", 15.0);
+        vars.set("SIM ON GROUND", 1.0);
+        for k in 1..=11 {
+            vars.set(&format!("A32NX_FUEL_TANK_QUANTITY_{k}"), 1500.0);
+        }
+        let mut sim = Simulation::new(StartState::Apron, A380::new, &mut vars);
+        let mut aspects = crate::aspects::a380(&mut vars);
+        let dt_s = 0.033;
+        let t = std::cell::Cell::new(0.0);
+        let mut run = |vars: &mut TestVars, seconds: f64| {
+            let end = t.get() + seconds;
+            while t.get() < end && vars.value("A32NX_OVHD_APU_START_PB_IS_AVAILABLE") == 0. {
+                aspects.pre_tick(vars, dt_s);
+                sim.tick(std::time::Duration::from_secs_f64(dt_s), t.get(), vars);
+                aspects.post_tick(vars);
+                t.set(t.get() + dt_s);
+            }
+        };
+        for bat in ["BAT_1", "BAT_2", "BAT_ESS", "BAT_APU"] {
+            vars.set(&format!("A32NX_OVHD_ELEC_{bat}_PB_IS_AUTO"), 1.);
+        }
+        vars.set("A32NX_OVHD_APU_MASTER_SW_PB_IS_ON", 1.);
+        run(&mut vars, 5.0);
+        vars.set("A32NX_OVHD_APU_START_PB_IS_ON", 1.);
+        let started = t.get();
+        run(&mut vars, 120.0);
+        let took = t.get() - started;
+        assert_eq!(vars.value("A32NX_OVHD_APU_START_PB_IS_AVAILABLE"), 1., "no AVAIL {took:.0} s after START, N {:.1}", vars.value("A32NX_APU_N_RAW"));
+        assert!(took < 75., "AVAIL took {took:.0} s");
+        eprintln!("APU AVAIL {took:.0} s after START");
+    }
+}

@@ -112,7 +112,7 @@ pub fn set_copilot_voice(voice: &str) {
 /// the main thread. Safe to call from the instruments' worker thread once the
 /// lead moves them off the main one.
 pub fn play_instrument_sound(name: &str) {
-    if crate::sound_pack::installed() {
+    if crate::sound_pack::installed() && !crate::sound_pack::fbw_mode() {
         crate::sound_pack::request(name);
         if crate::sound_pack::replaces(name) {
             return;
@@ -603,10 +603,7 @@ impl Sound {
             crate::log("sound: no sound packages in the plugin's sound folder; cockpit sounds are off");
         }
         let seed = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_nanos() as u64).unwrap_or(0x9E37_79B9);
-        let mut anim_triggers = load_anim_triggers();
-        if crate::sound_pack::installed() {
-            anim_triggers.retain(|t| !crate::sound_pack::replaces(&t.event));
-        }
+        let anim_triggers = load_anim_triggers();
         crate::log(&format!("sound: {} cockpit click/switch sound triggers (sound_triggers.txt)", anim_triggers.len()));
         let anim_trigger_states = anim_triggers::fresh_states(&anim_triggers);
         let click_datarefs = ClickDatarefs::new(&anim_triggers);
@@ -627,6 +624,7 @@ impl Sound {
     /// sound still waiting on its decode. Main thread only: this is the only
     /// place that calls XPLM's audio functions.
     pub fn update(&mut self, vars: &mut Vars) {
+        crate::sound_pack::refresh_source();
         self.view.follow(vars);
         self.poll_load();
         if let Some(voice) = COPILOT_VOICE.lock().ok().and_then(|mut v| v.take()) {
@@ -709,6 +707,7 @@ impl Sound {
         }
         self.inputs = Some(inputs);
         self.door_ids = (0..18).map(|i| vars.get(format!("INTERACTIVE POINT OPEN:{i}"))).collect();
+        engine_sound &= !crate::sound_pack::installed();
         let fans = !crate::sound_pack::installed() && state.package.resolve_event(wwise::msfs_event_id(&state.main_package, "AEVC380")).is_some();
         if engine_sound {
             self.mute_xplane("sim/operation/sound/engine_volume_ratio", vars);
@@ -867,11 +866,6 @@ impl Sound {
     /// Builds playback state from what the loader (or, in a test, a direct
     /// read of the real package) found, and starts the decode worker.
     fn install(&mut self, mut loaded: Loaded) {
-        if crate::sound_pack::installed() {
-            let before = loaded.sound_xml.triggers.len();
-            loaded.sound_xml.triggers.retain(|t| !crate::sound_pack::replaces(&t.event));
-            crate::log(&format!("sound: {} sound.xml triggers left to the FMOD sound pack", before - loaded.sound_xml.triggers.len()));
-        }
         let cache = Arc::new(Mutex::new(PcmCache::default()));
         let decode_pending = Arc::new(Mutex::new(HashSet::new()));
         let decode_errors = Arc::new(Mutex::new(HashMap::new()));
@@ -925,7 +919,8 @@ impl Sound {
             // Every <Requires> gate on this entry (sound.xml, 30 entries in
             // the package use one) must also hold for MSFS to consider it
             // inside; with none, this is vacuously true.
-            let requires_hold = state.sound_xml.triggers[i].requires.iter().all(|r| r.holds(read_named(vars, &r.variable)));
+            let to_pack = crate::sound_pack::installed() && crate::sound_pack::replaces(&state.sound_xml.triggers[i].event);
+            let requires_hold = !to_pack && state.sound_xml.triggers[i].requires.iter().all(|r| r.holds(read_named(vars, &r.variable)));
             let action = state.trigger_states[i].step(&state.sound_xml.triggers[i], value, requires_hold);
             if action != Action::None {
                 actions.push((i, action, state.sound_xml.triggers[i].event.clone(), state.sound_xml.triggers[i].outside));
@@ -990,7 +985,8 @@ impl Sound {
     /// the same "must not fire on the first reading" rule `step` already
     /// documents for cold spawn — instead of a falsely-consumed crossing.
     fn evaluate_animation_triggers(&mut self, vars: &mut Vars) {
-        let pack = crate::sound_pack::installed();
+        let installed = crate::sound_pack::installed();
+        let pack = installed && !crate::sound_pack::fbw_mode();
         if self.state.is_none() && !pack {
             return;
         }
@@ -1007,6 +1003,9 @@ impl Sound {
             fired.clear();
         }
         for (event, dataref) in fired {
+            if installed && crate::sound_pack::replaces(&event) {
+                continue;
+            }
             *self.fired.entry(format!("{event} <- {dataref}")).or_insert(0) += 1;
             if pack && crate::sound_pack::click_sound(click_fallback(&event).unwrap_or(&event)).is_some() {
                 crate::sound_pack::request(click_fallback(&event).unwrap_or(&event));

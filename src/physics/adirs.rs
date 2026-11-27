@@ -433,6 +433,8 @@ pub struct TrueState {
     /// docs/physics/ice-protection.md for the caveat and what would
     /// replace it.
     pub lwc_gm3: f64,
+    /// X-Plane's time or ground-speed acceleration is on: the aircraft moves faster than its own velocity says.
+    pub time_compressed: bool,
 }
 
 /// The standard aerospace body-to-NED direction cosine matrix (Z-Y-X Euler:
@@ -1112,7 +1114,7 @@ impl Adiru {
             self.mechanize(dt, t, truth_rates);
             let north_m = (t.lat_deg.to_radians() - self.lat_rad) * EARTH_RADIUS_M;
             let east_m = wrap_pi(t.lon_deg.to_radians() - self.lon_rad) * EARTH_RADIUS_M * self.lat_rad.cos();
-            if north_m.hypot(east_m) > RELOCATION_RESEED_M {
+            if north_m.hypot(east_m) > RELOCATION_RESEED_M || t.time_compressed {
                 if !t.on_ground {
                     self.pitch_deg = t.theta_xp;
                     self.roll_deg = t.phi_xp;
@@ -1903,6 +1905,8 @@ struct TrueStateSource {
     local_vx: Option<crate::xp::DataRef>,
     local_vy: Option<crate::xp::DataRef>,
     local_vz: Option<crate::xp::DataRef>,
+    sim_speed: Option<crate::xp::DataRef>,
+    ground_speed_mult: Option<crate::xp::DataRef>,
     last_local_v: Option<[f64; 3]>,
     accel_local_ms2: [f64; 3],
     /// The last position fix (lat/lon/alt, and north/east velocity) that
@@ -1948,6 +1952,8 @@ impl TrueStateSource {
             local_vx: xplm.find("sim/flightmodel/position/local_vx"),
             local_vy: xplm.find("sim/flightmodel/position/local_vy"),
             local_vz: xplm.find("sim/flightmodel/position/local_vz"),
+            sim_speed: xplm.find("sim/time/sim_speed"),
+            ground_speed_mult: xplm.find("sim/time/ground_speed"),
             last_local_v: None,
             accel_local_ms2: [0.; 3],
             p: xplm.find("sim/flightmodel/position/P"),
@@ -2081,6 +2087,7 @@ impl TrueStateSource {
                 running.iter().any(|&r| r != 0)
             }),
             lwc_gm3: f(self.precip_on_aircraft_ratio) * REFERENCE_LWC_GM3,
+            time_compressed: [self.sim_speed, self.ground_speed_mult].iter().any(|d| d.is_some_and(|d| xplm.get_i(d) > 1)),
         }
     }
 }
@@ -2233,6 +2240,7 @@ mod tests {
             v_east_ms: 0.,
             any_engine_running: false,
             lwc_gm3: 0.,
+            time_compressed: false,
         }
     }
 
@@ -2518,6 +2526,36 @@ mod tests {
             let flown_nm = (t.lat_deg - start) * 60.0;
             let ir_nm = (a.lat_rad.to_degrees() - start) * 60.0;
             assert!((ir_nm - flown_nm).abs() < 2.0, "gps {gps}: flew {flown_nm:.1} nm, the IR moved {ir_nm:.1} nm");
+        }
+    }
+
+    /// X-Plane's ground-speed multiplier moves the aircraft four times its own velocity: the IR follows where it is, not where its velocity says.
+    #[test]
+    fn under_time_acceleration_the_ir_position_is_where_the_aircraft_is() {
+        let _g = crate::failures::tests::serial();
+        for compressed in [false, true] {
+            let mut a = Adiru::new_for_test(1);
+            let mut t = stationary_level_state(45.0);
+            let dt = 0.05;
+            for _ in 0..(60.0 / dt) as u64 {
+                a.update_for_test(dt, &t, 2.0, true);
+            }
+            t.on_ground = false;
+            t.alt_m = 10_000.;
+            t.v_north_ms = 250.0;
+            t.time_compressed = compressed;
+            let start = t.lat_deg;
+            for _ in 0..(120.0 / dt) as u64 {
+                t.lat_deg += 4.0 * 250.0 * dt / EARTH_RADIUS_M * 180.0 / PI;
+                a.update_for_test(dt, &t, 2.0, true);
+            }
+            let lag_nm = (t.lat_deg - a.lat_rad.to_degrees()) * 60.0;
+            let flown_nm = (t.lat_deg - start) * 60.0;
+            if compressed {
+                assert!(lag_nm.abs() < 0.05, "IR {lag_nm:.2} nm behind after {flown_nm:.0} nm at 4x");
+            } else {
+                assert!(lag_nm > 1.0, "without the flag a 4x move should leave the IR behind ({lag_nm:.2} nm)");
+            }
         }
     }
 

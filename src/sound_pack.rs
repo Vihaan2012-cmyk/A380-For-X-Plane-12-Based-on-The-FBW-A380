@@ -1,4 +1,5 @@
 use std::path::Path;
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Mutex, OnceLock};
 
 use systems::simulation::{SimulatorReaderWriter, VariableIdentifier, VariableRegistry};
@@ -177,8 +178,46 @@ fn has_sound_file(dir: &Path) -> bool {
         .unwrap_or(false)
 }
 
+static FBW_SOUNDS: AtomicBool = AtomicBool::new(false);
+static GP: AtomicBool = AtomicBool::new(false);
+static SEEN_GENERATION: AtomicU64 = AtomicU64::new(u64::MAX);
+
+/// Picks up the EFB's sound choice and engine type when the settings change; once a tick.
+pub fn refresh_source() {
+    let generation = crate::app_settings::generation();
+    if SEEN_GENERATION.swap(generation, Ordering::Relaxed) == generation {
+        return;
+    }
+    let s = crate::app_settings::current();
+    GP.store(crate::aircraft_options::engine_rating().gp, Ordering::Relaxed);
+    if FBW_SOUNDS.swap(s.fbw_sounds, Ordering::Relaxed) != s.fbw_sounds && installed() {
+        crate::log(&format!("sound pack: sounds now {}", if s.fbw_sounds { "FlyByWire's" } else { "FTSiM+'s" }));
+    }
+}
+
+/// FlyByWire's sounds chosen over an installed FTSiM+ pack.
+pub fn fbw_mode() -> bool {
+    installed() && FBW_SOUNDS.load(Ordering::Relaxed)
+}
+
+/// Whether the pack still plays a sound of this kind: with FlyByWire's chosen, only a GP7200's engines.
+pub fn pack_plays(engine: bool) -> bool {
+    plays(engine, fbw_mode(), GP.load(Ordering::Relaxed))
+}
+
+fn plays(engine: bool, fbw: bool, gp: bool) -> bool {
+    !fbw || (engine && gp)
+}
+
 pub fn replaces(event: &str) -> bool {
-    if crate::aircraft_options::engine_rating().gp && gp_set_lacks(event) {
+    replaced(event, fbw_mode(), GP.load(Ordering::Relaxed))
+}
+
+fn replaced(event: &str, fbw: bool, gp: bool) -> bool {
+    if fbw {
+        return gp && event.starts_with("Engine_");
+    }
+    if gp && gp_set_lacks(event) {
         return false;
     }
     event.starts_with("Engine_") || REPLACED.contains(&event)
@@ -1178,6 +1217,16 @@ impl SoundPack {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn flybywires_sounds_take_everything_back_but_a_gp7200s_engines() {
+        assert!(replaced("Engine_1_Front", false, false) && replaced("apurun", false, false) && replaced("mastercaution", false, false));
+        assert!(!replaced("TCAS_sys_test_OK", false, false), "the pack has no TCAS");
+        assert!(!replaced("Engine_1_Front", true, false) && !replaced("apurun", true, false) && !replaced("mastercaution", true, true));
+        assert!(replaced("Engine_2_Rear", true, true), "a GP7200 keeps the pack's engines");
+        assert!(plays(false, false, false) && plays(true, false, true));
+        assert!(!plays(false, true, true) && !plays(true, true, false) && plays(true, true, true));
+    }
     #[test]
     fn gear_doors_report_the_start_of_opening_and_closing() {
         assert_eq!(door_transition(0., 8.), (true, false));

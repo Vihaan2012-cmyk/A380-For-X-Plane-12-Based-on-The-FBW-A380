@@ -25,13 +25,15 @@ struct Row {
     elevators: [f64; 2],
     ailerons: [f64; 2],
     rudder: f64,
+    spoilers: [f64; 2],
+    ias_kt: f32,
     rates: [f32; 3],
     attitude: [f32; 2],
 }
 
 #[derive(Default)]
 pub struct ControlResponse {
-    refs: Option<[Option<DataRef>; 5]>,
+    refs: Option<[Option<DataRef>; 6]>,
     history: VecDeque<Row>,
     recording: Option<(f64, Vec<Row>)>,
     written: usize,
@@ -49,7 +51,7 @@ impl ControlResponse {
             return;
         }
         let refs = *self.refs.get_or_insert_with(|| {
-            ["sim/flightmodel/position/P", "sim/flightmodel/position/Q", "sim/flightmodel/position/R", "sim/flightmodel/position/theta", "sim/flightmodel/position/phi"].map(|n| xplm.find(n))
+            ["sim/flightmodel/position/P", "sim/flightmodel/position/Q", "sim/flightmodel/position/R", "sim/flightmodel/position/theta", "sim/flightmodel/position/phi", "sim/flightmodel/position/indicated_airspeed"].map(|n| xplm.find(n))
         });
         let get = |i: usize| refs[i].map_or(f32::NAN, |d| xplm.get_f(d));
         let row = Row {
@@ -59,6 +61,8 @@ impl ControlResponse {
             elevators: s.elevators_deg,
             ailerons: [s.ailerons_deg[0][0], s.ailerons_deg[1][0]],
             rudder: s.rudder_deg,
+            spoilers: [s.spoilers_deg[0].iter().sum(), s.spoilers_deg[1].iter().sum()],
+            ias_kt: get(5),
             rates: [get(0), get(1), get(2)],
             attitude: [get(3), get(4)],
         };
@@ -84,12 +88,12 @@ impl ControlResponse {
         let _ = std::fs::create_dir_all(&dir);
         let path = dir.join(format!("step_{:03}_{:.0}s.csv", self.written + 1, start));
         let Ok(mut f) = std::fs::File::create(&path) else { return };
-        let _ = writeln!(f, "t_rel_s,frame_s,stick_pitch,stick_roll,stick_yaw,elev_l_deg,elev_r_deg,ail_l_deg,ail_r_deg,rudder_deg,p_deg_s,q_deg_s,r_deg_s,theta_deg,phi_deg");
+        let _ = writeln!(f, "t_rel_s,frame_s,stick_pitch,stick_roll,stick_yaw,elev_l_deg,elev_r_deg,ail_l_deg,ail_r_deg,rudder_deg,spoilers_l_deg_sum,spoilers_r_deg_sum,ias_kt,p_deg_s,q_deg_s,r_deg_s,theta_deg,phi_deg");
         for r in rows {
             let _ = writeln!(
                 f,
-                "{:.4},{:.4},{:.4},{:.4},{:.4},{:.3},{:.3},{:.3},{:.3},{:.3},{:.3},{:.3},{:.3},{:.3},{:.3}",
-                r.time - start, r.delta, r.stick[0], r.stick[1], r.stick[2], r.elevators[0], r.elevators[1], r.ailerons[0], r.ailerons[1], r.rudder, r.rates[0], r.rates[1], r.rates[2], r.attitude[0], r.attitude[1]
+                "{:.4},{:.4},{:.4},{:.4},{:.4},{:.3},{:.3},{:.3},{:.3},{:.3},{:.2},{:.2},{:.1},{:.3},{:.3},{:.3},{:.3},{:.3}",
+                r.time - start, r.delta, r.stick[0], r.stick[1], r.stick[2], r.elevators[0], r.elevators[1], r.ailerons[0], r.ailerons[1], r.rudder, r.spoilers[0], r.spoilers[1], r.ias_kt, r.rates[0], r.rates[1], r.rates[2], r.attitude[0], r.attitude[1]
             );
         }
         self.written += 1;
@@ -102,7 +106,7 @@ mod tests {
     use super::*;
 
     fn row(time: f64, pitch: f64) -> Row {
-        Row { time, delta: 0.03, stick: [pitch, 0., 0.], elevators: [0.; 2], ailerons: [0.; 2], rudder: 0., rates: [0.; 3], attitude: [0.; 2] }
+        Row { time, delta: 0.03, stick: [pitch, 0., 0.], elevators: [0.; 2], ailerons: [0.; 2], rudder: 0., spoilers: [0.; 2], ias_kt: 0., rates: [0.; 3], attitude: [0.; 2] }
     }
 
     #[test]

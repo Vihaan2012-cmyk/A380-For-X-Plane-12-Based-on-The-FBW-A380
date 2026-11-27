@@ -170,6 +170,8 @@ pub struct AppSettings {
     pub vatsim_token: MaskedText,
     pub ivao_token: MaskedText,
     pub sayintentions_key: MaskedText,
+    /// `soundSource`: true for FlyByWire's sounds over FTSiM+'s pack.
+    pub fbw_sounds: bool,
 }
 
 impl Default for AppSettings {
@@ -227,6 +229,7 @@ impl Default for AppSettings {
             vatsim_token: MaskedText::default(),
             ivao_token: MaskedText::default(),
             sayintentions_key: MaskedText::default(),
+            fbw_sounds: false,
         }
     }
 }
@@ -319,6 +322,7 @@ fn parse(map: &Map<String, Value>) -> AppSettings {
         vatsim_token: MaskedText::new(&as_text(map, "vatsimToken")),
         ivao_token: MaskedText::new(&as_text(map, "ivaoToken")),
         sayintentions_key: MaskedText::new(&as_text(map, "sayIntentionsKey")),
+        fbw_sounds: as_text(map, "soundSource").eq_ignore_ascii_case("FBW"),
     }
 }
 

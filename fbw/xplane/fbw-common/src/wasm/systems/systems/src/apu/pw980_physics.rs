@@ -232,6 +232,9 @@ const N2_LOAD_BAND_PERCENT: f64 = 2.0;
 /// quasi-statically with `n2()`.
 const OUTPUT_LOCK_N2_PERCENT: f64 = 83.0;
 
+/// The start schedule hands the fuel to the governor at 90 % N: held to the end it settled just short of 95 % N under the generators' load, so AVAIL never came.
+const START_SCHEDULE_END_N2_PERCENT: f64 = OUTPUT_LOCK_N2_PERCENT * 0.9;
+
 /// Start acceleration schedule, N-points per second against N, fitted to FlyByWire's
 /// video-timed PW980 start (PW980.md: 16 % at 10 s, 32 % at 20 s, 61 % at 30 s, AVAIL near 40 s).
 const START_NDOT_SCHEDULE: [(f64, f64); 4] = [(0.0, 1.6), (24.0, 1.8), (44.0, 3.0), (100.0, 3.4)];
@@ -596,7 +599,7 @@ impl Pw980Core {
         // Shutdown clears it).
         let running = running && self.trip.is_none();
         let n2_percent = self.n2.get::<percent>();
-        if !running || n2_percent >= OUTPUT_LOCK_N2_PERCENT {
+        if !running || n2_percent >= START_SCHEDULE_END_N2_PERCENT {
             self.starting = !running;
         }
         let starting = self.starting;

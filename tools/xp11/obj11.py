@@ -155,7 +155,7 @@ def generic(text, combined=None):
             elif tok[1] != "normal":
                 dropped_material = True
             continue
-        if head == "ATTR_cockpit_device":
+        if head in ("ATTR_cockpit_device", "WIPER_texture", "WIPER_param"):
             changed = True
             continue
         if head == "ATTR_manip_device":

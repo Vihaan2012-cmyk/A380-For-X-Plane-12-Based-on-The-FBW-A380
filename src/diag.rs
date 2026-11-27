@@ -507,6 +507,59 @@ pub(crate) fn process_stats(names: &[&str]) -> Vec<(String, u32, u64, u64, u64)>
     totals
 }
 
+#[cfg(windows)]
+#[link(name = "ntdll")]
+extern "system" {
+    fn NtQueryInformationProcess(process: *mut c_void, class: u32, info: *mut c_void, len: u32, ret: *mut u32) -> i32;
+}
+
+/// Chromium's process type from a command line: the `--type=` switch, or "main" for the browser process.
+pub(crate) fn chromium_kind(command_line: &str) -> String {
+    command_line
+        .split_whitespace()
+        .find_map(|a| a.trim_matches('"').strip_prefix("--type="))
+        .map_or_else(|| "main".to_string(), |t| t.to_string())
+}
+
+/// Every process named `exe`: pid, Chromium process type and CPU time (100 ns).
+#[cfg(windows)]
+pub(crate) fn chromium_process_times(exe: &str) -> Vec<(u32, String, u64)> {
+    let mut out = Vec::new();
+    unsafe {
+        let snapshot = CreateToolhelp32Snapshot(0x2, 0);
+        if snapshot.is_null() || snapshot as isize == -1 {
+            return out;
+        }
+        let mut entry: ProcessEntry = std::mem::zeroed();
+        entry.size = std::mem::size_of::<ProcessEntry>() as u32;
+        let mut ok = Process32FirstW(snapshot, &mut entry) != 0;
+        while ok {
+            let len = entry.exe.iter().position(|&c| c == 0).unwrap_or(entry.exe.len());
+            if String::from_utf16_lossy(&entry.exe[..len]).eq_ignore_ascii_case(exe) {
+                let h = OpenProcess(0x1000, 0, entry.pid);
+                if !h.is_null() {
+                    let (mut c, mut e, mut k, mut u) = (0u64, 0u64, 0u64, 0u64);
+                    let cpu = if GetProcessTimes(h, &mut c, &mut e, &mut k, &mut u) != 0 { k + u } else { 0 };
+                    let mut buf = vec![0u64; 4096];
+                    let mut ret = 0u32;
+                    let kind = if NtQueryInformationProcess(h, 60, buf.as_mut_ptr() as *mut c_void, (buf.len() * 8) as u32, &mut ret) >= 0 {
+                        let bytes = *(buf.as_ptr() as *const u16) as usize;
+                        let text = *(buf.as_ptr().add(1) as *const *const u16);
+                        if text.is_null() { "main".to_string() } else { chromium_kind(&String::from_utf16_lossy(std::slice::from_raw_parts(text, bytes / 2))) }
+                    } else {
+                        "unknown".to_string()
+                    };
+                    CloseHandle(h);
+                    out.push((entry.pid, kind, cpu));
+                }
+            }
+            ok = Process32NextW(snapshot, &mut entry) != 0;
+        }
+        CloseHandle(snapshot);
+    }
+    out
+}
+
 #[derive(Clone, Copy)]
 enum Kind {
     Float,
@@ -1447,5 +1500,28 @@ mod tests {
         let stats = process_stats(&[name.as_str()]);
         assert_eq!(stats[0].1, 1);
         assert!(stats[0].3 > 0, "working set measured");
+    }
+}
+
+#[cfg(test)]
+mod chromium_kind_tests {
+    use super::chromium_kind;
+
+    #[test]
+    fn the_type_switch_names_the_process_and_none_is_the_browser() {
+        assert_eq!(chromium_kind(r#""C:\X\XPHFBW.exe" --type=gpu-process --no-sandbox"#), "gpu-process");
+        assert_eq!(chromium_kind("XPHFBW.exe --type=renderer --lang=en"), "renderer");
+        assert_eq!(chromium_kind("XPHFBW.exe --tag=abc"), "main");
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn this_test_process_reads_as_a_main_process_with_its_cpu() {
+        let exe = std::env::current_exe().unwrap();
+        let name = exe.file_name().unwrap().to_string_lossy().to_string();
+        let found = super::chromium_process_times(&name);
+        let me = found.iter().find(|p| p.0 == std::process::id()).expect("this process");
+        assert_eq!(me.1, "main");
+        assert!(me.2 > 0);
     }
 }

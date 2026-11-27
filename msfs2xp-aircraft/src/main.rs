@@ -27,6 +27,7 @@ mod lights;
 mod model;
 mod rig;
 mod screens;
+mod sidesticks;
 mod stations;
 mod sasl;
 
@@ -3038,6 +3039,13 @@ fn main() -> anyhow::Result<()> {
                 !(on_a_light_node && no_real_material)
             });
             println!("  {model_name}: {} placeholder-material light-node meshes left out", before - model.meshes.len());
+        }
+        if !is_ext {
+            if let Some(xml) = behaviour_xml.as_ref().and_then(|x| std::fs::read_to_string(x).ok()) {
+                for line in sidesticks::split_shared(&mut model, &sidesticks::template_sticks(&xml)) {
+                    println!("  {model_name}: {line}");
+                }
+            }
         }
         // Which nodes are the (freshly grafted, if present) passenger
         // cabin: a fresh lookup, not the `inside` used to strip LOD0's own
