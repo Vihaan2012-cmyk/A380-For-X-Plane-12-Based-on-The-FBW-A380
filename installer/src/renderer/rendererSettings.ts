@@ -43,6 +43,8 @@ interface RendererSettings {
     useDarkTheme: boolean;
     allowSeasonalEffects: boolean;
     qaConfigUrls: Record<number, string>;
+    sounds: string | null;
+    soundsApply: boolean;
   };
   cache: {
     main: {
@@ -113,6 +115,14 @@ const schema: Schema<RendererSettings> = {
       useCdnCache: {
         type: 'boolean',
         default: true,
+      },
+      sounds: {
+        type: ['string', 'null'],
+        default: null,
+      },
+      soundsApply: {
+        type: 'boolean',
+        default: false,
       },
       dateLayout: {
         type: 'string',

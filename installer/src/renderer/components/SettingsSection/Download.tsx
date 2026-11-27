@@ -177,6 +177,30 @@ const Xplane11Settings = (): JSX.Element => {
   );
 };
 
+const SoundsSettingItem = (): JSX.Element => {
+  const [sounds, setSounds] = useSetting<string | null>('mainSettings.sounds');
+
+  return (
+    <SettingsItem name="Aircraft sounds (also in the EFB, any time)">
+      <select
+        value={sounds ?? ''}
+        onChange={(event) => {
+          setSounds(event.currentTarget.value);
+          settings.set('mainSettings.soundsApply', true);
+        }}
+        name="Aircraft sounds"
+        className="w-60 cursor-pointer rounded-md border-2 border-navy bg-navy-light px-3.5 py-2.5 text-xl text-white outline-none"
+      >
+        <option value="" disabled>
+          Ask at install
+        </option>
+        <option value="fbw">FlyByWire</option>
+        <option value="ftsim">FTSiM+</option>
+      </select>
+    </SettingsItem>
+  );
+};
+
 export const DownloadSettings = (): JSX.Element => {
   const [separateTempLocation, setSeparateTempLocation] = useSetting<boolean>('mainSettings.separateTempLocation');
   const [disableVersionWarning, setDisableVersionWarning] = useSetting<boolean>(
@@ -191,6 +215,7 @@ export const DownloadSettings = (): JSX.Element => {
         <div className="flex flex-col divide-y divide-gray-600">
           <XplaneSettings />
           <Xplane11Settings />
+          <SoundsSettingItem />
           <DisableWarningSettingItem value={disableVersionWarning} setValue={setDisableVersionWarning} />
         </div>
       </div>

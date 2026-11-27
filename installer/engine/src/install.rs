@@ -1,6 +1,6 @@
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
 pub struct Answers {
@@ -15,7 +15,38 @@ pub struct Answers {
     pub textures: Option<u32>,
     pub clean: bool,
     pub xplane12: Option<PathBuf>,
+    /// The sounds picked in the installer; None leaves the FTSiM+ pack as every release before installed it.
+    pub sounds: Option<Sounds>,
+    /// Write the pick into the aircraft's settings even when the EFB already holds one.
+    pub sounds_apply: bool,
 }
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Sounds {
+    Fbw,
+    Ftsim,
+}
+
+impl Sounds {
+    pub fn parse(text: &str) -> Option<Sounds> {
+        match text.trim().to_ascii_lowercase().as_str() {
+            "fbw" | "flybywire" => Some(Sounds::Fbw),
+            "ftsim" | "ftsim+" => Some(Sounds::Ftsim),
+            _ => None,
+        }
+    }
+
+    fn setting(self) -> &'static str {
+        match self {
+            Sounds::Fbw => "FBW",
+            Sounds::Ftsim => "FTSIM",
+        }
+    }
+}
+
+/// The FTSiM+ step of the last release, kept so the pack can be fetched later without a new release.
+const SOUND_PACK_STEP: &str = "fmod/sound_pack_step.json";
+const SOUND_SETTING: &str = "soundSource";
 
 pub enum Msg {
     Status(String),
@@ -304,7 +335,7 @@ struct Steps {
     steps: Vec<Step>,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Serialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 enum Step {
     /// Copy a folder from the archive into the aircraft folder.
@@ -515,6 +546,8 @@ pub fn takeover(xplane: PathBuf) -> Result<String, String> {
         textures: None,
         clean: false,
         xplane12: None,
+        sounds: None,
+        sounds_apply: false,
     };
     work(&a, &Ctx { json: false })
 }
@@ -549,6 +582,7 @@ fn work(a: &Answers, ctx: &Ctx) -> Result<String, String> {
         first = 0;
     }
     if !wipe && first >= latest.chain.len() {
+        apply_sounds(a, &aircraft, &work_root, ctx)?;
         if have_textures != Some(textures) {
             apply_textures(&aircraft, textures, &pack, &work_root.join("textures"), ctx)?;
             return Ok(format!("Textures set to {textures} px"));
@@ -579,6 +613,7 @@ fn work(a: &Answers, ctx: &Ctx) -> Result<String, String> {
         }
     }
     apply_textures(&aircraft, textures, &pack, &work_root.join("textures"), ctx)?;
+    apply_sounds(a, &aircraft, &work_root, ctx)?;
     if let Some(cap) = a.cockpit_cap {
         ctx.status(format!("Resizing the cockpit textures to {cap} px..."));
         let summary = crate::textures::cap_cockpit(&aircraft, cap, |i, n| ctx.send(Msg::Progress(i as f64 / n.max(1) as f64)))?;
@@ -968,10 +1003,18 @@ fn run_steps(a: &Answers, ctx: &Ctx, steps: &Steps, release: &Path, aircraft: &P
             }
             Step::Download { url, sha256, to } => {
                 ctx.status(format!("Downloading {to}..."));
-                fetch_verified(url, sha256, &aircraft.join(to))?;
-                ctx.log(format!("{to} downloaded and verified"));
+                if fetch_unless_present(url, sha256, &aircraft.join(to))? {
+                    ctx.log(format!("{to} downloaded and verified"));
+                } else {
+                    ctx.log(format!("{to} already present and verified"));
+                }
+            }
+            Step::SoundPack { .. } if a.sounds == Some(Sounds::Fbw) => {
+                keep_sound_pack_step(step, aircraft);
+                ctx.log("FTSiM+'s A380RR_Sp skipped: FlyByWire's sounds were chosen".to_owned());
             }
             Step::SoundPack { url, zip_sha256, to, sha256, banks, copy, renames, snd_template, snd_patch, snd_to, snd_also } => {
+                keep_sound_pack_step(step, aircraft);
                 let zip_sha256 = zip_sha256.as_deref().unwrap_or(SOUND_PACK_SHA256);
                 let local = a.sound_pack.clone().filter(|p| sha256_file(p).is_ok_and(|h| h.eq_ignore_ascii_case(zip_sha256)));
                 let zip = match local {
@@ -1379,6 +1422,63 @@ fn mega_download(link: &str, to: &Path) -> Result<String, String> {
     stream_to(ureq::get(url).call().map_err(|e| format!("MEGA download: {e}"))?.into_reader(), to, |b| ctr.apply(b))
 }
 
+/// Downloads `url` to `to` unless `to` already holds those bytes; true when it downloaded.
+fn fetch_unless_present(url: &str, sha256: &str, to: &Path) -> Result<bool, String> {
+    if to.is_file() && sha256_file(to).is_ok_and(|h| h.eq_ignore_ascii_case(sha256)) {
+        return Ok(false);
+    }
+    fetch_verified(url, sha256, to).map(|()| true)
+}
+
+fn keep_sound_pack_step(step: &Step, aircraft: &Path) {
+    if let Ok(text) = serde_json::to_string(step) {
+        let _ = std::fs::create_dir_all(aircraft.join("fmod"));
+        let _ = std::fs::write(aircraft.join(SOUND_PACK_STEP), text);
+    }
+}
+
+fn has_sound_pack(aircraft: &Path) -> bool {
+    std::fs::read_dir(aircraft.join("fmod"))
+        .map(|d| d.flatten().any(|e| e.path().extension().is_some_and(|x| x.eq_ignore_ascii_case("snd"))))
+        .unwrap_or(false)
+}
+
+/// The installer's sound pick: the FTSiM+ pack fetched if it is wanted and missing, and the choice handed to the EFB.
+fn apply_sounds(a: &Answers, aircraft: &Path, work_dir: &Path, ctx: &Ctx) -> Result<(), String> {
+    let Some(sounds) = a.sounds else { return Ok(()) };
+    if sounds == Sounds::Ftsim && !has_sound_pack(aircraft) {
+        match std::fs::read_to_string(aircraft.join(SOUND_PACK_STEP)).ok().and_then(|t| serde_json::from_str::<Step>(&t).ok()) {
+            Some(step) => {
+                std::fs::create_dir_all(work_dir).map_err(|e| e.to_string())?;
+                run_steps(a, ctx, &Steps { steps: vec![step] }, aircraft, aircraft, work_dir)?;
+            }
+            None => ctx.log("FTSiM+'s A380RR_Sp comes with the next update".to_owned()),
+        }
+    }
+    let path = a.xplane.join("Output").join("preferences").join("xphfbw.json");
+    write_sound_setting(&path, sounds, a.sounds_apply)?;
+    Ok(())
+}
+
+/// Puts the pick into X-Plane's xphfbw.json, which the EFB's Sounds setting reads and writes.
+fn write_sound_setting(path: &Path, sounds: Sounds, force: bool) -> Result<(), String> {
+    let mut map = std::fs::read_to_string(path)
+        .ok()
+        .and_then(|t| serde_json::from_str::<serde_json::Value>(&t).ok())
+        .and_then(|v| v.as_object().cloned())
+        .unwrap_or_default();
+    if map.contains_key(SOUND_SETTING) && !force {
+        return Ok(());
+    }
+    map.insert(SOUND_SETTING.to_owned(), serde_json::Value::String(sounds.setting().to_owned()));
+    if let Some(dir) = path.parent() {
+        std::fs::create_dir_all(dir).map_err(|e| e.to_string())?;
+    }
+    let tmp = path.with_extension("json.tmp");
+    std::fs::write(&tmp, serde_json::to_string_pretty(&serde_json::Value::Object(map)).map_err(|e| e.to_string())?).map_err(|e| e.to_string())?;
+    std::fs::rename(&tmp, path).map_err(|e| format!("{}: {e}", path.display()))
+}
+
 fn fetch_verified(url: &str, sha256: &str, to: &Path) -> Result<(), String> {
     let mut bytes = Vec::new();
     ureq::get(url)
@@ -1529,6 +1629,48 @@ pub fn detect_fbw_package() -> Option<PathBuf> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_sound_pick_reaches_the_efb_once_unless_applied_again() {
+        let dir = std::env::temp_dir().join("fbw-installer-sound-setting-test");
+        let _ = std::fs::remove_dir_all(&dir);
+        let path = dir.join("Output").join("preferences").join("xphfbw.json");
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        std::fs::write(&path, r#"{"cabinVisible": true}"#).unwrap();
+        let read = || serde_json::from_str::<serde_json::Value>(&std::fs::read_to_string(&path).unwrap()).unwrap();
+        write_sound_setting(&path, Sounds::Fbw, false).unwrap();
+        assert_eq!(read()["soundSource"], "FBW");
+        assert_eq!(read()["cabinVisible"], true, "other settings stay");
+        write_sound_setting(&path, Sounds::Ftsim, false).unwrap();
+        assert_eq!(read()["soundSource"], "FBW", "an update keeps what the EFB holds");
+        write_sound_setting(&path, Sounds::Ftsim, true).unwrap();
+        assert_eq!(read()["soundSource"], "FTSIM");
+        assert_eq!(Sounds::parse("FlyByWire"), Some(Sounds::Fbw));
+        assert_eq!(Sounds::parse("ftsim"), Some(Sounds::Ftsim));
+        assert_eq!(Sounds::parse("x"), None);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn a_kept_sound_pack_step_reads_back() {
+        let json = r#"{"kind":"sound_pack","to":"fmod","sha256":{"a":"b"},"banks":["x.bank"],"copy":["GUIDs.txt"],"renames":[["p","q"]],"snd_template":"A388.snd","snd_patch":"fmod/A380.sndpatch","snd_to":"fmod/A380.snd"}"#;
+        let step: Step = serde_json::from_str(json).unwrap();
+        let back: Step = serde_json::from_str(&serde_json::to_string(&step).unwrap()).unwrap();
+        assert!(matches!(back, Step::SoundPack { ref snd_to, .. } if snd_to == "fmod/A380.snd"));
+    }
+
+    #[test]
+    fn a_download_already_on_disk_is_not_fetched_again() {
+        let dir = std::env::temp_dir().join("fbw-installer-present-test");
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("pack.pck");
+        std::fs::write(&path, b"sound").unwrap();
+        let sha = hex(&Sha256::digest(b"sound"));
+        assert_eq!(fetch_unless_present("http://127.0.0.1:9/unreachable", &sha, &path), Ok(false));
+        std::fs::write(&path, b"stale").unwrap();
+        assert!(fetch_unless_present("http://127.0.0.1:9/unreachable", &sha, &path).is_err(), "a wrong copy is fetched again");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 
     const RELEASES: &str = r#"[
         {"tag_name": "v0.3.0", "draft": true, "assets": [{"name": "manifest.json", "browser_download_url": "https://x/draft/manifest.json"}]},

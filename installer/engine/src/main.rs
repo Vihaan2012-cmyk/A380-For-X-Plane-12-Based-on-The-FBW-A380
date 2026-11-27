@@ -27,7 +27,7 @@ fn xplane(args: &[String]) -> Option<PathBuf> {
 
 fn usage() -> ! {
     eprintln!(
-        "usage (any command takes --sim xp11 for the X-Plane 11 aircraft):\n  engine detect\n  engine status [--xplane DIR] [--repo OWNER/NAME]\n  engine install --xplane DIR [--xplane12 DIR] [--clean] [--cockpit-cap PX] [--textures 2048|4096|8192] [--sasl ZIP] [--sound-pack ZIP] [--converter DIR] [--repo OWNER/NAME]\n  engine uninstall --xplane DIR\n  engine amdb-status\n  engine liveries [--xplane DIR] [--repo OWNER/NAME]\n  engine livery-install --xplane DIR --id ID --edition 2K|4K [--repo OWNER/NAME]\n  engine livery-remove --xplane DIR --folder NAME\n  engine --takeover DIR\n  engine --cockpit-textures PX DIR
+        "usage (any command takes --sim xp11 for the X-Plane 11 aircraft):\n  engine detect\n  engine status [--xplane DIR] [--repo OWNER/NAME]\n  engine install --xplane DIR [--xplane12 DIR] [--clean] [--cockpit-cap PX] [--textures 2048|4096|8192] [--sasl ZIP] [--sound-pack ZIP] [--sounds fbw|ftsim [--sounds-apply]] [--converter DIR] [--repo OWNER/NAME]\n  engine uninstall --xplane DIR\n  engine amdb-status\n  engine liveries [--xplane DIR] [--repo OWNER/NAME]\n  engine livery-install --xplane DIR --id ID --edition 2K|4K [--repo OWNER/NAME]\n  engine livery-remove --xplane DIR --folder NAME\n  engine --takeover DIR\n  engine --cockpit-textures PX DIR
   engine --all-textures PX DIR"
     );
     std::process::exit(2);
@@ -116,6 +116,8 @@ fn main() {
                 textures: arg(&args, "--textures").and_then(|c| c.parse().ok()),
                 clean: args.iter().any(|a| a == "--clean"),
                 xplane12: arg(&args, "--xplane12").map(PathBuf::from),
+                sounds: arg(&args, "--sounds").as_deref().and_then(install::Sounds::parse),
+                sounds_apply: args.iter().any(|a| a == "--sounds-apply"),
             };
             if !install::run(answers, &ctx()) {
                 std::process::exit(1);

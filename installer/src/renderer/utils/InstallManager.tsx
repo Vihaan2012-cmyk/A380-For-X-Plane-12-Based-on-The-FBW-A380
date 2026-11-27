@@ -584,6 +584,27 @@ export class InstallManager {
       return InstallResult.Cancelled;
     }
 
+    let sounds = settings.get('mainSettings.sounds') as string | null;
+    if (sounds !== 'fbw' && sounds !== 'ftsim') {
+      const ftsim = await showModal(
+        <PromptModal
+          title="Aircraft sounds"
+          bodyText={
+            'Which sounds should the A380 use? You can switch at any time in the EFB (Settings, Audio) or in these settings.\n\n' +
+            "**FlyByWire**: FlyByWire's own A380 recordings, downloaded from FlyByWire's GitHub.\n\n" +
+            "**FTSiM+**: FTSiM+Sounds' A380RR pack, downloaded from MEGA. FlyByWire's sounds fill in what it lacks."
+          }
+          cancelText="FlyByWire"
+          confirmText="FTSiM+"
+          confirmColor={ButtonType.Emphasis}
+        />,
+      );
+      sounds = ftsim ? 'ftsim' : 'fbw';
+      settings.set('mainSettings.sounds', sounds);
+      settings.set('mainSettings.soundsApply', true);
+    }
+    const applySounds = settings.get('mainSettings.soundsApply') === true;
+
     const abortControllerID = this.lowestAvailableAbortControllerID();
     this.abortControllers[abortControllerID] = new AbortController();
     const signal = this.abortControllers[abortControllerID].signal;
@@ -649,6 +670,9 @@ export class InstallManager {
       '--xplane',
       Directories.simulatorBasePath(addon.simulator),
       ...(textures ? ['--textures', String(textures)] : []),
+      '--sounds',
+      sounds,
+      ...(applySounds ? ['--sounds-apply'] : []),
     ]);
 
     ipcRenderer.removeListener(channels.xplaneEngine.event, handleEngineEvent);
@@ -673,6 +697,9 @@ export class InstallManager {
       return InstallResult.Failure;
     }
 
+    if (applySounds) {
+      settings.set('mainSettings.soundsApply', false);
+    }
     this.notifyDownload(addon, true);
     this.setCurrentlyInstalledTrack(addon, track);
     this.setCurrentInstallState(addon, { status: InstallStatus.DownloadDone });
@@ -738,6 +765,10 @@ export class InstallManager {
     }
 
     if (status.latest && status.latest !== installed) {
+      return { status: InstallStatus.NeedsUpdate };
+    }
+
+    if (addon.engine !== 'amdb-bridge' && settings.get('mainSettings.soundsApply') === true) {
       return { status: InstallStatus.NeedsUpdate };
     }
 
