@@ -2564,6 +2564,17 @@ impl Plugin {
             let id = self.vars.get("ISIS_BARO_MODE".to_owned());
             self.vars.write(&id, standby.std as u8 as f64);
         }
+        // KOHLSMAN_SET and SimOutputAltimeter (FlyByWireInterface.cpp:2637-2642): the FCU's baro into X-Plane's own
+        // altimeters, which VATSIM clients and the A380 systems' KOHLSMAN SETTING read (#65).
+        for (bus, side) in self.prims.fcu_buses().iter().zip(["pilot", "copilot"]) {
+            let hpa = prim::value_or(bus.baro_setting_hpa, 1013.) as f64;
+            if let Some(d) = xplm.find(&format!("sim/cockpit2/gauges/actuators/barometer_setting_in_hg_{side}")) {
+                xplm.set_f(d, (hpa / sensors::kohlsman_mb_from_inhg(1.)) as f32);
+            }
+            if let Some(d) = xplm.find(&format!("sim/cockpit2/gauges/actuators/barometer_setting_is_std_{side}")) {
+                xplm.set_i(d, prim::bit_or(bus.efis_discrete_word_2, 11, true) as i32);
+            }
+        }
         let eec = self.engine_commands.update(
             &mut self.vars,
             xplm,

@@ -6,7 +6,7 @@
 //! used, with Laminar's A330 values, so X-Plane's light switches work them:
 //! nav (incl. the wingtip obstruction lights, the same switch/effect as the
 //! tail nav light), beacon and strobe switches, landing lights on the
-//! nose-gear (`landing_lights_switch` 0/1) and fuselage (2..5) slots the
+//! fuselage (`landing_lights_switch` 0..3) and nose-gear (4/5) slots the
 //! systems.cfg Index field -- not lightdef order -- tells apart, the taxi
 //! light, and generic lights 0 (runway turn-off), 1 (wing scan) and 2 (logo).
 //! Lights on moving parts (the nose gear's) follow its animation.
@@ -173,19 +173,22 @@ pub fn lights_obj(model: &Model, anim: &Animator, systems_cfg: &str) -> (String,
             // LIGHT_ASOBO_TAKEOFF_2/_3) apart from the fuselage lights
             // (Index:2/:3, circuit.18/.19, LIGHT_ASOBO_LAND_1/2_LH/RH), and
             // plugin/src/lights.rs's `landing_nose`/`landing_main` groups
-            // gate those same two sets onto landing_lights_switch[0,1] and
-            // [2,3,4,5] respectively -- so the index handed to each node
+            // gate those same two sets onto landing_lights_switch[4,5] and
+            // [0,1,2,3] respectively. The main lights hold slot 0 because
+            // X-Plane's landing_lights_on, which VATSIM clients read, is
+            // slot 0 (DataRefs.txt: "affects the first landing light"; #66)
+            // -- so the index handed to each node
             // here must come from that same Index, not from a single
             // shared counter that only happened to land in the right slots
             // because systems.cfg's TAKE OFF LIGHTS section is textually
             // ahead of its LANDING LIGHTS section (nothing enforces that).
             5 => {
                 let n = if idx == 1 {
-                    let v = nose_landing;
+                    let v = 4 + nose_landing;
                     nose_landing += 1;
                     v
                 } else {
-                    let v = 2 + main_landing;
+                    let v = main_landing;
                     main_landing += 1;
                     v
                 };
@@ -297,7 +300,7 @@ mod tests {
     fn landing_lights_route_by_circuit_index_not_lightdef_order() {
         // systems.cfg's LANDING LIGHTS section normally comes after its
         // TAKE OFF LIGHTS section, so a plain running counter would land in
-        // the right landing_lights_switch slots ([0,1] nose, [2,3,4,5]
+        // the right landing_lights_switch slots ([4,5] nose, [0,1,2,3]
         // main) by coincidence. This cfg deliberately reverses that order
         // (main-gear lights declared first) to prove the routing now comes
         // from the Index field itself (plugin/src/lights.rs's
@@ -325,13 +328,13 @@ mod tests {
                 .unwrap()
         };
         // LAND_1_LH/RH (Index:2, z=1,2) are the fuselage/main lights, on
-        // landing_lights_switch[2,3]; TAKEOFF_3/2 (Index:1, z=3,4) are the
-        // nose-gear lights, on [0,1] -- even though the main lights are
+        // landing_lights_switch[0,1]; TAKEOFF_3/2 (Index:1, z=3,4) are the
+        // nose-gear lights, on [4,5] -- even though the main lights are
         // declared first in this (deliberately reversed) cfg.
-        assert_eq!(slot_at_z(1.0), "2", "{obj}");
-        assert_eq!(slot_at_z(2.0), "3", "{obj}");
-        assert_eq!(slot_at_z(3.0), "0", "{obj}");
-        assert_eq!(slot_at_z(4.0), "1", "{obj}");
+        assert_eq!(slot_at_z(1.0), "0", "{obj}");
+        assert_eq!(slot_at_z(2.0), "1", "{obj}");
+        assert_eq!(slot_at_z(3.0), "4", "{obj}");
+        assert_eq!(slot_at_z(4.0), "5", "{obj}");
     }
 
     #[test]

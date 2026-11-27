@@ -330,8 +330,8 @@ pub fn xplane_var(key: &str) -> Option<(&'static str, f64)> {
         "A:LIGHT LOGO" => Some(("sim/cockpit2/switches/generic_lights_switch[2]", 1.0)),
         "A:LIGHT TAXI:1" => Some(("sim/cockpit2/switches/taxi_light_on", 1.0)),
         "A:LIGHT TAXI:2" => Some(("sim/cockpit2/switches/generic_lights_switch[0]", 1.0)),
-        "A:LIGHT LANDING:1" => Some(("sim/cockpit2/switches/landing_lights_switch[0]", 1.0)),
-        "A:LIGHT LANDING:2" => Some(("sim/cockpit2/switches/landing_lights_switch[2]", 1.0)),
+        "A:LIGHT LANDING:1" => Some(("sim/cockpit2/switches/landing_lights_switch[4]", 1.0)),
+        "A:LIGHT LANDING:2" => Some(("sim/cockpit2/switches/landing_lights_switch[0]", 1.0)),
         "A:LIGHT BEACON" => Some(("sim/cockpit2/switches/beacon_on", 1.0)),
         "A:LIGHT WING" => Some(("sim/cockpit2/switches/generic_lights_switch[1]", 1.0)),
         // FBW_Airbus_Wiper (A32NX_Exterior.xml, the WipersLeft/WipersRight

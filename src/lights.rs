@@ -51,8 +51,11 @@
 //! | Wing | `generic_lights_switch:1` | `CIRCUIT_LIGHT_WING` (2) |
 //! | Taxi (nose) | `taxi_light_on` | `CIRCUIT_LIGHT_TAXI:1` |
 //! | Taxi (turn-off) | `generic_lights_switch:0` | `CIRCUIT_LIGHT_TAXI:2/:3` |
-//! | Landing (nose) | `landing_lights_switch:0,1` | `CIRCUIT_LIGHT_LANDING:1` |
-//! | Landing (main) | `landing_lights_switch:2..5` | `CIRCUIT_LIGHT_LANDING:2/:3` |
+//! | Landing (main) | `landing_lights_switch:0..3` | `CIRCUIT_LIGHT_LANDING:2/:3` |
+//! | Landing (nose) | `landing_lights_switch:4,5` | `CIRCUIT_LIGHT_LANDING:1` |
+//!
+//! The main lights hold slot 0 because X-Plane's `landing_lights_on`, which
+//! VATSIM clients read, is that slot (#66).
 //!
 //! (msfs2xp-aircraft lights.rs's `airplane_generic_*` indices for turn-off/
 //! wing/logo; key_events.rs's `landing_lights` for the landing groups;
@@ -554,8 +557,8 @@ impl Lights {
             wing: Group::watched(circuit_numbers(circuits, "CIRCUIT_LIGHT_WING"), vars, "generic_lights_switch", &[1]),
             taxi_nose: Group::watched(circuit_numbers_where(circuits, "CIRCUIT_LIGHT_TAXI", 1, false), vars, "taxi_light_on", &[]),
             taxi_turnoff: Group::watched(circuit_numbers_where(circuits, "CIRCUIT_LIGHT_TAXI", 1, true), vars, "generic_lights_switch", &[0]),
-            landing_nose: Group::watched(circuit_numbers_where(circuits, "CIRCUIT_LIGHT_LANDING", 1, false), vars, "landing_lights_switch", &[0, 1]),
-            landing_main: Group::watched(circuit_numbers_where(circuits, "CIRCUIT_LIGHT_LANDING", 1, true), vars, "landing_lights_switch", &[2, 3, 4, 5]),
+            landing_nose: Group::watched(circuit_numbers_where(circuits, "CIRCUIT_LIGHT_LANDING", 1, false), vars, "landing_lights_switch", &[4, 5]),
+            landing_main: Group::watched(circuit_numbers_where(circuits, "CIRCUIT_LIGHT_LANDING", 1, true), vars, "landing_lights_switch", &[0, 1, 2, 3]),
 
             window_heat: Group::new({
                 let mut c = circuit_number_named(circuits, "WipersLeft");
