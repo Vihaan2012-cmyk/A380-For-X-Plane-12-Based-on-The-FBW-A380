@@ -1,4 +1,5 @@
 import { app, BrowserWindow, Menu, shell, ipcMain } from 'electron';
+import { NsisUpdater } from 'electron-updater';
 import installExtension, { REDUX_DEVTOOLS, REACT_DEVELOPER_TOOLS } from 'electron-devtools-installer';
 import * as packageInfo from '../../package.json';
 import settings, { persistWindowSettings } from './mainSettings';
@@ -69,6 +70,34 @@ function initializeApp() {
     mainWindow.once('ready-to-show', () => {
       mainWindow.show();
     });
+
+    // Self-update from the A380's own GitHub releases (latest.yml next to the setup exe).
+    if (app.isPackaged) {
+      const autoUpdater = new NsisUpdater({
+        provider: 'github',
+        owner: 'Vihaan2012-cmyk',
+        repo: 'A380-For-X-Plane-12-Based-on-The-FBW-A380',
+      });
+      autoUpdater.addListener('update-downloaded', (event, releaseNotes, releaseName) => {
+        mainWindow.webContents.send(channels.update.downloaded, { event, releaseNotes, releaseName });
+      });
+      autoUpdater.addListener('update-available', () => {
+        mainWindow.webContents.send(channels.update.available);
+      });
+      autoUpdater.addListener('error', (error) => {
+        mainWindow.webContents.send(channels.update.error, { error: String(error) });
+      });
+      mainWindow.once('show', () => {
+        autoUpdater.checkForUpdates().catch(() => {});
+      });
+      ipcMain.on(channels.checkForInstallerUpdate, () => {
+        autoUpdater.checkForUpdates().catch(() => {});
+      });
+      ipcMain.on('restartAndUpdate', () => {
+        autoUpdater.quitAndInstall();
+        app.exit();
+      });
+    }
 
     mainWindow.on('closed', () => {
       mainWindow.removeAllListeners();

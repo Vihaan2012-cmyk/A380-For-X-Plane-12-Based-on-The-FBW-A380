@@ -15,7 +15,7 @@ import settings, { useSetting } from 'renderer/rendererSettings';
 import './index.css';
 import { ipcRenderer } from 'electron';
 import channels from 'common/channels';
-import { ModalContainer } from '../Modal';
+import { ModalContainer, useModals } from '../Modal';
 import { PublisherSection } from 'renderer/components/PublisherSection';
 import * as packageInfo from '../../../../package.json';
 import { InstallManager } from 'renderer/utils/InstallManager';
@@ -39,6 +39,20 @@ const App = () => {
   if (!Object.values(Simulators).includes(managedSim) && Object.values(enabledSimulators()).length > 0) {
     setManagedSim(Object.values(enabledSimulators())[0]);
   }
+
+  const { showModalAsync } = useModals();
+
+  useEffect(() => {
+    const stored = settings.get('mainSettings.sounds');
+    if (stored === 'fbw' || stored === 'ftsim') {
+      return;
+    }
+    void InstallManager.askSounds(showModalAsync).then(() => {
+      for (const addon of addons) {
+        void InstallManager.refreshAddonInstallState(addon);
+      }
+    });
+  }, []);
 
   useEffect(() => {
     for (const addon of addons) {

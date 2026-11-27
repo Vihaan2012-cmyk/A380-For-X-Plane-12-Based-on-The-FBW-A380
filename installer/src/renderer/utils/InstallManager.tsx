@@ -560,6 +560,31 @@ export class InstallManager {
     return InstallResult.Success;
   }
 
+  /// The sound pick, asked once (at the first install, or when the installer opens with none stored).
+  public static async askSounds(showModal: (modal: React.JSX.Element) => Promise<boolean>): Promise<string> {
+    const stored = settings.get('mainSettings.sounds') as string | null;
+    if (stored === 'fbw' || stored === 'ftsim') {
+      return stored;
+    }
+    const ftsim = await showModal(
+      <PromptModal
+        title="Aircraft sounds"
+        bodyText={
+          'Which sounds should the A380 use? You can switch at any time in the EFB (Settings, Audio) or in these settings.\n\n' +
+          "**FlyByWire**: FlyByWire's own A380 recordings, downloaded from FlyByWire's GitHub.\n\n" +
+          "**FTSiM+**: FTSiM+Sounds' A380RR pack, downloaded from MEGA. FlyByWire's sounds fill in what it lacks."
+        }
+        cancelText="FlyByWire"
+        confirmText="FTSiM+"
+        confirmColor={ButtonType.Emphasis}
+      />,
+    );
+    const sounds = ftsim ? 'ftsim' : 'fbw';
+    settings.set('mainSettings.sounds', sounds);
+    settings.set('mainSettings.soundsApply', true);
+    return sounds;
+  }
+
   private static async installXPlaneAddon(
     addon: Addon,
     track: AddonTrack,
@@ -584,25 +609,7 @@ export class InstallManager {
       return InstallResult.Cancelled;
     }
 
-    let sounds = settings.get('mainSettings.sounds') as string | null;
-    if (sounds !== 'fbw' && sounds !== 'ftsim') {
-      const ftsim = await showModal(
-        <PromptModal
-          title="Aircraft sounds"
-          bodyText={
-            'Which sounds should the A380 use? You can switch at any time in the EFB (Settings, Audio) or in these settings.\n\n' +
-            "**FlyByWire**: FlyByWire's own A380 recordings, downloaded from FlyByWire's GitHub.\n\n" +
-            "**FTSiM+**: FTSiM+Sounds' A380RR pack, downloaded from MEGA. FlyByWire's sounds fill in what it lacks."
-          }
-          cancelText="FlyByWire"
-          confirmText="FTSiM+"
-          confirmColor={ButtonType.Emphasis}
-        />,
-      );
-      sounds = ftsim ? 'ftsim' : 'fbw';
-      settings.set('mainSettings.sounds', sounds);
-      settings.set('mainSettings.soundsApply', true);
-    }
+    const sounds = await this.askSounds(showModal);
     const applySounds = settings.get('mainSettings.soundsApply') === true;
 
     const abortControllerID = this.lowestAvailableAbortControllerID();
