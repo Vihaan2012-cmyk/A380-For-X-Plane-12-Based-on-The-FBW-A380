@@ -9,6 +9,7 @@ RUST_VERSION=1.97.1
 NODE_VERSION=22.23.1
 AIRCRAFT_NAME="A380 for X-Plane 12"
 SOURCE_REPO="https://github.com/Vihaan2012-cmyk/A380-For-X-Plane-12-Based-on-The-FBW-A380.git"
+RELEASES="https://github.com/Vihaan2012-cmyk/A380-For-X-Plane-12-Based-on-The-FBW-A380/releases"
 
 say() { printf '%s\n' "$*"; }
 line() { say "------------------------------------------------------------"; }
@@ -387,7 +388,7 @@ case "$ANSWER" in y|Y|yes) ;; *) stop "nothing was installed." ;; esac
 say ""
 
 STEP=0
-STEPS=4
+STEPS=5
 [ "$RELEASE_MODE" = none ] || STEPS=$((STEPS + 1))
 [ -z "$LIVERY_IDS" ] || STEPS=$((STEPS + 1))
 step() {
@@ -419,11 +420,39 @@ if [ "$RELEASE_MODE" != none ]; then
   [ -d "$AIRCRAFT/plugins/fbw_a380_systems" ] || stop "the install finished but the aircraft is missing. The whole log is $LOG"
 fi
 
+step "Getting the native screens..."
+# The C++ screens (no display app needed): a library built for this system, from the latest release.
+NATIVE_LIB=""
+NATIVE_NAME=""
+glibc_minor="$(ldd --version 2>/dev/null | head -1 | sed -n 's/.* 2\.\([0-9][0-9]*\)$/\1/p')"
+case "$OS-$ARCH" in
+  linux-x86_64)
+    if [ "${glibc_minor:-0}" -ge 38 ]; then
+      NATIVE_ASSET=liba380_displays-linux-x64.so; NATIVE_NAME=liba380_displays.so
+    else
+      NATIVE_ASSET=""
+      say "      The native screens need glibc 2.38 or newer (Ubuntu 24.04, Fedora 39, Debian 13); this system has 2.${glibc_minor:-?}."
+    fi ;;
+  mac-*) NATIVE_ASSET=liba380_displays-mac.dylib; NATIVE_NAME=liba380_displays.dylib ;;
+  *) NATIVE_ASSET="" ;;
+esac
+if [ -n "$NATIVE_ASSET" ] && curl -fsSL "$RELEASES/latest/download/$NATIVE_ASSET" -o "$WORK/$NATIVE_NAME" >> "$LOG" 2>&1; then
+  NATIVE_LIB="$WORK/$NATIVE_NAME"
+  say "      Using $NATIVE_ASSET from the latest release."
+else
+  rm -f "$WORK/$NATIVE_NAME" 2>/dev/null
+  say "      No native screens for $OS $ARCH yet; the plugin draws the screens with its built-in page engine."
+fi
+
 step "Compiling the plugin. This can take 20 minutes or more the first time..."
 PLUGIN_DIR="$AIRCRAFT/plugins/fbw_a380_systems"
 BUILT_PLUGIN=""
 build_plugin() {
-  (cd "$SRC" && cargo build --release --features js --lib "$@")
+  if [ -n "$NATIVE_LIB" ]; then
+    (cd "$SRC" && A380_DISPLAYS_PREBUILT="$NATIVE_LIB" cargo build --release --features js,native-displays --lib "$@")
+  else
+    (cd "$SRC" && cargo build --release --features js --lib "$@")
+  fi
 }
 if [ "$OS" = mac ]; then
   case "$ARCH" in
@@ -459,6 +488,11 @@ xplane_running && stop "X-Plane was started while building. Close it and run thi
 mkdir -p "$PLUGIN_DIR/64" "$PLUGIN_DIR/XPHFBW/ui" "$PLUGIN_DIR/XPHFBW/js" "$AIRCRAFT/html_ui"
 [ -f "$PLUGIN_DIR/64/$XPL" ] && cp "$PLUGIN_DIR/64/$XPL" "$WORK/$XPL.previous"
 run "the plugin could not be copied" cp "$BUILT_PLUGIN" "$PLUGIN_DIR/64/$XPL"
+if [ -n "$NATIVE_LIB" ]; then
+  run "the native screens could not be copied" cp "$NATIVE_LIB" "$PLUGIN_DIR/64/$NATIVE_NAME"
+else
+  rm -f "$PLUGIN_DIR/64/liba380_displays.so" "$PLUGIN_DIR/64/liba380_displays.dylib"
+fi
 STAGE="$WORK/stage"
 rm -rf "$STAGE"
 mkdir -p "$STAGE"
@@ -481,6 +515,7 @@ run "the page runtime could not be installed" cp "$INSTRUMENTS/runtime/xplane-js
 if [ "$OS" = mac ]; then
   xattr -dr com.apple.quarantine "$AIRCRAFT" >> "$LOG" 2>&1
   codesign --force --sign - "$PLUGIN_DIR/64/$XPL" >> "$LOG" 2>&1 || say "      WARNING: could not sign the plugin. See $LOG"
+  [ -n "$NATIVE_LIB" ] && { codesign --force --sign - "$PLUGIN_DIR/64/$NATIVE_NAME" >> "$LOG" 2>&1 || say "      WARNING: could not sign the native screens. See $LOG"; }
   say "      Plugin holds: $(lipo -archs "$PLUGIN_DIR/64/$XPL" 2>/dev/null)"
   nm -gU "$PLUGIN_DIR/64/$XPL" 2>/dev/null | grep -q '_XPluginStart' || stop "the plugin has no XPluginStart, so X-Plane cannot load it."
 elif [ "$OS" = linux ]; then

@@ -136,6 +136,10 @@ pub fn any_native_work() -> bool {
 }
 
 pub fn cef_installed(plugin_dir: Option<&Path>) -> bool {
+    // XPHFBW.exe is a Windows program: a Mac or Linux build with the C++ screens draws them all itself.
+    if !cfg!(windows) && cfg!(feature = "native-displays") {
+        return false;
+    }
     plugin_dir.is_none_or(|d| d.join(XPHFBW_EXE).is_file())
 }
 

@@ -46,6 +46,10 @@ if ! gh release view "v$VERSION" --repo "$REPO" >/dev/null 2>&1; then
 fi
 cmp -s "$ROOT/tools/beta/mac.sh" "$ROOT/tools/beta/linux.sh" || { echo "tools/beta/mac.sh and linux.sh differ" >&2; exit 1; }
 set -- "$DIST"/*.zip "$DIST/tree.json" "$ROOT/tools/beta/mac.sh" "$ROOT/tools/beta/linux.sh" $INSTALLER
+# The native screens for Mac and Linux, which the beta scripts download from the latest release.
+for LIBFILE in "$ROOT"/dist/native/liba380_displays-*; do
+  [ -f "$LIBFILE" ] && set -- "$@" "$LIBFILE"
+done
 TOTAL=$#
 N=0
 for FILE in "$@"; do

@@ -15,6 +15,12 @@
 #include <GL/gl.h>
 #else
 #include "gpu_egl.h"
+#include <dlfcn.h>
+#ifdef __APPLE__
+#include <OpenGL/gl3.h>
+#else
+#include <GLES2/gl2.h>
+#endif
 #endif
 #include "include/gpu/ganesh/GrContextOptions.h"
 #include "include/core/SkColorSpace.h"
@@ -307,6 +313,36 @@ static void* current_gl() {
 #endif
 }
 
+#if !defined(_WIN32) && !defined(__APPLE__)
+// X-Plane's own GL context on Linux, whatever made it current: GLX first, then the process, then EGL.
+static GrGLFuncPtr host_get_proc(void*, const char name[]) {
+    using GlxProc = void* (*)(const unsigned char*);
+    using EglProc = void* (*)(const char*);
+    static GlxProc glx = [] {
+        void* lib = dlopen("libGL.so.1", RTLD_LAZY | RTLD_NOLOAD);
+        if (!lib) lib = dlopen("libGL.so.1", RTLD_LAZY);
+        return lib ? (GlxProc)dlsym(lib, "glXGetProcAddressARB") : nullptr;
+    }();
+    static EglProc egl = [] {
+        void* lib = dlopen("libEGL.so.1", RTLD_LAZY);
+        return lib ? (EglProc)dlsym(lib, "eglGetProcAddress") : nullptr;
+    }();
+    if (glx)
+        if (void* f = glx((const unsigned char*)name)) return (GrGLFuncPtr)f;
+    if (void* f = dlsym(RTLD_DEFAULT, name)) return (GrGLFuncPtr)f;
+    return egl ? (GrGLFuncPtr)egl(name) : nullptr;
+}
+#endif
+
+static sk_sp<GrDirectContext> make_host_context(const GrContextOptions& options) {
+#if !defined(_WIN32) && !defined(__APPLE__)
+    if (auto iface = GrGLMakeAssembledInterface(nullptr, host_get_proc)) return GrDirectContexts::MakeGL(iface, options);
+    return nullptr;
+#else
+    return GrDirectContexts::MakeGL(options);
+#endif
+}
+
 struct HostContext {
     void* gl = nullptr;
     sk_sp<GrDirectContext> ctx;
@@ -332,7 +368,7 @@ static GrDirectContext* host_context() {
         h.made++;
         if (h.ctx) h.ctx->releaseResourcesAndAbandonContext();
         GrContextOptions options;
-        h.ctx = GrDirectContexts::MakeGL(options);
+        h.ctx = make_host_context(options);
     }
     return h.ctx.get();
 }

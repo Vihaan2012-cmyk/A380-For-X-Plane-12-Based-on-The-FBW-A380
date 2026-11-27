@@ -212,19 +212,33 @@ fn env_or(name: &str, default: &str) -> String {
 /// (the GNU toolchain cannot link MSVC libraries); the plugin loads the DLL at
 /// run time (src/native_displays). `A380_DISPLAYS_DLL_BUILT` carries the
 /// copy's path to the unit tests.
-fn native_displays() {
-    if !cfg!(windows) {
-        panic!("feature native-displays: only the Windows build is wired so far (Linux and Mac follow, plan Task 7)");
+/// The library's file name on the target: `a380_displays.dll`, `liba380_displays.so` or `liba380_displays.dylib`.
+fn displays_library(target_os: &str) -> &'static str {
+    match target_os {
+        "windows" => "a380_displays.dll",
+        "macos" => "liba380_displays.dylib",
+        _ => "liba380_displays.so",
     }
+}
+
+fn native_displays() {
     let manifest = PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap());
     let out = PathBuf::from(std::env::var("OUT_DIR").unwrap());
     let profile = std::env::var("PROFILE").unwrap_or_else(|_| "release".into());
-    // A release's a380_displays.dll, for builds without the a380-displays source and Skia.
+    let target_os = std::env::var("CARGO_CFG_TARGET_OS").unwrap_or_default();
+    let library = displays_library(&target_os);
+    let profile_dir = out.ancestors().nth(3).unwrap_or(&out).to_path_buf();
+    // A release's library, for builds without the a380-displays source and Skia.
+    println!("cargo:rerun-if-env-changed=A380_DISPLAYS_PREBUILT");
     let prebuilt = env_or("A380_DISPLAYS_PREBUILT", "");
     if !prebuilt.is_empty() {
-        let copy = out.ancestors().nth(3).unwrap_or(&out).join("a380_displays.dll");
+        let copy = profile_dir.join(library);
         std::fs::copy(&prebuilt, &copy).unwrap_or_else(|e| panic!("copying {prebuilt} to {}: {e}", copy.display()));
         println!("cargo:rustc-env=A380_DISPLAYS_DLL_BUILT={}", copy.display());
+        return;
+    }
+    if target_os != "windows" {
+        native_displays_unix(&manifest, &profile, &profile_dir, library);
         return;
     }
     let default_src = manifest.join("../a380-displays");
@@ -270,8 +284,38 @@ fn native_displays() {
     if !built.is_file() {
         panic!("{} was not produced", built.display());
     }
-    let profile_dir = out.ancestors().nth(3).unwrap_or(&out).to_path_buf();
     let copy = profile_dir.join("a380_displays.dll");
+    std::fs::copy(&built, &copy).unwrap_or_else(|e| panic!("copying {} to {}: {e}", built.display(), copy.display()));
+    println!("cargo:rustc-env=A380_DISPLAYS_DLL_BUILT={}", copy.display());
+}
+
+/// Linux and Mac: CMake and Ninja with the system compiler, Skia's static libraries from `A380_SKIA_LIB_DIR`.
+fn native_displays_unix(manifest: &Path, profile: &str, profile_dir: &Path, library: &str) {
+    let src = env_or("A380_DISPLAYS_DIR", &manifest.join("../a380-displays").to_string_lossy());
+    let src = std::fs::canonicalize(&src).unwrap_or_else(|e| panic!("a380-displays not found at {src} ({e}); or set A380_DISPLAYS_PREBUILT to a release's {library}"));
+    let home = std::env::var("HOME").unwrap_or_default();
+    let build = env_or("A380_DISPLAYS_BUILD_DIR", &format!("{home}/a380-build-plugin-{profile}"));
+    let skia_root = env_or("A380_SKIA_ROOT", &format!("{home}/skia-c152"));
+    let skia_lib = env_or("A380_SKIA_LIB_DIR", &format!("{skia_root}/out/c152l"));
+    for rel in ["CMakeLists.txt", "core", "displays", "third_party"] {
+        println!("cargo:rerun-if-changed={}/{rel}", src.display());
+    }
+    let run = |args: &[&str]| {
+        let status = std::process::Command::new("cmake").args(args).status().unwrap_or_else(|e| panic!("cannot run cmake: {e}"));
+        if !status.success() {
+            panic!("building {library} failed ({status}); build dir {build}");
+        }
+    };
+    if !Path::new(&build).join("build.ninja").is_file() {
+        let src_arg = src.to_string_lossy().to_string();
+        run(&[
+            "-S", &src_arg, "-B", &build, "-G", "Ninja", "-DCMAKE_BUILD_TYPE=Release", "-DA380_GPU=ON",
+            &format!("-DA380_SKIA_ROOT={skia_root}"), &format!("-DA380_SKIA_LIB_DIR_LINUX={skia_lib}"),
+        ]);
+    }
+    run(&["--build", &build, "--target", "a380_displays"]);
+    let built = Path::new(&build).join(library);
+    let copy = profile_dir.join(library);
     std::fs::copy(&built, &copy).unwrap_or_else(|e| panic!("copying {} to {}: {e}", built.display(), copy.display()));
     println!("cargo:rustc-env=A380_DISPLAYS_DLL_BUILT={}", copy.display());
 }

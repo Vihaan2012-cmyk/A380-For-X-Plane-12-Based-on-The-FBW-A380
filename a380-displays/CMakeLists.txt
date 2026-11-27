@@ -133,7 +133,8 @@ elseif(APPLE)
   target_link_options(a380_displays PRIVATE -Wl,-exported_symbol,_a380d_*)
 else()
   target_link_options(a380_displays PRIVATE
-    "-Wl,--version-script=${CMAKE_CURRENT_SOURCE_DIR}/core/a380_displays.map" -Wl,--exclude-libs,ALL)
+    "-Wl,--version-script=${CMAKE_CURRENT_SOURCE_DIR}/core/a380_displays.map" -Wl,--exclude-libs,ALL
+    -static-libstdc++ -static-libgcc)
 endif()
 
 add_executable(c_api_test tools/c_api_test.cpp)
